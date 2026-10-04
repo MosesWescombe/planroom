@@ -283,3 +283,10 @@ while one has them open: never plan another repo's change from here. Two page ac
 
 When the user asks you to reopen an old plan, call `planroom_open` with its change id, print the URL, and wait: it
 opens read-only, and their Reopen arrives as `session.reopen`.
+
+When the user wants to pick a plan rather than name one ("show me my plans", "open the plan browser"), call
+`planroom_open` with no `changeId`. It returns `{ url, browsing: true, repoRoot }` and opens the plan browser, a page
+that lists the plans as above. Print the url and call `planroom_wait({ after: 0 })`, again after each empty timeout.
+Once the user picks a plan it is refused like a switch: call `planroom_state` and carry on as on a resume. Outside
+Claude, `pnpm planroom` in scopious-platform (or `node ~/.local/share/planroom/server/main.js --browse` in another
+repo) serves the same browser on its own: every plan opens read-only there, takes no lock, and refuses every write.

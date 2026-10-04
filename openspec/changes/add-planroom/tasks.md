@@ -28,6 +28,7 @@
 - [x] 4.5 Implement the plan switcher (list plans, switch the page, refuse the agent's next write or wait until it reads the new plan) and Reopen for read-only plans (`session.reopen`), and verify the "Old plans can be reopened from the page" scenarios
 
 - [x] 4.6 Add the plan format (`openspec` or `markdown`) to `planroom_open` and the persisted state, keep a Markdown plan in `agent-plans/<id>/` with no OpenSpec scaffold, check its `<id>.md` in place of `openspec validate`, list both folders in the plan switcher, and word the page, skill and proposer for it (design decision 19); verify the new-Markdown-plan, format-fixed, plan-file-missing, plan-written and plan-as-markdown scenarios
+- [x] 4.7 Add the plan browser: `planroom_open` without a change id serves a browse page whose pick wakes the agent's parked `planroom_wait`, and `main.js --browse` (`pnpm planroom`) serves it standalone, opening every plan read-only and unlocked; verify the "Agent opens the browser" and "Standalone browser" scenarios
 
 ## 5. Agent-page sync
 
