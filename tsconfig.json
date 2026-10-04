@@ -1,0 +1,11 @@
+{
+  "extends": "@scopious/typescript-config/base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "rootDir": "."
+  },
+  "include": ["src/shared", "src/server", "src/test/fixtures.ts", "src/test/serverHelpers.ts", "vite.config.mts"],
+  "exclude": ["node_modules", "dist"]
+}

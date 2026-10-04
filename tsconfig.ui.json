@@ -1,0 +1,10 @@
+{
+  "extends": "@scopious/typescript-config/react-library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "types": ["react", "vite/client", "@testing-library/jest-dom"]
+  },
+  "include": ["src/ui", "src/shared", "src/test/fixtures.ts", "src/test/harness.tsx", "src/test/setup.ts"],
+  "exclude": ["node_modules", "dist"]
+}

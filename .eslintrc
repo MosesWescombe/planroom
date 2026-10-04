@@ -1,0 +1,4 @@
+{
+  "extends": ["@scopious/eslint-config/web.js"],
+  "overrides": [{ "files": ["src/server/**/*.ts", "src/shared/**/*.ts"], "env": { "node": true, "browser": false } }]
+}
