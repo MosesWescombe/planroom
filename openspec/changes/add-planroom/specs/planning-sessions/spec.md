@@ -102,6 +102,26 @@ session: it SHALL link to a plan's live page when another session holds it.
 - **WHEN** the user opens a plan they finished and chooses Reopen
 - **THEN** the plan takes edits again and the agent receives `session.reopen` with `from: finished`
 
+### Requirement: Plans can be browsed without opening one
+
+`planroom_open` without a change id SHALL serve and open a plan browser page that lists the plans as the plan list
+does, marking none. While no plan is open, the agent's `planroom_wait` MUST wait until the user picks a plan there,
+which then opens as a switch does. A standalone browser, started with `--browse` and no agent, SHALL serve the same
+page. A plan picked there, or from that plan's own list, SHALL open read-only without taking the change's lock, and
+every write from its page MUST be refused.
+
+#### Scenario: Agent opens the browser
+
+- **WHEN** the agent calls `planroom_open` with no change id, waits, and the user picks `add-audit-log` on the page
+- **THEN** the page shows `add-audit-log`, and the agent's wait is refused naming `add-audit-log` until it calls
+  `planroom_state`
+
+#### Scenario: Standalone browser
+
+- **WHEN** the user runs `pnpm planroom` and opens `add-audit-log` from the list
+- **THEN** the plan shows read-only, no lock is taken so a Claude session can still open it, and an answer posted from
+  the page is refused
+
 ### Requirement: The page is private to the local session
 
 The page and its event stream SHALL be served only on the loopback interface. Every page, API and stream request MUST
