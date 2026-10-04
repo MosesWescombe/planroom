@@ -6,9 +6,8 @@ description: Plan a feature or change in Planroom, the live browser planning pag
 # Planroom
 
 Planroom is the planning path in any repo with an `openspec/` directory. It is an MCP server (`planroom`) that also
-serves a page on `127.0.0.1`. `pnpm setup:planroom` in scopious-platform installs it for every repo on the machine (a
-user-scope MCP server running `~/.local/share/planroom/server/main.js`, plus this skill and its subagents in
-`~/.claude`); scopious-platform's own `.mcp.json` runs its checkout's build instead. You write to the page with typed
+serves a page on `127.0.0.1`. `planroom install` sets it up for every repo on the machine: a user-scope MCP server
+running `planroom mcp`, plus this skill and its subagents linked into `~/.claude`. You write to the page with typed
 events; the user answers, comments and ticks on the page; their events come back to you. A session plans exactly one
 change and stops at an accepted proposal, written as an OpenSpec change or as a Markdown plan.
 
@@ -29,20 +28,20 @@ approval step.
    path in this skill is relative to it. When it is not your working directory (the server was started with `--dir`),
    read and write the plan there, run `openspec` from there, and tell every subagent you start to work in it.
 4. If the `planroom` tools are missing or the call fails because the server is not running, say so and name the fix:
-   in scopious-platform `pnpm build:tools`, anywhere else `pnpm setup:planroom` run in scopious-platform, then `/mcp` to
-   reconnect. If the repo has no `openspec/` directory, `planroom_open` refuses: say the repo needs `openspec init`
+   `planroom install` (after `npm i -g @moseswescombe/planroom` if the `planroom` command is missing too), then `/mcp`
+   to reconnect. If the repo has no `openspec/` directory, `planroom_open` refuses: say the repo needs `openspec init`
    first and do not run it yourself. Do not fall back to planning in chat. For a stale server or a change held by
    another session, see [The server](#the-server).
 5. On `resumed: true`, call `planroom_state` and rebuild your picture of the session before acting. Do the same after a
    compaction.
 
-An old plan that was never implemented, such as `agent-plans/<feature>/<feature>.md` in scopious-platform, is good
+An old plan that was never implemented, such as `agent-plans/<feature>/<feature>.md`, is good
 opening context: read it and turn its open decisions into questions.
 
 ## The server
 
 Each Claude Code session runs its own Planroom server, a child process started from its MCP config, in the repo it
-was launched in, or the one a `--dir <path>` argument in that config names (`node …/main.js --dir ../other-repo`). It lives until the session exits or the user reconnects it in `/mcp`: `/clear` and invoking this
+was launched in, or the one a `--dir <path>` argument in that config names (`planroom mcp --dir ../other-repo`). It lives until the session exits or the user reconnects it in `/mcp`: `/clear` and invoking this
 skill again keep the old process.
 
 - **Stale after a rebuild.** A running server keeps the code it started with. After a rebuild or reinstall, its tools
@@ -52,12 +51,12 @@ skill again keep the old process.
 - **"Already open in another Claude Code session (pid N)".** Another server holds the change's lock. Give the user the
   returned `url` and ask whether to carry on there instead. Before anything else, see what the pid is:
   `ps -o pid,ppid,lstart,args -p <N>`.
-    - A Planroom server (its command ends `planroom/dist/server/main.js` or `planroom/server/main.js`) whose session is
+    - A Planroom server (its command ends `planroom/dist/cli.js mcp`) whose session is
       gone or unwanted: with the user's go-ahead, `kill <N>`. SIGTERM makes it release the lock and close its page. It
       ends that session's planning, so never kill one unasked.
     - Any other process: the pid was reused and the lock is stale. Delete `openspec/changes/<change-id>/.planroom/lock`.
     - A lock whose pid has exited, including after a `kill -9`, is taken over by the next `planroom_open` without help.
-- **Finding servers.** `pgrep -af 'planroom/(dist/)?server/main.js'` lists every running one; its parent pid is the
+- **Finding servers.** `pgrep -af 'planroom/dist/cli.js mcp'` lists every running one; its parent pid is the
   Claude Code session that owns it. State is written crash-safe, so killing a server loses nothing it had saved.
 
 ## The loop
@@ -94,7 +93,7 @@ Channels need Claude Code launched with `claude --dangerously-load-development-c
 ## Subagents
 
 Two subagents take the work that does not need the whole session. Their model and effort are pinned in their agent
-files (`~/.claude/agents/`, or `.agents/agents/` in scopious-platform):
+files (`~/.claude/agents/`, linked there by `planroom install`):
 
 - **`planroom-researcher`** (read-only, medium effort). Hand it any fact that takes more than a couple of reads, in
   this codebase or about an outside product: a question's `context.findings`, an info card, what each direction
@@ -258,7 +257,7 @@ message and the open comment threads: address them the same way, then `proposal.
 ## Stop
 
 On `proposal.accept`, the session is read-only. Report the change id and the repo's next step for an accepted change
-(`/decompose <change-id>` in scopious-platform; elsewhere the repo's OpenSpec apply workflow), and stop. Do not
+(the repo's OpenSpec apply workflow, or `/decompose <change-id>` where the repo has it), and stop. Do not
 implement the change, and do not start decomposing unless the user asks.
 
 On `session.end`, the user ended the session from the page and it is read-only: `how` is `cancelled` (before the

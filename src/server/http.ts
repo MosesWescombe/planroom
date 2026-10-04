@@ -175,7 +175,7 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         );
         res.sendFile(join(options.uiDir, 'index.html'), (error) => {
             if (error && !res.headersSent)
-                res.status(503).type('text').send('The Planroom page is not built. Run pnpm build:tools.');
+                res.status(503).type('text').send('The Planroom page is not built. Run pnpm build in the Planroom checkout.');
         });
     });
 

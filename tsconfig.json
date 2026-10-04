@@ -15,6 +15,14 @@
     "types": ["node"],
     "rootDir": "."
   },
-  "include": ["src/shared", "src/server", "src/test/fixtures.ts", "src/test/serverHelpers.ts", "vite.config.mts"],
+  "include": [
+    "src/cli.ts",
+    "src/shared",
+    "src/server",
+    "src/test/fixtures.ts",
+    "src/test/serverHelpers.ts",
+    "vite.config.mts",
+    "vite.cli.config.mts"
+  ],
   "exclude": ["node_modules", "dist"]
 }
