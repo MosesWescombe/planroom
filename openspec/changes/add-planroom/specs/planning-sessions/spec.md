@@ -106,7 +106,7 @@ session: it SHALL link to a plan's live page when another session holds it.
 
 `planroom_open` without a change id SHALL serve and open a plan browser page that lists the plans as the plan list
 does, marking none. While no plan is open, the agent's `planroom_wait` MUST wait until the user picks a plan there,
-which then opens as a switch does. A standalone browser, started with `--browse` and no agent, SHALL serve the same
+which then opens as a switch does. A standalone browser, started with `planroom open` and no agent, SHALL serve the same
 page. A plan picked there, or from that plan's own list, SHALL open read-only without taking the change's lock, and
 every write from its page MUST be refused.
 
@@ -118,7 +118,7 @@ every write from its page MUST be refused.
 
 #### Scenario: Standalone browser
 
-- **WHEN** the user runs `pnpm planroom` and opens `add-audit-log` from the list
+- **WHEN** the user runs `planroom open` and opens `add-audit-log` from the list
 - **THEN** the plan shows read-only, no lock is taken so a Claude session can still open it, and an answer posted from
   the page is refused
 

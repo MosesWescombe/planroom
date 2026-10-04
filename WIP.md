@@ -33,7 +33,7 @@ passing test or a live check. 66 of 75 are done (2026-10-05).
   page to it and refuses the agent's next emit or wait until it calls `planroom_state`. Ended and accepted plans open
   read-only with Reopen (`session.reopen`). Checked live on a seeded scratch repo at 1440 px.
 - Plan browser (task 4.7): `planroom_open` with no change id serves a browse page; a pick there wakes the agent's
-  parked wait as a switch. `main.js --browse` (`pnpm planroom`) serves it standalone: plans open in a `PlanViewer`,
+  parked wait as a switch. `planroom open` serves it standalone: plans open in a `PlanViewer`,
   read-only and unlocked. Checked live on this repo with a private build at 1920 px.
 
 ## Left

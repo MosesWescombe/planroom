@@ -131,3 +131,10 @@
 
 - [x] 17.1 Run `tools/planroom` lint, typecheck and test in the order `AGENTS.md` sets, and `pnpm check:agent-docs`
 - [x] 17.2 Run `pnpm exec openspec validate add-planroom --strict` and confirm it passes
+
+## 18. Standalone package (supersedes 1.3's in-repo launcher and 4.7's `pnpm planroom`)
+
+- [x] 18.1 Move Planroom into its own repo with its own lint, TypeScript and Prettier configs, the OpenSpec CLI pinned as a devDependency, and tests rooted at the new repo (design decision 20)
+- [x] 18.2 Add the `planroom` command (`mcp`, `open [change-id]`, `list`, `install`, `uninstall`, `--version`) bundled into one dependency-free `dist/cli.js`, replacing `main.ts` and `scripts/install-user.mjs`; verified from a packed tarball in a throwaway npm prefix and Claude config, where `claude mcp get planroom` connected
+- [x] 18.3 CI checks every push and publishes `v*` tags to GitHub Packages; `v0.1.0` published
+- [ ] 18.4 Install `@moseswescombe/planroom` from GitHub Packages on a clean machine with only a `read:packages` token and run `planroom install`

@@ -351,6 +351,22 @@ requirement, task and trace counts a Markdown plan does not have.
 - _Rejected: checking the Markdown plan's headings_. `/decompose` reads the plan whole, so any check stricter than
   "written" would only reject plans it can use.
 
+### 20. Planroom is its own package with a `planroom` command (supersedes decision 1's launcher)
+
+Planroom moved out of scopious-platform's `tools/planroom` into its own repo, published privately to GitHub Packages as
+`@moseswescombe/planroom` from `v*` tags. `src/cli.ts` is the `planroom` command: `mcp` is decision 1's stdio server,
+`open [change-id]` the standalone plan browser, `list` the plans of every repo in the registry, and `install` links
+`skill/` and `agents/` into `~/.claude` and registers a user-scope `planroom` MCP server running `<node> dist/cli.js mcp`
+with absolute paths. Vite bundles the command, server and all, into one `dist/cli.js` beside `dist/ui`, so the package
+installs no dependencies. Decision 1's process model is unchanged; only its launcher and the repo-root `.mcp.json` entry
+are gone.
+
+- _Rejected: the `npx skills` installer for the skill_. It installs skill folders only, not the subagents or the MCP
+  server, and fetches the skill from the repo's latest commit rather than the installed version, so the three drift.
+- _Rejected: a Claude Code plugin_. It gives no shell command, needs the built files committed, and renames the MCP
+  tools the agent files name.
+- _Rejected: installing from git_. Every install would download the build toolchain and build without the lockfile.
+
 ## Risks / Trade-offs
 
 - [Channels are research preview and org-gated; Scopious's claude.ai org may not have `channelsEnabled`] → Long-poll is
