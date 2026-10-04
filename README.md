@@ -31,12 +31,12 @@ skill and agents are links into the package, so they upgrade with it. After swit
 
 In Claude Code, ask it to plan something ("plan adding rate limiting") in a repo with an `openspec/` directory.
 
-| Command | Does |
-| --- | --- |
-| `planroom open [change-id]` | Open this repo's plans read-only in the browser, or one plan |
-| `planroom list` | List the plans in every repo Planroom has run in |
-| `planroom install` / `uninstall` | Wire Planroom into Claude Code, or remove it |
-| `planroom mcp [--dir <path>]` | The MCP server Claude Code starts; not run by hand |
+| Command                          | Does                                                         |
+| -------------------------------- | ------------------------------------------------------------ |
+| `planroom open [change-id]`      | Open this repo's plans read-only in the browser, or one plan |
+| `planroom list`                  | List the plans in every repo Planroom has run in             |
+| `planroom install` / `uninstall` | Wire Planroom into Claude Code, or remove it                 |
+| `planroom mcp [--dir <path>]`    | The MCP server Claude Code starts; not run by hand           |
 
 ## Develop
 
