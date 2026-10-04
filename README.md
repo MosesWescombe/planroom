@@ -43,7 +43,7 @@ In Claude Code, ask it to plan something ("plan adding rate limiting") in a repo
 ```sh
 pnpm install
 pnpm build
-pnpm link --global   # the global `planroom` now runs this checkout
+npm link             # the global `planroom` now runs this checkout
 planroom install     # links ~/.claude at this checkout's skill/ and agents/
 ```
 

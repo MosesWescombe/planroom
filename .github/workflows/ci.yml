@@ -1,51 +1,51 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
+    push:
+        branches: [main]
+        tags: ['v*']
+    pull_request:
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-        env:
-          OPENSPEC_TELEMETRY: '0'
-      - run: pnpm build
+    check:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm lint
+            - run: pnpm typecheck
+            - run: pnpm test
+              env:
+                  OPENSPEC_TELEMETRY: '0'
+            - run: pnpm build
 
-  publish:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
-          registry-url: https://npm.pkg.github.com
-          scope: '@moseswescombe'
-      - run: pnpm install --frozen-lockfile
-      - name: Check the tag matches package.json
-        run: |
-          version=$(node -p "require('./package.json').version")
-          test "$GITHUB_REF_NAME" = "v$version" || { echo "Tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1; }
-      # prepack builds dist/ first.
-      - run: pnpm publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    publish:
+        if: startsWith(github.ref, 'refs/tags/v')
+        needs: check
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+        steps:
+            - uses: actions/checkout@v5
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v5
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  registry-url: https://npm.pkg.github.com
+                  scope: '@moseswescombe'
+            - run: pnpm install --frozen-lockfile
+            - name: Check the tag matches package.json
+              run: |
+                  version=$(node -p "require('./package.json').version")
+                  test "$GITHUB_REF_NAME" = "v$version" || { echo "Tag $GITHUB_REF_NAME does not match package.json version $version"; exit 1; }
+            # prepack builds dist/ first.
+            - run: pnpm publish --no-git-checks
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
