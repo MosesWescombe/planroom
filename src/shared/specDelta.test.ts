@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { countDelta, parseSpecDelta, parseTasks } from './specDelta.js';
 
-const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const changeDir = `${repoRoot}openspec/changes/add-planroom`;
 
 /** The part of `openspec show --json` the reader is checked against. */

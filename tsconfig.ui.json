@@ -1,8 +1,22 @@
 {
-  "extends": "@scopious/typescript-config/react-library.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["dom", "dom.iterable", "ESNext"],
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
     "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
     "types": ["react", "vite/client", "@testing-library/jest-dom"]
   },
   "include": ["src/ui", "src/shared", "src/test/fixtures.ts", "src/test/harness.tsx", "src/test/setup.ts"],

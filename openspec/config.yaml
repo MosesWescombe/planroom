@@ -1,0 +1,37 @@
+schema: spec-driven
+
+context: |
+    Planroom: a live browser planning surface for Claude Code. One npm package holds an MCP
+    server (stdio) that also serves the planning page on 127.0.0.1, the planroom skill and its
+    two subagents. It plans changes in any repo, proposed as OpenSpec changes or Markdown plans.
+    - src/server   MCP tools, HTTP/SSE page server, sessions, locks, the OpenSpec runner
+    - src/shared   the zod contract shared by server and page: state, events, blocks, derive
+    - src/ui       the React 17 page, built by Vite
+    - skill/       the planroom skill; skill/references/blocks.md is generated
+    - agents/      the planroom-researcher and planroom-proposer subagents
+    Node >=22.18, pnpm. Repo rules live in AGENTS.md. Validation order is lint, then
+    typecheck, then test.
+
+rules:
+    proposal:
+        - Use exactly the four template H2s and no others.
+        - Impact is one bold-prefixed bullet per affected path, closing with a
+          "**Dependencies**" bullet that says so explicitly when nothing new is added.
+        - Capability names are kebab-case, name the capability rather than the feature, and
+          match their specs/<name>/ directory exactly.
+        - With no baseline spec to modify, write Modified Capabilities as an HTML comment
+          saying why nothing changes.
+    specs:
+        - Use only ADDED Requirements while openspec/specs/ holds no baseline spec for the
+          capability.
+    design:
+        - Every decision states the alternative that was rejected, and why.
+        - Write "None outstanding" under Open Questions rather than omitting the section.
+    tasks:
+        - Close with a tests group, then a verify group in the AGENTS.md validation order;
+          point at AGENTS.md rather than restating commands.
+        - Track ops and rollout steps as their own group, left unticked until done.
+        - Annotate a ticked task in place when reality diverged from the plan.
+        - Leave a blocked task unticked, with the blocker and what was verified instead.
+        - Append superseding work as a new numbered group whose heading names what it
+          supersedes; never rewrite earlier groups.

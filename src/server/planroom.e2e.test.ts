@@ -7,7 +7,7 @@ import { loggedEvent } from '../shared/events.js';
 import { connect } from '../test/serverHelpers.js';
 import { openSpecCli } from './openspec.js';
 
-const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const openspecBin = join(repoRoot, 'node_modules', '.bin', 'openspec');
 const CHANGE = 'add-api-rate-limiting';
 

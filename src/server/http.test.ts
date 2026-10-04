@@ -10,7 +10,7 @@ import { CHANGE, defined, harness, onCleanup, rejection, tempRepo, textBlock, up
 import { type PageServer, startPageServer } from './http.js';
 import { PlanViewer } from './viewer.js';
 
-const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 interface Raw {
     status: number;

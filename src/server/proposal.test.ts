@@ -21,7 +21,7 @@ import {
 import { openSpecCli } from './openspec.js';
 import { RejectedError } from './draft.js';
 
-const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 const spec = (scenarioHashes = '####') =>
     [

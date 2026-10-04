@@ -1,8 +1,17 @@
 {
-  "extends": "@scopious/typescript-config/base.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "declaration": false,
-    "declarationMap": false,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "lib": ["es2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleDetection": "force",
+    "moduleResolution": "NodeNext",
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
     "types": ["node"],
     "rootDir": "."
   },
