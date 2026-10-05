@@ -1,12 +1,19 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { countDelta, parseSpecDelta, parseTasks } from './specDelta.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-const changeDir = `${repoRoot}openspec/changes/add-planroom`;
+const archived = `${repoRoot}openspec/changes/archive/2026-10-05-add-planroom`;
+/** `openspec show` only finds active changes, so the archived change is copied into a throwaway repo. */
+const tempRoot = mkdtempSync(join(tmpdir(), 'planroom-spec-'));
+const changeDir = join(tempRoot, 'openspec', 'changes', 'add-planroom');
+cpSync(archived, changeDir, { recursive: true });
+afterAll(() => rmSync(tempRoot, { recursive: true, force: true }));
 
 /** The part of `openspec show --json` the reader is checked against. */
 const openspecShow = z.object({
@@ -18,7 +25,7 @@ describe('spec delta reader', () => {
         const shown = openspecShow.parse(
             JSON.parse(
                 execFileSync(`${repoRoot}node_modules/.bin/openspec`, ['show', 'add-planroom', '--json', '--no-interactive'], {
-                    cwd: repoRoot,
+                    cwd: tempRoot,
                     encoding: 'utf8'
                 })
             )
