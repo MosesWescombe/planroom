@@ -136,8 +136,11 @@ not quiet is waiting, and returns every event after its cursor when it resolves 
 events just ahead of the next event that is not, since the agent passes the highest `seq` it handled as its cursor and
 would otherwise skip them. A first real session spent 16 of its 92 waits on a lone tick or confirmation.
 
-`planroom_wait` defaults to a 300-second timeout, below Claude Code's MCP tool timeout, and the skill re-arms it after a
-timeout. The agent leaves the timeout unset, and does not wait at all while its subagents run: their results reach it
+`planroom_wait` defaults to a 600-second timeout, its schema's maximum, and the skill re-arms it after a timeout. On
+Claude Code 2.1.289 a wait still pending at two minutes becomes a background MCP task and the agent's turn ends; when an
+event resolves it, or it times out, the task completes and wakes the idle session with the result, with or without
+channels. Each timeout therefore costs one empty turn, so the default is as long as the schema allows; parked waits of
+300 and 600 seconds both ran to their own timeout. The agent leaves the timeout unset, and does not wait at all while its subagents run: their results reach it
 only between tool calls, so it ends its turn and Claude Code wakes it as each one reports back, and the page events
 that arrived meanwhile are in the log for its next wait. The first real session polled with 60-second waits instead,
 and 45 of its 92 waits returned nothing.
@@ -361,6 +364,11 @@ with absolute paths. Vite bundles the command, server and all, into one `dist/cl
 installs no dependencies. Decision 1's process model is unchanged; only its launcher and the repo-root `.mcp.json` entry
 are gone.
 
+Adopting Planroom in a repo is that repo's own change. Retiring scopious-platform's `plan-feature` and `grill` and
+repointing its `decompose` at OpenSpec changes (decision 14's last sentences, steps 1 and 2 of the Migration Plan) moved
+out with it. Planroom names no next step after an accept: `/decompose` is not part of the package, so the page, the
+server's messages and the skill only say the plan is accepted.
+
 - _Rejected: the `npx skills` installer for the skill_. It installs skill folders only, not the subagents or the MCP
   server, and fetches the skill from the repo's latest commit rather than the installed version, so the three drift.
 - _Rejected: a Claude Code plugin_. It gives no shell command, needs the built files committed, and renames the MCP
@@ -374,8 +382,11 @@ are gone.
   not waiting.
 - [Claude Code does not register a channel server that negotiates MCP protocol revision 2026-07-28 when
   `MCP_PROTOCOL_NEGOTIATION=auto`] → Pin the SDK version and verify registration as a task; long-poll is unaffected.
+  Verified on Claude Code 2.1.289: SDK 1.30.1 negotiates `2025-11-25`, the channel registers, and a push reaches an
+  idle session.
 - [Auto-backgrounding changes how a parked `planroom_wait` behaves after two minutes] → Verify on 2.1.283 as a task and
   set the default timeout from what is observed; correctness does not depend on it because delivery is by cursor.
+  Verified on 2.1.289; see decision 5.
 - [The server needs a build before Claude Code can start it] → `planroom_open` never runs without a build, so the
   failure shows as a failed `planroom` server in `/mcp`; the skill names `pnpm build:tools` as the fix, and the
   workspace builds under the existing `pnpm build`.
@@ -404,5 +415,7 @@ are gone.
 
 - The dark palette's exact values. Design work inside the tasks; it cannot change the specs.
 - Whether Scopious's claude.ai org has `channelsEnabled`. It decides whether the push path is usable here, not whether
-  it is built.
+  it is built. Answered 2026-10-05 by trying it rather than asking an Owner: under the Scopious Team login, Claude Code
+  2.1.289 launched with `--dangerously-load-development-channels server:planroom` registered the channel, and page
+  events reached the session as pushes, idle and mid-turn. Channels are usable here.
 - No Jira ticket is linked yet. Add the key here once one exists.

@@ -73,13 +73,7 @@ function Accepted() {
     return (
         <div className="banner banner-actions">
             <span role="status">
-                {accepted ? (
-                    <>
-                        Proposal accepted. This session is read-only. Next step: <code>/decompose {changeId}</code>
-                    </>
-                ) : (
-                    `You ${ended} this session. It is read-only.`
-                )}
+                {accepted ? 'Proposal accepted. This session is read-only.' : `You ${ended} this session. It is read-only.`}
             </span>
             {!closed && <ReopenButton />}
         </div>

@@ -6,8 +6,11 @@ import { planFormat } from './state.js';
  * generates each tool's JSON Schema from these and parses its arguments with them.
  */
 
-/** `planroom_wait`'s default timeout, below Claude Code's MCP tool timeout. */
-export const DEFAULT_WAIT_SEC = 300;
+/**
+ * `planroom_wait`'s default timeout, the schema's maximum. Claude Code backgrounds a call after two minutes and wakes the
+ * session when it completes, so each timeout costs an empty turn; 600 s was verified on Claude Code 2.1.289.
+ */
+export const DEFAULT_WAIT_SEC = 600;
 
 /** `planroom_open`'s input. */
 export const openInput = z.object({

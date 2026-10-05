@@ -6,8 +6,8 @@ import { deepEqual, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 
 /**
- * Phase 3's review: the change at a glance, its task groups, the next step, and accept or request changes once the
- * submitted change has validated.
+ * Phase 3's review: the change at a glance, its task groups, and accept or request changes once the submitted change
+ * has validated.
  */
 export function ReviewPanel() {
     const review = useSelector((view) => {
@@ -25,13 +25,11 @@ export function ReviewPanel() {
         const tasks = view.proposal.files.find((file) => file.kind === 'tasks')?.tasks ?? [];
         const gate = acceptGate(view);
         return {
-            changeId: view.changeId,
             markdown: view.format === 'markdown',
             counts,
             tasks,
             traced: tracedAnswers(view),
             gate,
-            accepted: Boolean(view.phases.acceptedAt),
             unlocked: view.phases.proposalUnlocked,
             hasProposalComment: canRequestChanges(view, undefined)
         };
@@ -89,15 +87,6 @@ export function ReviewPanel() {
                     </ol>
                 </section>
             )}
-            <section className="review-block next-step">
-                <span className="strong">Next step</span>
-                <span className="small">
-                    {review.accepted
-                        ? `Accepted. Break the ${review.markdown ? 'plan' : 'change'} into tickets in Claude Code with:`
-                        : 'Accepting makes this session read-only. Nothing is implemented until you decompose it:'}
-                </span>
-                <code className="command">/decompose {review.changeId}</code>
-            </section>
             {!readOnly && !review.unlocked && (
                 <p className="small muted">You can accept or request changes once the change validates.</p>
             )}

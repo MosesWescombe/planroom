@@ -172,7 +172,7 @@ export function applyAgentBatch(
         throw new RejectedError([
             {
                 path: '',
-                message: 'The proposal was accepted, so this session is read-only. Tell the user the next step is /decompose.'
+                message: 'The proposal was accepted, so this session is read-only. Stop.'
             }
         ]);
     }

@@ -19,10 +19,9 @@ approval step.
 1. Derive a kebab-case change id from the request, verb first (`add-api-rate-limiting`, `fix-alarm-dedup`). Check
    `openspec/changes/` and `agent-plans/` for an in-flight plan that already covers it and resume that one instead.
 2. Pick the format of a new plan. It becomes an **OpenSpec change** in `openspec/changes/<change-id>/` (`openspec`,
-   the default) or a **Markdown plan** at `agent-plans/<change-id>/<change-id>.md` (`markdown`), the file
-   `/decompose <change-id>` reads. Use the one the user asked for ("plan X as markdown"); when they did not say, ask
-   them which before opening, in one question. The format is fixed once the plan exists: a resumed plan keeps its own,
-   so leave `format` out when resuming.
+   the default) or a **Markdown plan** at `agent-plans/<change-id>/<change-id>.md` (`markdown`). Use the one the user
+   asked for ("plan X as markdown"); when they did not say, ask them which before opening, in one question. The format
+   is fixed once the plan exists: a resumed plan keeps its own, so leave `format` out when resuming.
 3. Call `planroom_open({ changeId, title, format })`. Print the returned `url` for the user every time, even when a
    browser opened. Keep `cursor`: it is your `after` for the first `planroom_wait`. Keep `repoRoot` too: every plan
    path in this skill is relative to it. When it is not your working directory (the server was started with `--dir`),
@@ -256,9 +255,8 @@ message and the open comment threads: address them the same way, then `proposal.
 
 ## Stop
 
-On `proposal.accept`, the session is read-only. Report the change id and the repo's next step for an accepted change
-(the repo's OpenSpec apply workflow, or `/decompose <change-id>` where the repo has it), and stop. Do not
-implement the change, and do not start decomposing unless the user asks.
+On `proposal.accept`, the session is read-only. Report the change id and where the accepted plan is, and stop. Do not
+implement the change unless the user asks.
 
 On `session.end`, the user ended the session from the page and it is read-only: `how` is `cancelled` (before the
 proposal validated) or `finished` (after). Stop waiting, say what the change folder holds, and stop.

@@ -27,16 +27,14 @@ builds it as a tool Claude Code drives, and makes it the repo's planning path.
 - Comment on any text in any phase; anchors survive the agent rewriting neighbouring content.
 - Persist every session under `openspec/changes/<change-id>/.planroom/`, so a session resumes in a new Claude Code
   session and the planning record travels with the change.
-- Let a plan become either an OpenSpec change or a Markdown plan at `agent-plans/<change-id>/<change-id>.md`, the file
-  `/decompose` already reads, chosen when the plan is opened. A Markdown plan keeps its session in
+- Let a plan become either an OpenSpec change or a Markdown plan at `agent-plans/<change-id>/<change-id>.md`, chosen
+  when the plan is opened. A Markdown plan keeps its session in
   `agent-plans/<change-id>/.planroom/` and is checked for that file in place of `openspec validate`.
 - Beyond the handoff: dark mode, a narrow single-column layout, and write-up revision history with diffs.
 - Register the server in the root `.mcp.json` and add a model-invocable `planroom` skill, so Claude Code opens a
   Planroom session whenever it is asked to plan a feature or change.
-- **BREAKING** (agent workflow only): remove the `plan-feature` and `grill` skills; Planroom replaces both. Repoint
-  `decompose` to read an OpenSpec change as well as `agent-plans/<feature>/<feature>.md`, which Planroom's Markdown
-  plans write. Planroom stops at an
-  accepted proposal; implementation stays a separate, user-started step.
+- Planroom stops at an accepted proposal; implementation stays a separate, user-started step. Retiring a repo's
+  `plan-feature` and `grill` skills and repointing its `decompose` belong to that repo's own change (design decision 20).
 
 ## Capabilities
 
@@ -69,10 +67,6 @@ builds it as a tool Claude Code drives, and makes it the repo's planning path.
   state, the React SPA, and its unit tests.
 - **.mcp.json**: new `planroom` stdio server entry alongside `atlassian`.
 - **.agents/skills/planroom**: new skill, plus a block-catalog reference the agent reads before emitting blocks.
-- **.agents/skills/plan-feature**, **.agents/skills/grill**: removed.
-- **.agents/skills/decompose**: reads `openspec/changes/<change-id>/` (proposal, design, specs, tasks) as its input,
-  alongside the Markdown plans in `agent-plans/`; ticket output location and format are unchanged, so `implement`
-  needs no change.
 - **.agents/agents**, **.claude/agents**: new `planroom-researcher` and `planroom-proposer` subagents, reached by
   Claude Code through a tracked `.claude/agents` symlink, as the skills are through `.claude/skills`.
 - **.gitignore**: ignore `.planroom/events.jsonl`, `revisions/`, `lock` and in-flight temp files inside change

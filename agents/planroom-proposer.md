@@ -33,8 +33,8 @@ comments later, fix the files and reply the same way.
 
 ## Markdown plan
 
-Write one file, `agent-plans/<change-id>/<change-id>.md`, the plan `/decompose <change-id>` slices into tickets, and
-skip steps 2 to 5. It is the shape and the why, not a task list: keep it to a screen or two, in this layout.
+Write one file, `agent-plans/<change-id>/<change-id>.md`, and skip steps 2 to 5. It is the shape and the why, not a
+task list: keep it to a screen or two, in this layout.
 
 ```markdown
 # <Title> - plan

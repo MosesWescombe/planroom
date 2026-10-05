@@ -276,7 +276,6 @@ describe('the review panel', () => {
         renderWith(storeWith(proposalView()), <ReviewPanel />, 'proposal');
         const tiles = [...document.querySelectorAll('.glance-tile')].map((tile) => tile.textContent);
         expect(tiles).toEqual(['2requirements added', '0requirements modified', '3tasks in 2 groups', '1/2answers traced']);
-        expect(screen.getByText('/decompose add-x')).toBeInTheDocument();
     });
 
     it('accept: tells the agent', async () => {
@@ -307,13 +306,12 @@ describe('the review panel', () => {
         await waitFor(() => expect(posted).toEqual([{ type: 'proposal.requestChanges', text: 'Split the spec in two' }]));
     });
 
-    it('once accepted, shows the next step and no actions', () => {
+    it('once accepted, shows no actions', () => {
         const view = proposalView();
         view.phases = { ...view.phases, acceptedAt: NOW };
         renderWith(storeWith(view), <ReviewPanel />, 'proposal');
         expect(screen.queryByRole('button', { name: 'Accept proposal' })).toBeNull();
-        expect(screen.getByText(/Accepted\. Break the change into tickets/)).toBeInTheDocument();
-        expect(screen.getByText('/decompose add-x')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Request changes' })).toBeNull();
     });
 });
 

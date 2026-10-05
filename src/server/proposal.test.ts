@@ -223,7 +223,7 @@ describe('accepting or requesting changes', () => {
             type: 'proposal.accept',
             changeId: CHANGE
         });
-        await expect(session.emit({ events: [upsert('Q-99')] })).rejects.toThrow(/read-only.*\/decompose/);
+        await expect(session.emit({ events: [upsert('Q-99')] })).rejects.toThrow(/accepted.*read-only/);
         await expect(session.handlePage({ type: 'message.send', text: 'hi' })).rejects.toThrow(/read-only/);
     });
 

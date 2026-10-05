@@ -63,7 +63,7 @@ export async function scanChangeFolder(changeDir: string, now: string): Promise<
 
 /**
  * A Markdown plan's check, in place of `openspec validate`: its `<change-id>.md` is in the plan folder and is not
- * empty. `/decompose` reads that file, so a plan written under any other name would never reach it.
+ * empty.
  */
 export async function checkMarkdownPlan(
     changeDir: string,

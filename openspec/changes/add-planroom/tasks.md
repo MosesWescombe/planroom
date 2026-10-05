@@ -1,14 +1,22 @@
 ## 1. Prove the platform assumptions
 
-- [ ] 1.1 Spike a minimal stdio server that declares `claude/channel`, register it as `planroom-spike` in a scratch `.mcp.json`, launch `claude --dangerously-load-development-channels server:planroom-spike`, and confirm a pushed notification reaches an idle session; record the working MCP SDK version and protocol revision (design decision 5, risk on 2026-07-28)
-- [ ] 1.2 With the same spike, park a tool call for five minutes and record what auto-backgrounding at two minutes does to the pending call and the session; set `planroom_wait`'s default timeout from the result (design decision 5)
+- [x] 1.1 Spike a minimal stdio server that declares `claude/channel`, register it as `planroom-spike` in a scratch `.mcp.json`, launch `claude --dangerously-load-development-channels server:planroom-spike`, and confirm a pushed notification reaches an idle session; record the working MCP SDK version and protocol revision (design decision 5, risk on 2026-07-28)
+    - Diverged: run against the real `planroom` server, which declares the same capability, instead of a separate
+      spike server. On Claude Code 2.1.289 with SDK 1.30.1 the session negotiated protocol `2025-11-25`, logged
+      "Channel notifications registered", and a page event posted while it sat idle woke it with the pushed event.
+- [x] 1.2 With the same spike, park a tool call for five minutes and record what auto-backgrounding at two minutes does to the pending call and the session; set `planroom_wait`'s default timeout from the result (design decision 5)
+    - At two minutes Claude Code moves the pending call into a background MCP task and ends the turn; the session
+      sits idle until the task completes, then wakes with its result. A wait resolved by an event, and waits that timed
+      out at 300 s and at 600 s, all returned cleanly. The default is now 600 s, the schema maximum (design decision 5).
 - [x] 1.3 Confirm the working directory Claude Code gives a project `.mcp.json` stdio server is the repo root, so `node tools/planroom/dist/server/main.js` resolves (design decision 1)
 - [x] 1.4 Add a `.planroom/` folder with sample files to a throwaway change and confirm `openspec validate --strict`, `openspec show` and `openspec archive` all ignore it (design decision 7)
 
 ## 2. Workspace scaffold
 
 - [x] 2.1 Create `tools/planroom` with `package.json` (`lint`, `typecheck`, `test`, `build`, `start`), `tsconfig` from `configs/typescript-config`, workspace ESLint and Prettier config, and verify `pnpm install` links it and `pnpm turbo build --filter=@scopious/planroom` produces `dist/server` and `dist/ui`
-- [ ] 2.2 Add dependencies at the lockfile's existing versions (React 17 toolchain, `vitest`, `@testing-library/react`, `jsdom`, `express`, `dagre`, `react-markdown`, `diff`, `use-sync-external-store`, `zod` 4) plus `@modelcontextprotocol/sdk` at the version from 1.1 and `mermaid`, and verify `pnpm why` shows no second copy of React 17
+- [x] 2.2 Add dependencies at the lockfile's existing versions (React 17 toolchain, `vitest`, `@testing-library/react`, `jsdom`, `express`, `dagre`, `react-markdown`, `diff`, `use-sync-external-store`, `zod` 4) plus `@modelcontextprotocol/sdk` at the version from 1.1 and `mermaid`, and verify `pnpm why` shows no second copy of React 17
+    - `pnpm why` finds one `react` and one `react-dom` (17.0.2), and `@modelcontextprotocol/sdk` is pinned at
+      1.30.1, the version 1.1 verified.
 - [x] 2.3 Gitignore `openspec/changes/*/.planroom/events.jsonl`, `revisions/` and `lock`, and verify with `git check-ignore` on sample paths
 
 ## 3. Shared schemas and derived logic
@@ -97,32 +105,53 @@
 - [x] 12.1 Build the file tree, rendered and raw markdown views, and spec deltas as requirements and scenarios from `Proposal.dc.html`; verify the live-update scenario
 - [x] 12.2 Build trace links, the change-at-a-glance summary, and validation status with Re-run; verify the traceability and re-run scenarios
 - [x] 12.3 Build Accept and Request changes with their gates, the read-only accepted state and the `/decompose <change-id>` next step; verify the accept scenarios
+    - Diverged: the next step was removed later, with the page, the server's messages and the skill naming none (design
+      decision 20).
 
 ## 13. Claude Code integration
 
 - [x] 13.1 Add the `planroom` stdio entry to the root `.mcp.json`, and verify `claude mcp get planroom` connects after `pnpm build:tools`
-- [ ] 13.2 Write `.agents/skills/planroom/SKILL.md` (triggers, grill's rules, the phase loop, wait and channel handling, the Phase 4 `openspec instructions` flow, the channels launch command, no plan mode), and verify a fresh session asked to "plan X" invokes it
+- [x] 13.2 Write `.agents/skills/planroom/SKILL.md` (triggers, grill's rules, the phase loop, wait and channel handling, the Phase 4 `openspec instructions` flow, the channels launch command, no plan mode), and verify a fresh session asked to "plan X" invokes it
+    - Checked 2026-10-05 in a fresh interactive session: "plan making the accepted-proposal screen show the right next
+      step" loaded `Skill(planroom)` first, and the session ended its turn while three `planroom-researcher`s ran and
+      was woken as each reported back.
 - [x] 13.3 Generate `.agents/skills/planroom/references/blocks.md` from the block schemas with a script, and verify a test fails when a schema changes without regenerating it
 
 ## 14. Retire plan-feature and grill
 
-- [ ] 14.1 Repoint `.agents/skills/decompose/SKILL.md` to read `openspec/changes/<change-id>/` as well as a Markdown plan's `agent-plans/<change-id>/<change-id>.md`, keeping its ticket and INDEX format, and verify on the change from 15.2
-- [ ] 14.2 Delete `.agents/skills/plan-feature` and `.agents/skills/grill`, remove every reference to them, and verify `pnpm check:agent-docs` passes and a grep for both names under `.agents` and `AGENTS.md` files is empty
+Moved out (design decision 20): repointing scopious-platform's `decompose` (was 14.1) and deleting its `plan-feature`
+and `grill` (was 14.2) belong to that repo's own change adopting the package, so their two `planning-workflow`
+requirements left this change with them.
 
 ## 15. Rollout
 
-- [ ] 15.1 Ask a claude.ai Owner whether `channelsEnabled` is on for the Scopious org, and record the answer in design.md's Open Questions
-- [ ] 15.2 Plan one real change end to end with Planroom, with channels on and off, and record what diverged from this design in this file
-- [ ] 15.3 Tell the team the launch command for push mode and that `/plan-feature` and `/grill` are gone
+- [x] 15.1 Ask a claude.ai Owner whether `channelsEnabled` is on for the Scopious org, and record the answer in design.md's Open Questions
+    - Answered by trying it rather than asking an Owner; recorded in design.md's Open Questions.
+- [x] 15.2 Plan one real change end to end with Planroom, with channels on and off, and record what diverged from this design in this file
+    - Channels off: `add-centralised-logs` in scopious-platform (2026-10-01), through submit and a passing validation,
+      ended without an accept. Its divergences, polling waits and ticks that woke the agent, are fixed under 5.6 and in
+      decision 5.
+    - Channels on: `fix-accepted-next-step` for this repo (2026-10-05), from "plan …" to accept, with the user's side
+      driven through the page by another agent. 20 page events, 14 waits, four subagents; the proposal validated, and
+      on accept the page showed "Planroom closed" and its URL stopped answering.
+    - Diverged: an idle agent was always parked in a wait, which Claude Code had backgrounded after two minutes (1.2),
+      so every event that arrived while it was idle reached it through that wait's completion, never by push. Pushes
+      only carried events that landed while the agent was busy between waits (6 of 20), and the next wait returned
+      those again; the agent skipped them by `seq`, as the instructions say. Push therefore saves little beyond
+      what auto-backgrounding already gives.
+    - Diverged: the accepted page named `/decompose`, which cannot read an OpenSpec change and is not part of the
+      package. Planroom now names no next step (design decision 20).
+
+Dropped: telling the Scopious team the push-mode launch command and that `/plan-feature` and `/grill` are gone (was
+15.3). Planroom is a personal package now; the README and the skill give the launch command.
 
 ## 16. Tests
 
 - [x] 16.1 Vitest suites for `src/shared` (every schema, every derivation) and `src/server` (sessions, persistence, sync, delivery, HTTP access control, OpenSpec integration), each scenario in `specs/` traceable to at least one test name
-    - Diverged: nine scenarios cannot be traced to a unit test, because what they check is the agent following the
+    - Diverged: seven scenarios cannot be traced to a unit test, because what they check is the agent following the
       skill, or real layout, rather than code. `planning-workflow`'s "Plan a feature", "Plan as markdown", "Answer spawns
       a follow-up", "Submission" and "Proposal accepted" are the skill's phase loop, checked by 13.2 and 15.2; "Server not built" is
-      the skill's stale-server guidance; "Decompose an accepted change", "Unknown change" and "Agent docs check" wait on
-      14.1 and 14.2. `planning-workspace-ui`'s "Phone width" needs layout jsdom does not do, and was checked live under
+      the skill's stale-server guidance. `planning-workspace-ui`'s "Phone width" needs layout jsdom does not do, and was checked live under
       7.5. Every other scenario title appears in a test name.
 - [x] 16.2 Testing Library suites for render isolation, drafts, anchors, the submit gate and each block's render and error states, in jsdom
 - [x] 16.3 One end-to-end test that drives the MCP tools through the SDK's in-memory client while `fetch` posts page events to the real HTTP server, covering open, a question round trip, a comment round trip, submit, validation and accept
@@ -137,4 +166,7 @@
 - [x] 18.1 Move Planroom into its own repo with its own lint, TypeScript and Prettier configs, the OpenSpec CLI pinned as a devDependency, and tests rooted at the new repo (design decision 20)
 - [x] 18.2 Add the `planroom` command (`mcp`, `open [change-id]`, `list`, `install`, `uninstall`, `--version`) bundled into one dependency-free `dist/cli.js`, replacing `main.ts` and `scripts/install-user.mjs`; verified from a packed tarball in a throwaway npm prefix and Claude config, where `claude mcp get planroom` connected
 - [x] 18.3 CI checks every push and publishes `v*` tags to GitHub Packages; `v0.1.0` published
-- [ ] 18.4 Install `@moseswescombe/planroom` from GitHub Packages on a clean machine with only a `read:packages` token and run `planroom install`
+- [x] 18.4 Install `@moseswescombe/planroom` from GitHub Packages on a clean machine with only a `read:packages` token and run `planroom install`
+    - Checked 2026-10-05 in a fresh `node:24` container with the README's `.npmrc` and a classic token scoped to
+      `read:packages` alone: `npm i -g` installed v0.1.0, `planroom install` linked the skill and both agents, and
+      `claude mcp get planroom` connected.

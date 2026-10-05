@@ -5359,17 +5359,6 @@ button.rail-strip-item {
     border-radius: 8px;
 }
 
-.next-step {
-    padding: 16px;
-    border-radius: 12px;
-    background: var(--paper);
-}
-
-.next-step .command {
-    background: var(--surface);
-    border: 1px solid var(--line);
-}
-
 .review-actions {
     display: flex;
     flex-direction: column;

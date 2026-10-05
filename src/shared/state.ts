@@ -16,8 +16,8 @@ import {
 export const STATE_SCHEMA_VERSION = 1;
 
 /**
- * What a plan becomes on submit: an OpenSpec change, or a Markdown plan at `agent-plans/<id>/<id>.md` for
- * `/decompose`. Fixed when the plan is created, since it decides the folder the plan lives in.
+ * What a plan becomes on submit: an OpenSpec change, or a Markdown plan at `agent-plans/<id>/<id>.md`. Fixed when the
+ * plan is created, since it decides the folder the plan lives in.
  */
 export const planFormat = z.enum(['openspec', 'markdown']);
 export type PlanFormat = z.infer<typeof planFormat>;

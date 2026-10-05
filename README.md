@@ -31,6 +31,10 @@ skill and agents are links into the package, so they upgrade with it. After swit
 
 In Claude Code, ask it to plan something ("plan adding rate limiting") in a repo with an `openspec/` directory.
 
+Launch Claude Code with `claude --dangerously-load-development-channels server:planroom` and what you do on the page
+reaches Claude even while it is not waiting on it. Channels are a research preview; on claude.ai Team and Enterprise an
+Owner must allow them.
+
 | Command                          | Does                                                         |
 | -------------------------------- | ------------------------------------------------------------ |
 | `planroom open [change-id]`      | Open this repo's plans read-only in the browser, or one plan |

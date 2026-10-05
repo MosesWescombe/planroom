@@ -48,13 +48,13 @@ phase completion by writing the write-up; and submission by writing the change a
 
 ### Requirement: The agent stops at an accepted proposal
 
-On an accept event the agent SHALL end the session, report the change id and the next step `/decompose <change-id>`,
-and MUST NOT start implementing the change.
+On an accept event the agent SHALL end the session and report the change id, and MUST NOT start implementing the
+change.
 
 #### Scenario: Proposal accepted
 
 - **WHEN** the user accepts the proposal for `add-api-rate-limiting`
-- **THEN** the agent reports the change id and `/decompose add-api-rate-limiting`, and makes no code changes
+- **THEN** the agent reports the change id and makes no code changes
 
 ### Requirement: Planroom shuts down when the session ends
 
@@ -72,30 +72,3 @@ shut a resumed session down.
 
 - **WHEN** the agent opens a change whose session was finished in an earlier run and its wait returns that end event
 - **THEN** the page stays served
-
-### Requirement: Decompose reads an OpenSpec change or a Markdown plan
-
-`/decompose <change-id>` SHALL read the change's proposal, design, spec deltas and tasks from
-`openspec/changes/<change-id>/`, or for a Markdown plan `agent-plans/<change-id>/<change-id>.md`, and write tickets to `agent-plans/<change-id>/<change-id>-tickets/` in the existing
-ticket and INDEX format. With no argument it SHALL list the in-flight changes and ask which one; with a name that is not
-a change it SHALL say so and point at Planroom.
-
-#### Scenario: Decompose an accepted change
-
-- **WHEN** the user runs `/decompose add-api-rate-limiting`
-- **THEN** tickets and an INDEX are written under `agent-plans/add-api-rate-limiting/add-api-rate-limiting-tickets/`
-
-#### Scenario: Unknown change
-
-- **WHEN** the user runs `/decompose not-a-change`
-- **THEN** the agent says no such change exists and points at planning it with Planroom
-
-### Requirement: Planroom replaces plan-feature and grill
-
-The repo SHALL NOT provide the `plan-feature` or `grill` skills, and no agent documentation in the repo SHALL reference
-them.
-
-#### Scenario: Agent docs check
-
-- **WHEN** `pnpm check:agent-docs` runs after this change
-- **THEN** it passes and no file under `.agents/` or any `AGENTS.md` names `plan-feature` or `grill`

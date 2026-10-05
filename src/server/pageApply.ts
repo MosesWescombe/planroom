@@ -485,7 +485,7 @@ export function applyPageRequest(draft: Draft, request: PageRequest, revisions: 
             const gate = acceptGate(state);
             if (!gate.canAccept) reject(gate.reason ?? 'The proposal cannot be accepted yet');
             draft.setPhases({ ...state.phases, acceptedAt: now });
-            noteYours(draft, { title: 'You accepted the proposal', detail: `next: /decompose ${state.changeId}` });
+            noteYours(draft, { title: 'You accepted the proposal' });
             return { event: { type: 'proposal.accept', changeId: state.changeId } };
         }
         case 'proposal.requestChanges': {

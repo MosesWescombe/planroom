@@ -69,8 +69,8 @@ The user SHALL be able to re-run strict validation from the page, and the latest
 When the plan's format is Markdown, the submit dialog SHALL name `agent-plans/<change-id>/<change-id>.md` as the file
 the agent writes, with no strict validation to choose. The agent SHALL write that file, and the server SHALL check that
 it exists and is not empty in place of running `openspec validate`, gating the review on the check exactly as on a
-validation. The review SHALL leave out requirement, task and trace counts, and accepting SHALL show the same
-`/decompose <change-id>` next step.
+validation. The review SHALL leave out requirement, task and trace counts, and accepting SHALL work as it does for a
+change.
 
 #### Scenario: Plan file missing
 
@@ -85,14 +85,14 @@ validation. The review SHALL leave out requirement, task and trace counts, and a
 ### Requirement: The user accepts or requests changes
 
 "Accept proposal" SHALL be enabled only when the latest validation passed and no comment on the proposal is open.
-Accepting SHALL notify the agent, make the session read-only, and show `/decompose <change-id>` as the next step.
+Accepting SHALL notify the agent and make the session read-only.
 "Request changes" SHALL require at least one open comment or a message and SHALL notify the agent. Accepting MUST NOT
 start implementation.
 
 #### Scenario: Accept
 
 - **WHEN** validation passed, no proposal comment is open and the user accepts
-- **THEN** the agent is notified, the session becomes read-only, and the page shows `/decompose add-api-rate-limiting`
+- **THEN** the agent is notified and the session becomes read-only
 
 #### Scenario: Accept blocked by a comment
 
