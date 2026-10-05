@@ -154,7 +154,7 @@ export function channelContent(event: LoggedEvent): string {
  */
 export function createPlanroom(options: PlanroomOptions): Planroom {
     const server = new Server(
-        { name: 'planroom', version: '0.1.0' },
+        { name: 'planroom', version: '1.0.0' },
         { capabilities: { tools: {}, experimental: { 'claude/channel': {} } }, instructions: INSTRUCTIONS }
     );
     let session: Session | undefined;
