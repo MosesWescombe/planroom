@@ -7,23 +7,21 @@ One package holds the `planroom` command, the MCP server, the page, the `planroo
 
 ## Install
 
-Needs Node 22.18 or newer and Claude Code. The package is private on GitHub Packages, so each machine needs a classic
-GitHub token with only the `read:packages` scope (GitHub Packages accepts only classic tokens):
+Needs Node 22.18 or newer and Claude Code. The package is public on npm, so no token is needed:
 
 ```sh
-cat >> ~/.npmrc <<'EOF'
-@moseswescombe:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=<classic token, read:packages>
-EOF
-npm i -g @moseswescombe/planroom
+npm i -g @moses-wescombe/planroom
 planroom install
 ```
+
+If you installed the old `@moseswescombe/planroom` from GitHub Packages, run `npm rm -g @moseswescombe/planroom` first,
+since both own the `planroom` command. Its `npm.pkg.github.com` lines in `~/.npmrc` can go too.
 
 `planroom install` links the skill and agents into `~/.claude` (or `$CLAUDE_CONFIG_DIR`) and registers a user-scope
 `planroom` MCP server. OpenSpec-format plans also need the OpenSpec CLI, pinned in the repo or from
 `npm i -g @fission-ai/openspec`.
 
-Upgrade with `npm i -g @moseswescombe/planroom@latest`, then reconnect `planroom` in `/mcp` in any running session. The
+Upgrade with `npm i -g @moses-wescombe/planroom@latest`, then reconnect `planroom` in `/mcp` in any running session. The
 skill and agents are links into the package, so they upgrade with it. After switching your default Node version, run
 `planroom install` again: it records absolute paths.
 

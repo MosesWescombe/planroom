@@ -115,7 +115,7 @@ export function parseStateFile(raw: string, file: string): SessionState {
     if (version !== STATE_SCHEMA_VERSION) {
         throw new StateFileError(
             `${file} has schemaVersion ${JSON.stringify(version)}, but this Planroom reads version ${STATE_SCHEMA_VERSION}. ` +
-                'Update Planroom (npm i -g @moseswescombe/planroom@latest) or move the file aside to start the session over.'
+                'Update Planroom (npm i -g @moses-wescombe/planroom@latest) or move the file aside to start the session over.'
         );
     }
     const parsed = sessionState.safeParse(json);

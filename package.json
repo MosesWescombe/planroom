@@ -1,5 +1,5 @@
 {
-  "name": "@moseswescombe/planroom",
+  "name": "@moses-wescombe/planroom",
   "version": "0.1.0",
   "description": "Live browser planning surface for Claude Code: an MCP server that also serves the planning page",
   "type": "module",
@@ -18,7 +18,7 @@
     "url": "git+https://github.com/MosesWescombe/planroom.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "engines": {
     "node": ">=22.18"

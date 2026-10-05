@@ -27,7 +27,7 @@ approval step.
    path in this skill is relative to it. When it is not your working directory (the server was started with `--dir`),
    read and write the plan there, run `openspec` from there, and tell every subagent you start to work in it.
 4. If the `planroom` tools are missing or the call fails because the server is not running, say so and name the fix:
-   `planroom install` (after `npm i -g @moseswescombe/planroom` if the `planroom` command is missing too), then `/mcp`
+   `planroom install` (after `npm i -g @moses-wescombe/planroom` if the `planroom` command is missing too), then `/mcp`
    to reconnect. If the repo has no `openspec/` directory, `planroom_open` refuses: say the repo needs `openspec init`
    first and do not run it yourself. Do not fall back to planning in chat. For a stale server or a change held by
    another session, see [The server](#the-server).

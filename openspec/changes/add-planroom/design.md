@@ -356,8 +356,8 @@ requirement, task and trace counts a Markdown plan does not have.
 
 ### 20. Planroom is its own package with a `planroom` command (supersedes decision 1's launcher)
 
-Planroom moved out of scopious-platform's `tools/planroom` into its own repo, published privately to GitHub Packages as
-`@moseswescombe/planroom` from `v*` tags. `src/cli.ts` is the `planroom` command: `mcp` is decision 1's stdio server,
+Planroom moved out of scopious-platform's `tools/planroom` into its own repo, published publicly to npm as
+`@moses-wescombe/planroom` from `v*` tags through npm trusted publishing. `src/cli.ts` is the `planroom` command: `mcp` is decision 1's stdio server,
 `open [change-id]` the standalone plan browser, `list` the plans of every repo in the registry, and `install` links
 `skill/` and `agents/` into `~/.claude` and registers a user-scope `planroom` MCP server running `<node> dist/cli.js mcp`
 with absolute paths. Vite bundles the command, server and all, into one `dist/cli.js` beside `dist/ui`, so the package
@@ -374,6 +374,8 @@ server's messages and the skill only say the plan is accepted.
 - _Rejected: a Claude Code plugin_. It gives no shell command, needs the built files committed, and renames the MCP
   tools the agent files name.
 - _Rejected: installing from git_. Every install would download the build toolchain and build without the lockfile.
+- _Rejected: GitHub Packages_. Its npm registry needs a token to install even public packages, and that token has
+  to be a classic one.
 
 ## Risks / Trade-offs
 

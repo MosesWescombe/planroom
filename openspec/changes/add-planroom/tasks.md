@@ -170,3 +170,7 @@ Dropped: telling the Scopious team the push-mode launch command and that `/plan-
     - Checked 2026-10-05 in a fresh `node:24` container with the README's `.npmrc` and a classic token scoped to
       `read:packages` alone: `npm i -g` installed v0.1.0, `planroom install` linked the skill and both agents, and
       `claude mcp get planroom` connected.
+- [x] 18.5 Publish `v*` tags to public npm as `@moses-wescombe/planroom` through npm trusted publishing, so installing needs no token (design decision 20)
+    - `npm publish --dry-run` targets `https://registry.npmjs.org/` with public access. Left for after the archive,
+      since they need the npm account: the first publish by hand, `ci.yml` as its trusted publisher on npmjs.com, and
+      a clean-machine install from npm.
