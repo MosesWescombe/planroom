@@ -11,7 +11,7 @@ import type { OpenSpecRunner } from '../server/openspec.js';
 import { Session } from '../server/session.js';
 import type { AgentEvent } from '../shared/events.js';
 import type { SectionItem, ValidationRecord } from '../shared/records.js';
-import type { PlanFormat } from '../shared/state.js';
+import type { PlanFormat, SessionKind } from '../shared/state.js';
 import { questionContent } from './fixtures.js';
 
 export const CHANGE = 'add-api-rate-limiting';
@@ -164,14 +164,18 @@ export async function eventually(check: () => void | Promise<void>, timeoutMs = 
     }
 }
 
-/** A Planroom MCP server connected to an in-memory client. */
-export async function connect(options: { opened?: boolean; cli?: (repo: string) => OpenSpecRunner; registryFile?: string } = {}) {
+/** A Planroom MCP server, by default the planning server, connected to an in-memory client. */
+export async function connect(
+    options: { kind?: SessionKind; opened?: boolean; cli?: (repo: string) => OpenSpecRunner; registryFile?: string } = {}
+) {
     const repo = await tempRepo();
     const uiDir = await tempRepo();
     await writeFile(join(uiDir, 'index.html'), '<!doctype html><title>Planroom</title>');
     const cli = options.cli?.(repo) ?? fakeCli(repo);
     const openBrowser = vi.fn(async () => options.opened ?? true);
     const planroom = createPlanroom({
+        kind: options.kind ?? 'plan',
+        version: '0.0.0-test',
         repoRoot: repo,
         uiDir,
         cli,

@@ -21,7 +21,7 @@ export function App({ store }: { store: ViewStore }) {
         <StoreContext.Provider value={store}>
             {browsing ? (
                 <UiProvider initialTab="interrogate">
-                    <PlanBrowser readOnly={browsing.readOnly} />
+                    <PlanBrowser />
                 </UiProvider>
             ) : changeId && view ? (
                 <UiProvider initialTab={tabForPhase(pagePhase(view))}>

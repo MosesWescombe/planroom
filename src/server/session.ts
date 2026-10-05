@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, promises as fs } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { checkCommand, currentPhase } from '../shared/derive.js';
 import { type LoggedEvent, type NewLoggedEvent, pageRequest } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
@@ -11,10 +11,11 @@ import { applyAgentBatch, type BatchResult, parseBatch } from './agentApply.js';
 import { checkMarkdownPlan, scanChangeFolder, watchChangeFolder } from './changeFolder.js';
 import { type ChannelNotifier, EventDelivery, type WaitResult } from './delivery.js';
 import { Draft, RejectedError } from './draft.js';
+import { writeAtomic } from './fsutil.js';
 import { acquireLock, releaseLock, releaseLockSync, updateLock } from './lock.js';
 import type { OpenSpecRunner } from './openspec.js';
 import { applyPageRequest } from './pageApply.js';
-import { planroomDir, SessionStore } from './store.js';
+import { askDir, ignoreInGit, LOCAL_FILES, planroomDir, SessionStore } from './store.js';
 import { describeWork, followsAgent, PHASE_WORK, type Work } from './work.js';
 
 /** kebab-case: lowercase letters and digits in words joined by single hyphens. */
@@ -22,7 +23,7 @@ export const CHANGE_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** How long the top bar says "Agent editing …" after a write. */
 const EDITING_MS = 8_000;
-const ACTIVITY_LIMIT = 60;
+export const ACTIVITY_LIMIT = 60;
 
 export interface OpenOptions {
     repoRoot: string;
@@ -33,6 +34,26 @@ export interface OpenOptions {
     cli: OpenSpecRunner;
     /** Returns the current time; tests pass a fixed clock. */
     now?: () => Date;
+}
+
+/** What `Session.openAsk` needs: the repo, the ask's id, and for a new ask its title and transcript file. */
+export interface AskOptions {
+    repoRoot: string;
+    askId: string;
+    title?: string;
+    /** The repo-relative `.md` file the transcript is written to when the user sends their answers. */
+    output?: string;
+    cli: OpenSpecRunner;
+    now?: () => Date;
+}
+
+/** Reject an id that is not kebab-case before anything touches the disk. */
+function checkId(id: string, path: string, example: string): void {
+    if (!CHANGE_ID.test(id))
+        throw new RejectedError(
+            [{ path, message: `"${id}" is not kebab-case: use lowercase letters, digits and single hyphens, like ${example}` }],
+            400
+        );
 }
 
 /** How a format reads in a message. */
@@ -66,14 +87,16 @@ export function formatFor(repoRoot: string, changeId: string, requested: PlanFor
 }
 
 /** The fields a page view adds to the persisted state, which the server works out live. */
-export type LiveFields = Pick<View, 'agent' | 'activity' | 'revisions' | 'proposal' | 'validating' | 'viewOnly'>;
+export type LiveFields = Pick<View, 'agent' | 'activity' | 'revisions' | 'proposal' | 'validating' | 'viewOnly' | 'elsewhere'>;
 
 /** A plan's page view: the page's fields of its persisted state, plus the live ones. */
 export function viewOf(state: SessionState, live: LiveFields): View {
     const {
         changeId,
         title,
+        kind,
         format,
+        output,
         createdAt,
         questions,
         suggestions,
@@ -91,7 +114,9 @@ export function viewOf(state: SessionState, live: LiveFields): View {
     return {
         changeId,
         title,
+        kind,
         format,
+        ...(output !== undefined ? { output } : {}),
         createdAt,
         questions,
         suggestions,
@@ -117,8 +142,11 @@ export function viewOf(state: SessionState, live: LiveFields): View {
 export class Session {
     private queue: Promise<unknown> = Promise.resolve();
     private readonly listeners = new Set<(patches: Patch[]) => void>();
-    private activity: ActivityEntry[] = [];
-    private activityId = 0;
+    /** The newest activity entries, newest first; every entry is also appended to the store's activity log. */
+    private activity: ActivityEntry[];
+    private activityId: number;
+    /** The activity log's appends, in order, off the queue: the feed is a convenience, not the record. */
+    private activityLog: Promise<void> = Promise.resolve();
     private editing: { label: string; until: number } | undefined;
     private editingTimer: NodeJS.Timeout | undefined;
     /** What the agent is on: set from what its last wait returned or its own `doing`, cleared when it waits again. */
@@ -136,16 +164,21 @@ export class Session {
     readonly openedSeq: number;
     closed = false;
 
-    /** Private: sessions come from `Session.open`, which takes the lock and loads the state first. */
+    /** Private: sessions come from `Session.open` or `Session.openAsk`, which take the lock and load the state first. */
     private constructor(
+        private readonly repoRoot: string,
+        /** The plan's folder, or an ask's records folder, which is never watched or validated. */
         readonly changeDir: string,
         readonly store: SessionStore,
         private state: SessionState,
         events: LoggedEvent[],
         private revisions: Revision[],
+        activity: ActivityEntry[],
         private readonly cli: OpenSpecRunner,
         private readonly clock: () => Date
     ) {
+        this.activity = activity;
+        this.activityId = Math.max(0, ...activity.map((entry) => entry.id));
         this.delivery = new EventDelivery(events, state.agentCursor, () => clock().getTime());
         this.openedSeq = this.delivery.lastSeq;
         this.delivery.onChange(() => this.agentChanged());
@@ -157,22 +190,12 @@ export class Session {
      * Open or resume the session for a change: reject a non-kebab-case id before
      * touching anything, scaffold an OpenSpec change with `openspec new change` when it
      * does not exist, take the lock, and restore the persisted state. A Markdown plan
-     * lives in `agent-plans/<id>/` instead, which needs no scaffold.
+     * lives in `agent-plans/<id>/` instead, which needs no scaffold. Its `.planroom/`
+     * gets a `.gitignore` for the files that stay local.
      */
     static async open(options: OpenOptions): Promise<{ session: Session; resumed: boolean }> {
         const { repoRoot, changeId, cli } = options;
-        const clock = options.now ?? (() => new Date());
-        if (!CHANGE_ID.test(changeId)) {
-            throw new RejectedError(
-                [
-                    {
-                        path: 'changeId',
-                        message: `"${changeId}" is not kebab-case: use lowercase letters, digits and single hyphens, like add-api-rate-limiting`
-                    }
-                ],
-                400
-            );
-        }
+        checkId(changeId, 'changeId', 'add-api-rate-limiting');
         // Otherwise `openspec new change` would quietly create an OpenSpec root here.
         if (!existsSync(join(repoRoot, 'openspec')))
             throw new Error(
@@ -184,21 +207,58 @@ export class Session {
             await cli.newChange(changeId);
             if (!existsSync(changeDir)) throw new Error(`openspec new change did not create ${changeDir}`);
         }
-        const store = new SessionStore(planroomDir(repoRoot, format, changeId));
+        const dir = planroomDir(repoRoot, format, changeId);
+        await ignoreInGit(dir, LOCAL_FILES);
+        return Session.start(options, changeDir, new SessionStore(dir), (now) =>
+            emptyState(changeId, options.title?.trim() || changeId, now, format)
+        );
+    }
+
+    /**
+     * Open or resume an ask in `.planroom/asks/<askId>/`, which needs no `openspec/` and whose `.planroom/` ignores
+     * itself in git. A resumed ask is as it was left: `reopenAsk` makes a sent one editable again, and `setOutput`
+     * points it at another file.
+     */
+    static async openAsk(options: AskOptions): Promise<{ session: Session; resumed: boolean }> {
+        const { repoRoot, askId, output } = options;
+        checkId(askId, 'askId', 'auth-migration-questions');
+        const dir = askDir(repoRoot, askId);
+        await ignoreInGit(join(repoRoot, '.planroom'));
+        return Session.start(options, dir, new SessionStore(dir), (now) => ({
+            ...emptyState(askId, options.title?.trim() || askId, now),
+            kind: 'ask',
+            ...(output === undefined ? {} : { output })
+        }));
+    }
+
+    /** Take the lock, then restore the persisted state or start one from `fresh`, and watch a plan's folder. */
+    private static async start(
+        options: Pick<OpenOptions, 'repoRoot' | 'cli' | 'now'>,
+        changeDir: string,
+        store: SessionStore,
+        fresh: (now: string) => SessionState
+    ): Promise<{ session: Session; resumed: boolean }> {
+        const clock = options.now ?? (() => new Date());
         await store.init();
         await acquireLock(store.lockFile, '(starting)', clock().toISOString());
         try {
             const loaded = await store.load();
-            if (loaded) {
-                const session = new Session(changeDir, store, loaded.state, loaded.events, loaded.revisions, cli, clock);
-                await session.startWatching();
-                return { session, resumed: true };
-            }
-            const state = emptyState(changeId, options.title?.trim() || changeId, clock().toISOString(), format);
-            await store.saveState(state);
-            const session = new Session(changeDir, store, state, [], [], cli, clock);
-            await session.startWatching();
-            return { session, resumed: false };
+            const state = loaded?.state ?? fresh(clock().toISOString());
+            if (!loaded) await store.saveState(state);
+            const { repoRoot, cli } = options;
+            const session = new Session(
+                repoRoot,
+                changeDir,
+                store,
+                state,
+                loaded?.events ?? [],
+                loaded?.revisions ?? [],
+                await store.loadActivity(ACTIVITY_LIMIT),
+                cli,
+                clock
+            );
+            if (state.kind === 'plan') await session.startWatching();
+            return { session, resumed: loaded !== undefined };
         } catch (error) {
             await releaseLock(store.lockFile);
             throw error;
@@ -218,6 +278,39 @@ export class Session {
     /** The session clock's time as an ISO string. */
     private nowIso(): string {
         return this.clock().toISOString();
+    }
+
+    /**
+     * Make a sent ask editable again for the agent's next questions, once its `ask.done` has reached the agent, and
+     * count that event as read so it is not handed over again. Until then the ask stays as the user sent it: the agent
+     * has their answers to read first. Resolves with whether the ask takes questions.
+     */
+    reopenAsk(): Promise<boolean> {
+        return this.exclusive(async () => {
+            const { ended, ...phases } = this.state.phases;
+            if (!ended) return true;
+            // Nothing follows an ask's `ask.done`: the page and the agent are refused once it is sent.
+            const done = this.state.lastEvent?.seq ?? 0;
+            if (!this.delivery.reached(done)) return false;
+            this.delivery.acknowledge(done);
+            const draft = new Draft(this.state, this.nowIso());
+            draft.state.agentCursor = this.delivery.agentCursor;
+            draft.setPhases(phases);
+            draft.note({ title: 'Reopened for more questions' });
+            await this.store.saveState(draft.state);
+            this.commit(draft);
+            return true;
+        });
+    }
+
+    /** Point an ask's transcript at `output` from now on. */
+    setOutput(output: string): Promise<void> {
+        return this.exclusive(async () => {
+            if (this.state.output === output) return;
+            this.state = { ...this.state, output };
+            await this.store.saveState(this.state);
+            this.broadcast([{ field: 'output', value: output }]);
+        });
     }
 
     /** Record the page URL in the lock, so a second session's error can name it. */
@@ -264,14 +357,27 @@ export class Session {
             this.work = describeWork(result.events, this.state);
             this.agentChanged();
         }
-        if (this.delivery.agentCursor > this.state.agentCursor) {
-            await this.exclusive(async () => {
-                if (this.delivery.agentCursor <= this.state.agentCursor) return;
-                this.state = { ...this.state, agentCursor: this.delivery.agentCursor };
-                await this.store.saveState(this.state);
-            });
-        }
+        await this.saveCursor();
         return result;
+    }
+
+    /**
+     * Record that the agent has read through `seq` without waiting again: for an event that ends the session, which no
+     * later wait on it acknowledges.
+     */
+    async acknowledge(seq: number): Promise<void> {
+        this.delivery.acknowledge(seq);
+        await this.saveCursor();
+    }
+
+    /** Persist the agent's cursor once it has moved past the saved one, so a resume carries on from it. */
+    private async saveCursor(): Promise<void> {
+        if (this.delivery.agentCursor <= this.state.agentCursor) return;
+        await this.exclusive(async () => {
+            if (this.delivery.agentCursor <= this.state.agentCursor) return;
+            this.state = { ...this.state, agentCursor: this.delivery.agentCursor };
+            await this.store.saveState(this.state);
+        });
     }
 
     /** Attach or detach the channel push for events that arrive while no wait is parked. */
@@ -291,7 +397,9 @@ export class Session {
             if (!parsed.success) throw new RejectedError(toIssues(parsed.error), 400);
             const draft = new Draft(this.state, this.nowIso());
             const outcome = applyPageRequest(draft, parsed.data, this.revisions);
-            const event = outcome.event ? this.stamp(outcome.event, draft.now) : undefined;
+            let sent = outcome.event;
+            if (sent?.type === 'ask.done') sent = { ...sent, ...(await this.writeOutput(draft.state.output, sent.context)) };
+            const event = sent ? this.stamp(sent, draft.now) : undefined;
             if (event) draft.state.lastEvent = event;
             if (outcome.revision) await this.store.saveRevision(outcome.revision);
             await this.store.saveState(draft.state);
@@ -301,6 +409,19 @@ export class Session {
             if (outcome.validate) this.startValidation('rerun');
             return event ? { seq: event.seq } : {};
         });
+    }
+
+    /** Write an ask's transcript to its `output`, when it has one, and say how that went for the `ask.done` event. */
+    private async writeOutput(output: string | undefined, context: string): Promise<{ file?: string; fileError?: string }> {
+        if (output === undefined) return {};
+        const file = join(this.repoRoot, output);
+        try {
+            await fs.mkdir(dirname(file), { recursive: true });
+            await writeAtomic(file, context);
+            return { file: output };
+        } catch (error) {
+            return { fileError: `${output} could not be written: ${error instanceof Error ? error.message : String(error)}` };
+        }
     }
 
     /** Give a new event the next seq and its timestamp. */
@@ -366,13 +487,14 @@ export class Session {
             });
     }
 
-    /** Wait for any validation in flight; tests use this to observe the result. */
+    /** Wait for any validation in flight and the activity log; tests use this to observe the result. */
     async settled(): Promise<void> {
         await this.queue;
         while (this.validations > 0) {
             await new Promise((resolve) => setTimeout(resolve, 10));
             await this.queue;
         }
+        await this.activityLog;
     }
 
     /** Scan the change folder now and rescan whenever it changes. */
@@ -389,7 +511,10 @@ export class Session {
 
     // ---------------------------------------------------------------- page stream
 
-    /** Swap in a draft's state and broadcast its patches, with the revision list and activity feed when they grew. */
+    /**
+     * Swap in a draft's state and broadcast its patches, with the revision list and activity feed when they grew. The
+     * feed's new entries are logged in the background.
+     */
     private commit(draft: Draft, revision?: Revision): void {
         this.state = draft.state;
         const patches = draft.listPatches();
@@ -399,10 +524,18 @@ export class Session {
         }
         if (draft.activity.length) {
             const entries = draft.activity.map((entry) => ({ ...entry, id: (this.activityId += 1) }));
-            this.activity = [...entries.reverse(), ...this.activity].slice(0, ACTIVITY_LIMIT);
+            this.logActivity(entries);
+            this.activity = [...entries.toReversed(), ...this.activity].slice(0, ACTIVITY_LIMIT);
             patches.push({ field: 'activity', value: this.activity });
         }
         this.broadcast(patches);
+    }
+
+    /** Append entries to the activity log after the earlier ones. A failed write costs only the feed, so it is reported, not thrown. */
+    private logActivity(entries: readonly ActivityEntry[]): void {
+        this.activityLog = this.activityLog
+            .then(() => this.store.appendActivity(entries))
+            .catch((error: unknown) => console.error(`planroom: could not log activity for ${this.changeId}`, error));
     }
 
     /** Show "Agent editing <label>" in the top bar for a few seconds after a write. */
@@ -487,6 +620,7 @@ export class Session {
         this.stopWatching?.();
         clearTimeout(this.editingTimer);
         await this.queue.catch(() => undefined);
+        await this.activityLog;
         await releaseLock(this.store.lockFile);
         process.off('exit', this.exitHandler);
         this.listeners.clear();

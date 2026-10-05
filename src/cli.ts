@@ -15,17 +15,18 @@ import { PlanViewer } from './server/viewer.js';
 
 /**
  * The `planroom` command, bundled with the server into `dist/cli.js` beside the built page in `dist/ui`. `mcp` is
- * what Claude Code starts over stdio; there nothing may write to stdout except the MCP transport. The repo is the
- * nearest directory up from `--dir <path>` (default: the launch directory) with an `openspec/`.
+ * what Claude Code starts over stdio, as the planning server or with `--ask` the question server; there nothing may
+ * write to stdout except the MCP transport. The repo is the nearest directory up from `--dir <path>` (default: the
+ * launch directory) with an `openspec/`.
  */
 
 const USAGE = `Usage: planroom <command> [--dir <path>]
 
 Commands:
-  mcp               Run the MCP server that Claude Code starts over stdio
+  mcp [--ask]       Run the MCP server that Claude Code starts over stdio: planning, or with --ask questions
   open [change-id]  Open this repo's plans read-only in the browser, or one plan
   list              List the plans in every repo Planroom has run in
-  install           Link the skill and agents into ~/.claude and register the MCP server
+  install           Link the skills and agents into ~/.claude and register the MCP servers
   uninstall         Remove what install added
 
 Options:
@@ -34,11 +35,17 @@ Options:
 
 const pkgRoot = fileURLToPath(new URL('..', import.meta.url));
 const uiDir = fileURLToPath(new URL('./ui/', import.meta.url));
+const { version }: { version: string } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const registry = registryFile();
 
 const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { dir: { type: 'string' }, version: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } }
+    options: {
+        dir: { type: 'string' },
+        ask: { type: 'boolean' },
+        version: { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' }
+    }
 });
 const [command, ...rest] = positionals;
 
@@ -68,10 +75,12 @@ function repo(): { repoRoot: string; openSpecRoot?: string } {
     return { repoRoot: openSpecRoot ?? startDir, openSpecRoot };
 }
 
-/** Serve the MCP server over stdio until Claude Code closes it. */
+/** Serve the planning server, or with `--ask` the question server, over stdio until Claude Code closes it. */
 async function mcp(): Promise<void> {
     const { repoRoot } = repo();
     const planroom = createPlanroom({
+        kind: values.ask ? 'ask' : 'plan',
+        version,
         repoRoot,
         uiDir,
         cli: openSpecCli(repoRoot),
@@ -149,7 +158,7 @@ process.on('SIGINT', () => void stop(0));
 process.on('SIGTERM', () => void stop(0));
 
 if (values.version) {
-    console.log(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+    console.log(version);
 } else if (command === 'mcp') {
     await mcp();
 } else if (command === 'open') {
@@ -158,12 +167,15 @@ if (values.version) {
     await list();
 } else if (command === 'install') {
     install(target, claude);
-    console.log(`Planroom installed: skill and agents linked into ${target.configDir} from ${pkgRoot}, MCP server registered.`);
+    console.log(
+        `Planroom installed: skills and agents linked into ${target.configDir} from ${pkgRoot}, planroom and planroom-ask MCP servers registered.`
+    );
     if (spawnSync('openspec', ['--version']).error)
         console.log(
             'openspec is not on PATH. OpenSpec-format plans need it, pinned in the repo or from npm i -g @fission-ai/openspec.'
         );
-    console.log('Running Claude Code sessions keep their old server: reconnect planroom in /mcp.');
+    console.log('Running Claude Code sessions keep their old servers: reconnect planroom and planroom-ask in /mcp.');
+    console.log('To turn planning or asking off, disable its server in /mcp and its skill in /skills.');
 } else if (command === 'uninstall') {
     uninstall(target, claude);
     console.log(`Planroom uninstalled from ${target.configDir}. Plans and their records are left in place.`);

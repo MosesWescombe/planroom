@@ -3,8 +3,9 @@ dist/
 *.tgz
 
 # Planroom keeps its planning record (state.json, assets/) with the plan; the event log,
-# write-up revisions, session lock and in-flight temp files are local mechanics.
+# activity feed, write-up revisions, session lock and in-flight temp files are local mechanics.
 **/.planroom/events.jsonl*
+**/.planroom/activity.jsonl*
 **/.planroom/revisions/
 **/.planroom/lock
 **/.planroom/.*.tmp

@@ -16,7 +16,7 @@ window.addEventListener('afterprint', () => applyTheme(resolveTheme(readPreferen
 const store = new ViewStore();
 openStream({
     onMessage: (message) => {
-        if (message.type === 'browse') store.browse(message.readOnly);
+        if (message.type === 'browse') store.browse();
         else if (message.type === 'snapshot') store.snapshot(message.view);
         else store.apply(message.patches);
     },

@@ -191,20 +191,21 @@ describe('old plans', () => {
                     updatedAt: NOW,
                     liveUrl: 'http://127.0.0.1:4000/live/'
                 },
-                { changeId: 'drop-retries', title: 'Drop retries', format: 'openspec', status: 'cancelled', updatedAt: NOW }
+                { changeId: 'drop-retries', title: 'Drop retries', format: 'openspec', status: 'cancelled', updatedAt: NOW },
+                { changeId: 'add-x', title: 'Agora X', format: 'openspec', status: 'interrogate', updatedAt: NOW }
             ]
         }
     ];
 
-    /** Stub the plan endpoints; returns the change ids the page asked to open. */
-    function stubPlans(): string[] {
-        const opened: string[] = [];
+    /** Stub the plan endpoints, listing this repo's plans as `readOnly`; returns what the page asked to open. */
+    function stubPlans(readOnly = false): { changeId: string; repoRoot?: string }[] {
+        const opened: { changeId: string; repoRoot?: string }[] = [];
         vi.stubGlobal(
             'fetch',
             vi.fn(async (url: string, init?: RequestInit) => {
-                if (url === 'api/plans') return new Response(JSON.stringify({ plans, elsewhere }), { status: 200 });
+                if (url === 'api/plans') return new Response(JSON.stringify({ plans, elsewhere, readOnly }), { status: 200 });
                 if (url === 'api/plans/open') {
-                    opened.push(JSON.parse(String(init?.body)).changeId);
+                    opened.push(JSON.parse(String(init?.body)));
                     return new Response(JSON.stringify({ error: 'held', issues: [{ path: '', message: 'Held elsewhere' }] }), {
                         status: 409
                     });
@@ -229,32 +230,52 @@ describe('old plans', () => {
         expect(within(old).getByText('add-centralised-logs')).toHaveAttribute('title', 'agent-plans/add-centralised-logs');
         expect(here).not.toHaveTextContent('Markdown');
         await userEvent.click(old);
-        expect(opened).toEqual(['add-centralised-logs']);
+        expect(opened).toEqual([{ changeId: 'add-centralised-logs' }]);
         expect(await screen.findByText('Held elsewhere')).toBeInTheDocument();
     });
 
-    it("other repos' plans: a live one links to its page, an idle one says to reopen it from its repo", async () => {
-        stubPlans();
+    it("other repos' plans: a live one links to its page, an idle one asks Planroom to show it read-only", async () => {
+        const opened = stubPlans();
         renderApp(storeWith(makeView()));
         await userEvent.click(screen.getByRole('button', { name: 'Switch plan: add-x' }));
         const repo = await screen.findByRole('region', { name: 'Plans in agora-processor-app' });
         expect(within(repo).getByRole('link', { name: /Accept packets/ })).toHaveAttribute('href', 'http://127.0.0.1:4000/live/');
-        expect(within(repo).getByText(/reopen from that repo/)).toBeInTheDocument();
-        expect(within(repo).queryByRole('button')).toBeNull();
+        const idle = within(repo).getByRole('button', { name: /Drop retries/ });
+        expect(idle).toHaveTextContent('opens read-only');
+        await userEvent.click(idle);
+        expect(opened).toEqual([{ changeId: 'drop-retries', repoRoot: '/home/me/agora-processor-app' }]);
+        expect(await screen.findByText('Held elsewhere')).toBeInTheDocument();
+    });
+
+    it("another repo's plan, shown read-only over a live session: marked in its repo, this repo's plans still switch", async () => {
+        const opened = stubPlans();
+        renderApp(storeWith(makeView({}, { viewOnly: true, elsewhere: '/home/me/agora-processor-app' })));
+        expect(screen.getByText(/ask Claude in/)).toHaveTextContent('/home/me/agora-processor-app');
+        await userEvent.click(screen.getByRole('button', { name: 'Switch plan: add-x' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Plans' });
+        expect(within(dialog).getByText(/the agent picks it up on its next step/)).toBeInTheDocument();
+        const ours = within(dialog).getByRole('button', { name: /Add X/ });
+        expect(ours).toBeEnabled();
+        expect(ours).not.toHaveAttribute('aria-current');
+        const theirs = within(dialog).getByRole('button', { name: /Agora X/ });
+        expect(theirs).toBeDisabled();
+        expect(theirs).toHaveAttribute('aria-current', 'true');
+        await userEvent.click(ours);
+        expect(opened).toEqual([{ changeId: 'add-x' }]);
     });
 
     it('the plan browser page lists every plan with none marked; picking one asks Planroom to open it', async () => {
-        const opened = stubPlans();
+        const opened = stubPlans(true);
         const store = new ViewStore();
-        store.browse(true);
+        store.browse();
         renderApp(store);
         expect(screen.getByRole('heading', { name: 'Plans' })).toBeInTheDocument();
-        expect(screen.getByText(/each opens read-only/)).toBeInTheDocument();
+        expect(await screen.findByText(/each opens read-only/)).toBeInTheDocument();
         const plan = await screen.findByRole('button', { name: /Add X/ });
         expect(plan).toBeEnabled();
         expect(plan).not.toHaveAttribute('aria-current');
         await userEvent.click(plan);
-        expect(opened).toEqual(['add-x']);
+        expect(opened).toEqual([{ changeId: 'add-x' }]);
         expect(await screen.findByText('Held elsewhere')).toBeInTheDocument();
     });
 

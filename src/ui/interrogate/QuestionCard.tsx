@@ -26,6 +26,7 @@ import { Markdown } from '../components/Markdown';
 import { ThreadDialog, ThreadRow } from '../components/Thread';
 import { relativeTime } from '../format';
 import { useNow } from '../hooks';
+import { storageScope } from '../local';
 import { useReadOnly } from '../readOnly';
 import { useSendOnKey } from '../sendKey';
 import { deepEqual, useRecord, useSelector } from '../store';
@@ -672,15 +673,15 @@ function Conflict({ question, slot }: { question: QuestionRecord; slot: Clarific
  * One question, rendered on its own. It subscribes to its own record, so an agent
  * update to another question never re-renders it, and its unsaved selection and note
  * live in a local draft that survives reloads and is never sent until saved. An answered
- * question shows as one line; "View" opens it read-only, and a double-click edits it.
+ * question shows as one line; "View" opens it read-only, and a double-click edits it unless the session is read-only.
  * Its Clarifications stay mounted whichever layout its status picks.
  */
 export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
     const question = useRecord('questions', id);
-    const changeId = useSelector((view) => view.changeId);
+    const scope = useSelector(storageScope);
     const readOnly = useReadOnly();
     const { send } = useActions();
-    const [draft, setDraft, clearDraft] = useDraft(changeId, id);
+    const [draft, setDraft, clearDraft] = useDraft(scope, id);
     const [busy, track] = useBusy();
     const [view, setView] = useState(false);
     const now = useNow();
@@ -711,7 +712,7 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
     if (isInfo(question)) return withClarifications(<Info question={question} slot={slot} />);
 
     const answered = question.status === 'answered' && !draft.editing;
-    const viewing = answered && view && !readOnly && Boolean(question.answer);
+    const viewing = answered && view && Boolean(question.answer);
     const needsReview = question.status === 'needs-review';
     const save = (value: Answer) =>
         quietly(
@@ -757,11 +758,9 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
                     </div>
                     <ClarificationsHere slot={slot} />
                 </div>
-                {!readOnly && (
-                    <button type="button" className="button-link" onClick={() => setView(true)}>
-                        View
-                    </button>
-                )}
+                <button type="button" className="button-link" onClick={() => setView(true)}>
+                    View
+                </button>
             </article>
         );
     }
@@ -800,7 +799,7 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
             }
             aria-labelledby={`q-title-${question.id}`}
             data-scroll-anchor
-            onDoubleClick={viewing ? editOnDoubleClick : undefined}
+            onDoubleClick={viewing && !readOnly ? editOnDoubleClick : undefined}
             onKeyDown={readOnly ? undefined : saveOnKey}
         >
             <div className="q-head">
@@ -823,7 +822,7 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
                     ) : null}
                 </div>
                 <span className="q-note">
-                    {viewing
+                    {viewing && !readOnly
                         ? 'Double-click to edit'
                         : dirty && !readOnly
                           ? `Draft kept locally${tooLong ? ` · ${tooLong}` : ''}`
@@ -837,7 +836,7 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
                     {question.title}
                 </h3>
                 <Context question={question} />
-                {!readOnly && (
+                {(!readOnly || viewing) && (
                     <Inputs
                         question={question}
                         draft={shown}
@@ -847,29 +846,33 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
                     />
                 )}
             </div>
-            {readOnly && question.answer && <YourAnswer question={question} answer={question.answer} />}
-            {!readOnly && (viewing ? Boolean(shown.note) : selected) && (
+            {readOnly && !viewing && question.answer && <YourAnswer question={question} answer={question.answer} />}
+            {(viewing ? Boolean(shown.note) : !readOnly && selected) && (
                 <Note id={question.id} draft={shown} setDraft={setDraft} disabled={viewing} />
             )}
             <ClarificationsHere slot={slot} />
-            {!readOnly && (
+            {(!readOnly || viewing) && (
                 <footer className="q-footer">
-                    <button
-                        type="button"
-                        className="button-text"
-                        onClick={() => commentOnWhole(`question:${question.id}`, 'question')}
-                    >
-                        Ask to clarify
-                    </button>
+                    {!readOnly && (
+                        <button
+                            type="button"
+                            className="button-text"
+                            onClick={() => commentOnWhole(`question:${question.id}`, 'question')}
+                        >
+                            Ask to clarify
+                        </button>
+                    )}
                     <div className="row">
                         {viewing && (
                             <>
                                 <button type="button" className="button-text" onClick={() => setView(false)}>
                                     Close
                                 </button>
-                                <button type="button" className="button-secondary" onClick={edit}>
-                                    Edit
-                                </button>
+                                {!readOnly && (
+                                    <button type="button" className="button-secondary" onClick={edit}>
+                                        Edit
+                                    </button>
+                                )}
                             </>
                         )}
                         {(dirty || draft.editing) && (

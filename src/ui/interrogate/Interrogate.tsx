@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, type ReactNode, useState } from 'react';
 import {
     directionsQuestion,
     directionTabs,
@@ -486,7 +486,7 @@ function DirectionHead({ id }: { id: string }) {
 }
 
 /** The questions in `scope` by group, each under its header. */
-function QuestionGroups({ scope }: { scope: QuestionScope }) {
+export function QuestionGroups({ scope }: { scope: QuestionScope }) {
     const groups = useSelector(
         (view) =>
             groupProgress(view, scope).groups.map(({ path, heading, name, questionIds }) => ({
@@ -512,12 +512,21 @@ function QuestionGroups({ scope }: { scope: QuestionScope }) {
 }
 
 /**
- * Phase 1: the navigator, then the page head, the agent's understanding and the shared questions by group, with the
- * phase gate floating over them. A direction's own questions live on its tab in Directions.
+ * A page of the shared questions: the navigator, then the page head (`eyebrow`, the title, then `head`), `children`,
+ * and `gate` floating over them. Phase 1 and an ask are both laid out this way.
  */
-export function Interrogate() {
+export function QuestionsPage({
+    eyebrow,
+    head,
+    gate,
+    children
+}: {
+    eyebrow: string;
+    head: ReactNode;
+    gate: ReactNode;
+    children: ReactNode;
+}) {
     const title = useSelector((view) => view.title);
-    const skipped = useSelector((view) => view.phases.phase1.exploreSkipped);
     return (
         <>
             <Rail strip={<NavigatorStrip scope={null} />}>
@@ -526,24 +535,45 @@ export function Interrogate() {
             <main className="main" id="main">
                 <div className="main-inner">
                     <header className="page-head">
-                        <div className="eyebrow">PHASE 1 · INTERROGATE</div>
+                        <div className="eyebrow">{eyebrow}</div>
                         <h1>{title}</h1>
-                        <p className="lede">
-                            The agent is stress-testing this change before anything is written. Answer, correct its assumptions,
-                            or select any text to comment. Every edit syncs both ways, live.
-                        </p>
-                        {skipped && (
-                            <p className="stage-note">
-                                <span className="muted">The agent went straight to the deep dive:</span> {skipped}
-                            </p>
-                        )}
+                        {head}
                     </header>
-                    <Understanding />
-                    <QuestionGroups scope={null} />
+                    {children}
                 </div>
-                <PhaseGate scope={null} />
+                {gate}
             </main>
         </>
+    );
+}
+
+/**
+ * Phase 1: the navigator, then the page head, the agent's understanding and the shared questions by group, with the
+ * phase gate floating over them. A direction's own questions live on its tab in Directions.
+ */
+export function Interrogate() {
+    const skipped = useSelector((view) => view.phases.phase1.exploreSkipped);
+    return (
+        <QuestionsPage
+            eyebrow="PHASE 1 · INTERROGATE"
+            head={
+                <>
+                    <p className="lede">
+                        The agent is stress-testing this change before anything is written. Answer, correct its assumptions, or
+                        select any text to comment. Every edit syncs both ways, live.
+                    </p>
+                    {skipped && (
+                        <p className="stage-note">
+                            <span className="muted">The agent went straight to the deep dive:</span> {skipped}
+                        </p>
+                    )}
+                </>
+            }
+            gate={<PhaseGate scope={null} />}
+        >
+            <Understanding />
+            <QuestionGroups scope={null} />
+        </QuestionsPage>
     );
 }
 

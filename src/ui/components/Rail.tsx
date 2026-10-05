@@ -12,10 +12,12 @@ const RAIL_SIZE: PaneSize = { key: 'planroom:rail-width', initial: 272, min: 200
 
 /**
  * Planroom's mark and name with the change id under them, heading the rail level with the top row. The change id opens
- * the plan switcher. The collapsed rail keeps only the mark, which names the change on hover.
+ * the plan switcher; an ask's id opens nothing, since switching plans would end it. The collapsed rail keeps only the
+ * mark, which names the change on hover.
  */
 function Brand({ compact = false }: { compact?: boolean }) {
-    const path = useSelector((view) => planDir(view.format, view.changeId));
+    const ask = useSelector((view) => view.kind === 'ask');
+    const path = useSelector((view) => (view.kind === 'ask' ? view.changeId : planDir(view.format, view.changeId)));
     if (compact) {
         return (
             <div className="brand" title={path}>
@@ -29,7 +31,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
                 <Logo />
                 <span className="brand-name">Planroom</span>
             </div>
-            <PlanSwitcher />
+            {ask ? <span className="change-id">{path}</span> : <PlanSwitcher />}
         </div>
     );
 }

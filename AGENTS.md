@@ -12,8 +12,9 @@ not implement them unless asked.
 - `src/server`: the MCP server, the page server and everything they run. `src/cli.ts` is the `planroom` command.
 - `src/shared`: the zod contract the server and the page share.
 - `src/ui`: the React 19 page, built by Vite into `dist/ui`.
-- `skill/`, `agents/`: the planroom skill and its two subagents, shipped in the package and linked into `~/.claude` by
-  `planroom install`. `skill/references/blocks.md` is generated: run `pnpm generate:blocks-doc`, never edit it.
+- `skills/`, `agents/`: the planroom (planning) and planroom-ask (questions) skills and their two subagents, shipped
+  in the package and linked into `~/.claude` by `planroom install`, beside one MCP server each. Each skill's
+  `references/blocks.md` is generated: run `pnpm generate:blocks-doc`, never edit it.
 - `openspec/`: this repo's own OpenSpec changes. The CLI is a pinned devDependency, so run it as `pnpm exec openspec`.
 
 ## Rules

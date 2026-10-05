@@ -149,6 +149,7 @@ export const TEXT_PAIRS: readonly (readonly [Token, Token])[] = [
     ['ink2', 'agentWash'],
     ['ink', 'accentSoft'],
     ['ink', 'accentWash'],
+    ['ink2', 'accentSoft'],
     ['ink', 'comment'],
     ['ink', 'commentFocus'],
     ['ink', 'selection'],

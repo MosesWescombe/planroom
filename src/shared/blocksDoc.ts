@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { blockCatalog } from './blockCatalog.js';
 import { blockConfigSchemas, blockTypes } from './blocks.js';
 
-/** Where the generated reference lives, relative to the repo root. */
-export const BLOCKS_DOC_PATH = 'skill/references/blocks.md';
+/** Where the generated reference lives in each skill, relative to the repo root. */
+export const BLOCKS_DOC_PATHS = ['skills/planroom/references/blocks.md', 'skills/planroom-ask/references/blocks.md'];
 
 /** A block type's config schema as compact JSON Schema, without the `$schema` key. */
 function schemaOf(type: (typeof blockTypes)[number]): string {

@@ -6,7 +6,7 @@ import type { View } from '../shared/view.js';
 import { scanChangeFolder } from './changeFolder.js';
 import { RejectedError } from './draft.js';
 import { hasPlan } from './plans.js';
-import { formatFor, viewOf } from './session.js';
+import { ACTIVITY_LIMIT, formatFor, viewOf } from './session.js';
 import { planroomDir, SessionStore } from './store.js';
 
 /**
@@ -19,11 +19,13 @@ export class PlanViewer {
     private constructor(
         private readonly snapshot: View,
         private readonly revisions: Revision[],
-        readonly store: { readonly assetsDir: string }
+        readonly store: { readonly assetsDir: string },
+        /** The repo the plan is in, whose files its code blocks quote. */
+        readonly repoRoot: string
     ) {}
 
-    /** Read a change's plan, rejecting a change id that has none. */
-    static async open(repoRoot: string, changeId: string): Promise<PlanViewer> {
+    /** Read a change's plan, rejecting a change id that has none. `elsewhere` when the plan is from another repo than the page server's. */
+    static async open(repoRoot: string, changeId: string, elsewhere = false): Promise<PlanViewer> {
         if (!(await hasPlan(repoRoot, changeId)))
             throw new RejectedError([{ path: 'changeId', message: `${changeId} has no plan to open` }], 404);
         const format = formatFor(repoRoot, changeId, undefined);
@@ -33,13 +35,14 @@ export class PlanViewer {
         const now = new Date().toISOString();
         const view = viewOf(state, {
             agent: { mode: 'offline', queued: 0 },
-            activity: [],
+            activity: await store.loadActivity(ACTIVITY_LIMIT),
             revisions: revisionMeta(revisions),
             proposal: await scanChangeFolder(join(repoRoot, planDir(format, changeId)), now),
             validating: false,
-            viewOnly: true
+            viewOnly: true,
+            ...(elsewhere ? { elsewhere: repoRoot } : {})
         });
-        return new PlanViewer(view, revisions, store);
+        return new PlanViewer(view, revisions, store, repoRoot);
     }
 
     /** The plan as it was read. */

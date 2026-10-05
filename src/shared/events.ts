@@ -72,6 +72,16 @@ export type AgentEventType = AgentEvent['type'];
 /** Every agent event type, in union order. */
 export const agentEventTypes = agentEvent.options.map((option) => option.shape.type.value);
 
+/** The agent events an ask takes: its question and info cards, and replies. The rest belong to a plan's phases. */
+export const ASK_AGENT_EVENTS: ReadonlySet<AgentEventType> = new Set<AgentEventType>([
+    'question.upsert',
+    'question.close',
+    'question.merge',
+    'comment.reply',
+    'comment.edit',
+    'suggestion.decline'
+]);
+
 /** One `planroom_emit` call: some events, a new `doing`, the subagents you are waiting on, or any mix. */
 export const emitBatch = z
     .object({
@@ -142,10 +152,25 @@ export const pageRequest = z.discriminatedUnion('type', [
     z.object({ type: z.literal('proposal.requestChanges'), text: z.string().trim().max(8000).optional() }),
     z.object({ type: z.literal('session.end') }),
     /** Make a read-only session editable again: one the user ended, or whose proposal they accepted. */
-    z.object({ type: z.literal('session.reopen') })
+    z.object({ type: z.literal('session.reopen') }),
+    /** Send an ask's answers to the agent, ending it. */
+    z.object({ type: z.literal('ask.done') })
 ]);
 export type PageRequest = z.infer<typeof pageRequest>;
 export type PageRequestType = PageRequest['type'];
+
+/** The page requests an ask takes: answers, suggestions, comments, messages and sending the answers. */
+export const ASK_PAGE_REQUESTS: ReadonlySet<PageRequestType> = new Set<PageRequestType>([
+    'answer.submit',
+    'question.reopen',
+    'conflict.resolve',
+    'question.suggest',
+    'comment.create',
+    'thread.reply',
+    'comment.resolve',
+    'message.send',
+    'ask.done'
+]);
 
 // ---------------------------------------------------------------- logged events (what the agent reads)
 
@@ -224,6 +249,15 @@ export const loggedEvent = z.discriminatedUnion('type', [
     }),
     /** The user ended the session: stop. `cancelled` before the proposal validated, `finished` after. */
     logged.extend({ type: z.literal('session.end'), how: z.enum(['cancelled', 'finished']) }),
+    /** The user sent an ask's answers: it is read-only. `context` is its questions, answers and threads as Markdown. */
+    logged.extend({
+        type: z.literal('ask.done'),
+        context: z.string(),
+        /** The repo-relative file the transcript was written to, when the ask named an `output`. */
+        file: z.string().optional(),
+        /** Why the transcript could not be written to the ask's `output`. */
+        fileError: z.string().optional()
+    }),
     /** The user reopened a read-only session: it takes edits again. `from` is how it had become read-only. */
     logged.extend({ type: z.literal('session.reopen'), from: z.enum(['cancelled', 'finished', 'accepted']) }),
     logged.extend({

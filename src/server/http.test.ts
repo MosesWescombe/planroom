@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
@@ -8,6 +9,7 @@ import { z } from 'zod';
 import type { Patch, StreamMessage, View } from '../shared/view.js';
 import { CHANGE, defined, harness, onCleanup, rejection, section, tempRepo, textBlock, upsert } from '../test/serverHelpers.js';
 import { type PageServer, startPageServer } from './http.js';
+import { rememberRepo } from './registry.js';
 import { PlanViewer } from './viewer.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -42,7 +44,7 @@ const streamMessage = z.discriminatedUnion('type', [
     z.object({ type: z.literal('snapshot'), view: z.custom<View>(isObject) }),
     z.object({ type: z.literal('patch'), patches: z.array(z.custom<Patch>(isObject)) }),
     z.object({ type: z.literal('closed') }),
-    z.object({ type: z.literal('browse'), readOnly: z.boolean() })
+    z.object({ type: z.literal('browse') })
 ]);
 
 /** Read server-sent messages from a stream until `done` says enough have arrived. */
@@ -72,7 +74,7 @@ async function readStream(
     return messages;
 }
 
-async function served() {
+async function served(registryFile?: string) {
     const h = await harness();
     // Under a dot directory, as a global install is (`~/.nvm/...`): serving must not take it for a hidden file.
     const uiDir = join(await tempRepo(), '.install', 'ui');
@@ -82,7 +84,8 @@ async function served() {
     const pages: PageServer = await startPageServer({
         uiDir,
         repoRoot,
-        openPlan: () => Promise.reject(new Error('plan switching is covered in mcp.test.ts'))
+        openPlan: () => Promise.reject(new Error('plan switching is covered in mcp.test.ts')),
+        ...(registryFile ? { registryFile } : {})
     });
     onCleanup(() => pages.close());
     const url = pages.add(h.session);
@@ -251,8 +254,11 @@ describe('a plan shown read-only', () => {
     it('shows the plan as it was saved, takes no lock, and refuses every write', async () => {
         const { session, repo, pages, answerBody } = await served();
         await session.emit({ events: [upsert('Q-12'), textBlock('b1', 'Hi'), section('s1', 1, ['b1'])] });
+        const { activity } = session.view();
         await session.close();
         const viewer = await PlanViewer.open(repo, CHANGE);
+        expect(viewer.view().activity).toEqual(activity);
+        expect(activity.length).toBeGreaterThan(0);
         expect(existsSync(session.store.lockFile)).toBe(false);
         const url = pages.add(viewer);
         const { port } = pages;
@@ -272,6 +278,44 @@ describe('a plan shown read-only', () => {
         expect((await raw(port, 'POST', `${path}api/events`, json, answerBody)).status).toBe(409);
         expect((await raw(port, 'POST', `${path}api/assets`, { 'content-type': 'image/png' }, 'PNGDATA')).status).toBe(409);
         expect(await readFile(session.store.stateFile, 'utf8')).toBe(saved);
+    });
+
+    it("opens another known repo's plan read-only, quoting that repo's files, and refuses any other repo", async () => {
+        const registryFile = join(await tempRepo(), 'repos.json');
+        const { session, repo, port, path } = await served(registryFile);
+        await rememberRepo(registryFile, repo);
+        await rememberRepo(registryFile, repoRoot);
+        await writeFile(join(repo, 'notes.txt'), 'from the other repo\n');
+        execFileSync('git', ['init', '-q'], { cwd: repo });
+        execFileSync('git', ['add', 'notes.txt'], { cwd: repo });
+        await session.close();
+        const open = (body: object) => raw(port, 'POST', `${path}api/plans/open`, json, JSON.stringify(body));
+
+        const opened = await open({ changeId: CHANGE, repoRoot: repo });
+        expect(opened.status).toBe(200);
+        const { url } = z.object({ url: z.string() }).parse(JSON.parse(opened.body));
+        const controller = new AbortController();
+        const [snapshot] = await readStream(`${url}api/stream`, (messages) => messages.length > 0, controller.signal);
+        controller.abort();
+        expect(snapshot).toMatchObject({ type: 'snapshot', view: { changeId: CHANGE, viewOnly: true, elsewhere: repo } });
+        const viewer = new URL(url).pathname;
+        expect(JSON.parse((await raw(port, 'GET', `${viewer}api/code?file=notes.txt&lines=1`)).body)).toMatchObject({
+            lines: ['from the other repo']
+        });
+
+        // Opening it again reads it afresh under the same page, rather than serving another.
+        const saved = JSON.parse(await readFile(session.store.stateFile, 'utf8'));
+        await writeFile(session.store.stateFile, JSON.stringify({ ...saved, title: 'Renamed' }));
+        expect(JSON.parse((await open({ changeId: CHANGE, repoRoot: repo })).body)).toEqual({ url });
+        const reread = new AbortController();
+        const [fresh] = await readStream(`${url}api/stream`, (messages) => messages.length > 0, reread.signal);
+        reread.abort();
+        expect(fresh).toMatchObject({ type: 'snapshot', view: { title: 'Renamed' } });
+
+        expect((await open({ changeId: CHANGE, repoRoot: join(repo, '..') })).status).toBe(404);
+        expect((await open({ changeId: CHANGE, repoRoot: repoRoot.replace(/\/$/, '') })).status).toBe(404);
+        expect((await open({ changeId: 'add-unknown', repoRoot: repo })).status).toBe(404);
+        expect((await open({ changeId: CHANGE, repoRoot: 7 })).status).toBe(400);
     });
 
     it('opens only a change that has a plan', async () => {

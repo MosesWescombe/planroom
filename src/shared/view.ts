@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { PagePhase } from './derive.js';
 import type { RevisionMeta } from './revisions.js';
 import type { SpecDelta } from './specDelta.js';
@@ -27,21 +28,23 @@ export interface AgentStatus {
     queued: number;
 }
 
-export interface ActivityEntry {
-    id: number;
-    at: string;
+/** One entry of the activity feed, as the page shows it and `activity.jsonl` keeps it. */
+export const activityEntry = z.object({
+    id: z.number().int(),
+    at: z.string(),
     /** e.g. "Reworded Q-13". */
-    title: string;
+    title: z.string(),
     /** e.g. "back to needs review". */
-    detail?: string;
+    detail: z.string().optional(),
     /** A record the entry links to: a question id, `section:<id>`, `thread:<id>`. */
-    ref?: string;
+    ref: z.string().optional(),
     /**
      * How the page shows it: `question` (the agent asked one; an info card is a plain change) stands out, `yours` (your own action) stays
      * quiet with its detail folded away, `attention` and `closed` are marked. Unset: any other change.
      */
-    kind?: 'question' | 'yours' | 'attention' | 'closed';
-}
+    kind: z.enum(['question', 'yours', 'attention', 'closed']).optional()
+});
+export type ActivityEntry = z.infer<typeof activityEntry>;
 
 /** One file of the change folder, as the Proposal tab renders it. */
 export interface ProposalFile {
@@ -66,7 +69,9 @@ export interface View
         SessionState,
         | 'changeId'
         | 'title'
+        | 'kind'
         | 'format'
+        | 'output'
         | 'createdAt'
         | 'questions'
         | 'suggestions'
@@ -87,8 +92,10 @@ export interface View
     proposal: ProposalView;
     /** True while the submitted plan is being checked: `openspec validate`, or the Markdown plan's check. */
     validating: boolean;
-    /** Set on a plan the standalone browser shows read-only: no agent is attached and every write is refused. */
+    /** Set on a plan shown read-only, by the standalone browser or from another repo: no agent is attached and every write is refused. */
     viewOnly?: true;
+    /** Set on a plan from another repo than the page server's: that repo's absolute path. */
+    elsewhere?: string;
 }
 
 /** Where a plan stands: its page phase while it takes edits, or how the user ended it. */
@@ -106,7 +113,7 @@ export interface PlanSummary {
     liveUrl?: string;
 }
 
-/** The plans in another repo Planroom has run in. Those open from a Claude session in that repo. */
+/** The plans in another repo Planroom has run in. Those open read-only here, and to work on from a Claude session there. */
 export interface RepoPlans {
     /** The repo's absolute path. */
     repoRoot: string;
@@ -124,7 +131,7 @@ export type MapField =
     | 'confirmedAssumptions';
 
 /** View fields replaced whole. */
-export type ScalarField = Exclude<keyof View, MapField | 'changeId' | 'format' | 'createdAt' | 'viewOnly'>;
+export type ScalarField = Exclude<keyof View, MapField | 'changeId' | 'kind' | 'format' | 'createdAt' | 'viewOnly' | 'elsewhere'>;
 
 export type MapPatch = { [K in MapField]: { field: K; id: string; value: View[K][string] | null } }[MapField];
 export type ScalarPatch = { [K in ScalarField]: { field: K; value: View[K] } }[ScalarField];
@@ -146,13 +153,21 @@ export function isMapPatch(patch: Patch): patch is MapPatch {
     return 'id' in patch;
 }
 
+/** What the plan switcher lists: this repo's plans, other repos' plans, and `readOnly` when this repo's open read-only. */
+export interface PlanListing {
+    plans: PlanSummary[];
+    elsewhere: RepoPlans[];
+    /** Set by the standalone browser, which attaches no agent: every plan opens read-only. */
+    readOnly: boolean;
+}
+
 /** Server-sent stream messages. */
 /**
  * `closed`: Planroom stopped serving this session, so the page must not reconnect. `browse`: the page is the plan
- * browser, showing no plan; `readOnly` when the plans it opens are shown read-only (the standalone browser).
+ * browser, showing no plan.
  */
 export type StreamMessage =
     | { type: 'snapshot'; view: View }
     | { type: 'patch'; patches: Patch[] }
     | { type: 'closed' }
-    | { type: 'browse'; readOnly: boolean };
+    | { type: 'browse' };

@@ -7,11 +7,11 @@ import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { repoPath } from '../shared/blocks.js';
 import type { Revision } from '../shared/revisions.js';
-import type { Patch, StreamMessage, View } from '../shared/view.js';
+import type { Patch, PlanListing, StreamMessage, View } from '../shared/view.js';
 import { RejectedError } from './draft.js';
 import { isErrno } from './fsutil.js';
 import { ChangeLockedError } from './lock.js';
-import { listPlans, listPlansElsewhere } from './plans.js';
+import { listPlans, listPlansElsewhere, otherRepos } from './plans.js';
 import { PlanViewer } from './viewer.js';
 
 /** The most lines one code excerpt returns. */
@@ -57,9 +57,9 @@ export interface PageServerOptions {
     repoRoot: string;
     /** Switch the page to another plan by change id, resolving with its page URL. */
     openPlan: (changeId: string) => Promise<string>;
-    /** The list of repos Planroom has run in, whose plans the switcher also shows. Unset: this repo's only. */
+    /** The list of repos Planroom has run in, whose plans the switcher also shows and opens read-only. Unset: this repo's only. */
     registryFile?: string;
-    /** Whether `openPlan` shows plans read-only, as the standalone browser does; the browse page says so. */
+    /** Whether `openPlan` shows plans read-only, as the standalone browser does; the plan list says so. */
     readOnly?: boolean;
 }
 
@@ -185,9 +185,7 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         const send = (message: StreamMessage) => res.write(`data: ${JSON.stringify(message)}\n\n`);
         res.write('retry: 1000\n\n');
-        send(
-            entry.plan ? { type: 'snapshot', view: entry.plan.view() } : { type: 'browse', readOnly: options.readOnly ?? false }
-        );
+        send(entry.plan ? { type: 'snapshot', view: entry.plan.view() } : { type: 'browse' });
         const unsubscribe = entry.plan?.subscribe((patches) => send({ type: 'patch', patches }));
         const heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS);
         heartbeat.unref();
@@ -218,20 +216,47 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
                 listPlans(options.repoRoot),
                 options.registryFile ? listPlansElsewhere(options.registryFile, options.repoRoot) : []
             ]);
-            res.json({ plans, elsewhere });
+            const listing: PlanListing = { plans, elsewhere, readOnly: options.readOnly ?? false };
+            res.json(listing);
         } catch (error) {
             sendError(res, error);
         }
     });
 
+    /** The page of each other repo's plan opened here, by repo and change id, so opening one again reuses its page. */
+    const elsewherePages = new Map<string, { entry: Served; url: string }>();
+
+    /**
+     * Serve a plan from another repo the registry lists, read-only: this session never opens one. Opening it again
+     * reads it afresh under the same page.
+     */
+    const openElsewhere = async (repoRoot: string, changeId: string): Promise<string> => {
+        const others = options.registryFile ? await otherRepos(options.registryFile, options.repoRoot) : [];
+        if (!others.includes(repoRoot))
+            throw new RejectedError([{ path: 'repoRoot', message: `${repoRoot} is not another repo Planroom has run in` }], 404);
+        const viewer = await PlanViewer.open(repoRoot, changeId, true);
+        const key = JSON.stringify([repoRoot, changeId]);
+        const page = elsewherePages.get(key);
+        if (page) {
+            page.entry.plan = viewer;
+            return page.url;
+        }
+        const opened = serveEntry(viewer);
+        elsewherePages.set(key, opened);
+        return opened.url;
+    };
+
     router.post('/api/plans/open', express.json(), async (req, res) => {
         const changeId: unknown = req.body?.changeId;
-        if (typeof changeId !== 'string') {
-            res.status(400).json({ error: 'send { changeId }' });
+        const repoRoot: unknown = req.body?.repoRoot;
+        if (typeof changeId !== 'string' || (repoRoot !== undefined && typeof repoRoot !== 'string')) {
+            res.status(400).json({ error: 'send { changeId, repoRoot? }' });
             return;
         }
         try {
-            res.json({ url: await options.openPlan(changeId) });
+            res.json({
+                url: repoRoot === undefined ? await options.openPlan(changeId) : await openElsewhere(repoRoot, changeId)
+            });
         } catch (error) {
             sendError(
                 res,
@@ -249,8 +274,11 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
     });
 
     router.get('/api/code', async (req, res) => {
+        const { plan } = res.locals.served as Served;
+        // A plan from another repo quotes that repo's files.
+        const root = plan instanceof PlanViewer ? plan.repoRoot : options.repoRoot;
         try {
-            res.json(await readExcerpt(options.repoRoot, String(req.query.file ?? ''), String(req.query.lines ?? '')));
+            res.json(await readExcerpt(root, String(req.query.file ?? ''), String(req.query.lines ?? '')));
         } catch (error) {
             sendError(
                 res,
@@ -332,12 +360,15 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
     });
     port = (http.address() as AddressInfo).port;
 
-    /** Serve a page under a fresh token and return its URL. */
-    const serve = (plan?: ServedPlan): string => {
+    /** Serve a page under a fresh token and return its entry and URL. */
+    const serveEntry = (plan?: ServedPlan): { entry: Served; url: string } => {
         const token = randomBytes(32).toString('base64url');
-        served.add({ token: Buffer.from(token), ...(plan ? { plan } : {}), streams: new Set() });
-        return `${originOf()}/${token}/`;
+        const entry: Served = { token: Buffer.from(token), ...(plan ? { plan } : {}), streams: new Set() };
+        served.add(entry);
+        return { entry, url: `${originOf()}/${token}/` };
     };
+    /** Serve a page under a fresh token and return its URL. */
+    const serve = (plan?: ServedPlan): string => serveEntry(plan).url;
     const browseUrl = serve();
 
     return {

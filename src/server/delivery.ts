@@ -202,6 +202,11 @@ export class EventDelivery {
         this.held = this.held.filter((event) => event.seq > last.seq);
     }
 
+    /** Whether event `seq` is known to have reached the agent: a wait returned it, a confirmed push carried it, or it was read past. */
+    reached(seq: number): boolean {
+        return this.delivered >= seq;
+    }
+
     /** Whether a wait is parked right now. */
     get waiting(): boolean {
         return this.waiters.size > 0;

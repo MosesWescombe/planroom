@@ -574,7 +574,7 @@ input[type="checkbox"] {
 .plan-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -584,6 +584,24 @@ input[type="checkbox"] {
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+
+/* Each plan is a bordered card, so neighbours read apart on the paper page and in the surface dialog alike. Scoped to
+   the list to outrank the later `.nav-item` and `button.nav-item` rules; the current plan keeps their raised fill. */
+.plan-list .plan-item {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    transition:
+        border-color 120ms,
+        background-color 120ms;
+}
+
+/* Hovering lights the whole card, unlike the raised current plan, which cannot be picked again. */
+.plan-list .plan-item:not(:disabled):hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
 }
 
 .plan-item:disabled {
@@ -601,11 +619,6 @@ input[type="checkbox"] {
     margin: 0 auto;
     padding: 32px 16px;
     overflow-y: auto;
-}
-
-/* Another repo's plan that no session has open is listed, not clickable. */
-div.plan-item:hover {
-    background: transparent;
 }
 
 /* A read-only banner's text, then its Reopen button. */
@@ -2521,6 +2534,11 @@ button.rail-strip-item {
     justify-content: space-between;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+/* Keeps the actions right when a read-only card has no "Ask to clarify" beside them. */
+.q-footer > .row {
+    margin-left: auto;
 }
 
 /* Comments on a question: one row each, opening the thread in a dialog. */

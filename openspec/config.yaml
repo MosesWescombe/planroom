@@ -2,12 +2,12 @@ schema: spec-driven
 
 context: |
     Planroom: a live browser planning surface for Claude Code. One npm package holds an MCP
-    server (stdio) that also serves the planning page on 127.0.0.1, the planroom skill and its
-    two subagents. It plans changes in any repo, proposed as OpenSpec changes or Markdown plans.
+    server (stdio) that also serves the planning page on 127.0.0.1, the planroom and
+    planroom-ask skills and their two subagents. It plans changes in any repo, proposed as OpenSpec changes or Markdown plans.
     - src/server   MCP tools, HTTP/SSE page server, sessions, locks, the OpenSpec runner
     - src/shared   the zod contract shared by server and page: state, events, blocks, derive
     - src/ui       the React 19 page, built by Vite
-    - skill/       the planroom skill; skill/references/blocks.md is generated
+    - skills/      the planroom and planroom-ask skills; each references/blocks.md is generated
     - agents/      the planroom-researcher and planroom-proposer subagents
     Node >=24, pnpm. Repo rules live in AGENTS.md. Validation order is lint, then
     typecheck, then test.

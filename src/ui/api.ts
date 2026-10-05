@@ -1,7 +1,7 @@
 import type { PageRequest } from '../shared/events';
 import type { Issue } from '../shared/issues';
 import type { Revision } from '../shared/revisions';
-import type { PlanSummary, RepoPlans, StreamMessage } from '../shared/view';
+import type { PlanListing, StreamMessage } from '../shared/view';
 
 /**
  * The page's calls to its own server. Every path is relative, so it stays under the
@@ -68,17 +68,20 @@ export async function uploadAsset(image: Blob): Promise<string> {
     return (await json<{ asset: string }>(response)).asset;
 }
 
-/** Every plan in this repo and in the other repos Planroom has run in, most recently changed first. */
-export async function fetchPlans(): Promise<{ plans: PlanSummary[]; elsewhere: RepoPlans[] }> {
+/** Every plan in this repo and in the other repos Planroom has run in, most recently changed first, and how they open. */
+export async function fetchPlans(): Promise<PlanListing> {
     return json(await fetch('api/plans'));
 }
 
-/** Switch Planroom to another plan. Resolves with that plan's page URL, for the page to load. */
-export async function openPlan(changeId: string): Promise<string> {
+/**
+ * Switch Planroom to another plan, or with `repoRoot` show another repo's plan read-only. Resolves with that plan's
+ * page URL, for the page to load.
+ */
+export async function openPlan(changeId: string, repoRoot?: string): Promise<string> {
     const response = await fetch('api/plans/open', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ changeId })
+        body: JSON.stringify({ changeId, repoRoot })
     });
     return (await json<{ url: string }>(response)).url;
 }

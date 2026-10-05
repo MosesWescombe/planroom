@@ -1,9 +1,14 @@
-// Regenerate the planroom skill's block reference from the built shared schemas.
+// Regenerate the block reference in each skill from the built shared schemas.
 // Run with `pnpm generate:blocks-doc`, which builds the server first.
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BLOCKS_DOC_PATH, renderBlocksDoc } from '../dist/shared/blocksDoc.js';
+import { BLOCKS_DOC_PATHS, renderBlocksDoc } from '../dist/shared/blocksDoc.js';
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
-writeFileSync(`${repoRoot}${BLOCKS_DOC_PATH}`, renderBlocksDoc());
-console.log(`Wrote ${BLOCKS_DOC_PATH}`);
+const doc = renderBlocksDoc();
+for (const path of BLOCKS_DOC_PATHS) {
+    mkdirSync(dirname(`${repoRoot}${path}`), { recursive: true });
+    writeFileSync(`${repoRoot}${path}`, doc);
+    console.log(`Wrote ${path}`);
+}

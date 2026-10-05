@@ -51,9 +51,14 @@ export async function listPlans(repoRoot: string): Promise<PlanSummary[]> {
     ).reverse();
 }
 
+/** Every repo the registry knows other than `repoRoot`. */
+export async function otherRepos(registry: string, repoRoot: string): Promise<string[]> {
+    return (await knownRepos(registry)).filter((repo) => repo !== resolve(repoRoot));
+}
+
 /** The plans in every other repo the registry knows, leaving out repos with none. */
 export async function listPlansElsewhere(registry: string, repoRoot: string): Promise<RepoPlans[]> {
-    const others = (await knownRepos(registry)).filter((repo) => repo !== resolve(repoRoot));
+    const others = await otherRepos(registry, repoRoot);
     const listed = await Promise.all(others.map(async (repo) => ({ repoRoot: repo, plans: await listPlans(repo) })));
     return listed.filter((repo) => repo.plans.length > 0);
 }

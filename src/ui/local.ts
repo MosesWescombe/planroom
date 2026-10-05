@@ -1,3 +1,5 @@
+import type { View } from '../shared/view';
+
 /**
  * Per-browser conveniences. Settings (theme, widths, send key, collapsed panes) are
  * cookies, which ignore the port, so every Planroom on this machine shares them;
@@ -6,6 +8,14 @@
  * (private windows, blocked site data), so every access is guarded and the page
  * works without it.
  */
+
+/**
+ * The page's part of a localStorage key: its change id, and for a plan from another repo that repo, since a plan here
+ * can share its id. Asks and plans have separate servers, so separate ports.
+ */
+export function storageScope({ changeId, elsewhere }: Pick<View, 'changeId' | 'elsewhere'>): string {
+    return elsewhere ? `${elsewhere}:${changeId}` : changeId;
+}
 
 /** Browsers cap a cookie's life at 400 days; every write renews it. */
 const SETTING_MAX_AGE = 400 * 24 * 60 * 60;

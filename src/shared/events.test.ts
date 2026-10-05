@@ -54,7 +54,8 @@ const pageSamples: Record<PageRequestType, unknown> = {
     'proposal.accept': { type: 'proposal.accept' },
     'proposal.requestChanges': { type: 'proposal.requestChanges', text: 'Split the spec' },
     'session.end': { type: 'session.end' },
-    'session.reopen': { type: 'session.reopen' }
+    'session.reopen': { type: 'session.reopen' },
+    'ask.done': { type: 'ask.done' }
 };
 
 const at = { seq: 1, at: '2026-09-29T00:00:00.000Z' };
@@ -91,6 +92,7 @@ const loggedSamples: Record<LoggedEventType, unknown> = {
     'proposal.requestChanges': { ...at, type: 'proposal.requestChanges', openComments: ['C-2'] },
     'session.end': { ...at, type: 'session.end', how: 'finished' },
     'session.reopen': { ...at, type: 'session.reopen', from: 'accepted' },
+    'ask.done': { ...at, type: 'ask.done', context: '# Auth migration\n', file: 'docs/auth.md' },
     'validation.result': {
         ...at,
         type: 'validation.result',

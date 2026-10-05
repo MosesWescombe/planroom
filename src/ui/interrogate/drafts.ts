@@ -14,14 +14,14 @@ export const draftSchema = answer.extend({
 });
 export type AnswerDraft = z.infer<typeof draftSchema>;
 
-/** The localStorage key a question's draft answer is kept under. */
-export function draftKey(changeId: string, questionId: string): string {
-    return `planroom:${changeId}:draft:${questionId}`;
+/** The localStorage key a question's draft answer is kept under, on the page with `storageScope` `scope`. */
+export function draftKey(scope: string, questionId: string): string {
+    return `planroom:${scope}:draft:${questionId}`;
 }
 
 /** A question's stored draft answer, or an empty draft when none is stored or it no longer parses. */
-export function loadDraft(changeId: string, questionId: string): AnswerDraft {
-    return draftSchema.safeParse(readJson(draftKey(changeId, questionId))).data ?? {};
+export function loadDraft(scope: string, questionId: string): AnswerDraft {
+    return draftSchema.safeParse(readJson(draftKey(scope, questionId))).data ?? {};
 }
 
 /** Whether the draft holds anything the user chose or typed. */
@@ -59,14 +59,14 @@ export function lengthProblem(draft: AnswerDraft): string | null {
 }
 
 /** A question's local draft, written through to localStorage so it survives a reload. */
-export function useDraft(changeId: string, questionId: string): [AnswerDraft, (next: AnswerDraft) => void, () => void] {
-    const [draft, setDraftState] = useState<AnswerDraft>(() => loadDraft(changeId, questionId));
+export function useDraft(scope: string, questionId: string): [AnswerDraft, (next: AnswerDraft) => void, () => void] {
+    const [draft, setDraftState] = useState<AnswerDraft>(() => loadDraft(scope, questionId));
     const setDraft = useCallback(
         (next: AnswerDraft) => {
             setDraftState(next);
-            writeJson(draftKey(changeId, questionId), hasContent(next) || next.editing ? next : undefined);
+            writeJson(draftKey(scope, questionId), hasContent(next) || next.editing ? next : undefined);
         },
-        [changeId, questionId]
+        [scope, questionId]
     );
     const clear = useCallback(() => setDraft({}), [setDraft]);
     return [draft, setDraft, clear];

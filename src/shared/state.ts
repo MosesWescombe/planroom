@@ -31,6 +31,21 @@ export function planDir(format: PlanFormat, changeId: string): string {
 }
 
 /**
+ * What a session is: a `plan`, taken through the four phases to a proposal, or an `ask`, a page of question cards an
+ * agent puts to the user at any point in its work, which ends in a transcript of the answers.
+ */
+export const sessionKind = z.enum(['plan', 'ask']);
+export type SessionKind = z.infer<typeof sessionKind>;
+
+/** The repo folder asks keep their records in, one folder per ask. Its parent ignores itself in git. */
+export const ASK_ROOT = '.planroom/asks';
+
+/** The repo-relative folder a session keeps its records in: a plan's `.planroom/`, or an ask's own folder. */
+export function recordsDir(state: Pick<SessionState, 'kind' | 'format' | 'changeId'>): string {
+    return state.kind === 'ask' ? `${ASK_ROOT}/${state.changeId}` : `${planDir(state.format, state.changeId)}/.planroom`;
+}
+
+/**
  * Everything Planroom persists for one change, in `.planroom/state.json`. It is the
  * planning record that travels with the change.
  */
@@ -38,8 +53,12 @@ export const sessionState = z.object({
     schemaVersion: z.literal(STATE_SCHEMA_VERSION),
     changeId: z.string(),
     title: z.string(),
-    /** Plans saved before the format existed are OpenSpec ones. */
+    /** Sessions saved before asks existed are plans. */
+    kind: sessionKind.default('plan'),
+    /** Plans saved before the format existed are OpenSpec ones. An ask has no use for it. */
     format: planFormat.default('openspec'),
+    /** An ask's repo-relative Markdown file, written with the transcript when the user sends their answers. */
+    output: z.string().optional(),
     createdAt: z.string(),
     questions: z.record(z.string(), questionRecord),
     suggestions: z.record(z.string(), suggestionRecord),
@@ -74,6 +93,7 @@ export function emptyState(changeId: string, title: string, now: string, format:
         schemaVersion: STATE_SCHEMA_VERSION,
         changeId,
         title,
+        kind: 'plan',
         format,
         createdAt: now,
         questions: {},

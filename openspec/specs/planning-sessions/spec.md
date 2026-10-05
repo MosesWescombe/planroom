@@ -80,7 +80,8 @@ under a new URL, without creating a change. After a switch, the agent's next wri
 nothing applied, until the agent reads the new plan. An accepted or ended plan SHALL open read-only with a Reopen
 action, which makes it editable again in the phase it had reached and notifies the agent. The list SHALL also show
 the plans of other repos Planroom has run in on the machine, grouped by repo, which the page MUST NOT open in this
-session: it SHALL link to a plan's live page when another session holds it.
+session: it SHALL link to a plan's live page when another session holds it, and otherwise open it read-only, as the
+standalone browser does, for a repo the registry lists only.
 
 #### Scenario: Switch to an old plan
 
@@ -97,6 +98,12 @@ session: it SHALL link to a plan's live page when another session holds it.
 
 - **WHEN** the user opens the plan list while `agora-processor-app` has a plan another Claude session holds
 - **THEN** that plan is listed under `agora-processor-app` with a link to its live page, and offers no switch here
+
+#### Scenario: An idle plan in another repo
+
+- **WHEN** the user picks a plan under `agora-processor-app` that no session holds
+- **THEN** it shows read-only under a new URL, quoting code from `agora-processor-app`, and the agent's plan is
+  unchanged
 
 #### Scenario: Reopen a finished plan
 

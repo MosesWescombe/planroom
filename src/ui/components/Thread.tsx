@@ -4,6 +4,7 @@ import { BlockView } from '../blocks/Block';
 import { useAnchorState } from '../comments/anchorStatus';
 import { plural, relativeTime } from '../format';
 import { useNow } from '../hooks';
+import { storageScope } from '../local';
 import { useReadOnly } from '../readOnly';
 import { isSeen, markSeen, useSeen } from '../seen';
 import { useSendOnKey } from '../sendKey';
@@ -274,14 +275,14 @@ export function ThreadDialog({
     onClose: () => void;
     onShow?: () => void;
 }) {
-    const changeId = useSelector((view) => view.changeId);
+    const scope = useSelector(storageScope);
     const lastAt = useSelector((view) => {
         const thread = view.threads[id];
         return thread && (thread.messages.at(-1)?.at ?? thread.updatedAt);
     });
     useEffect(() => {
-        if (lastAt) markSeen(changeId, `thread:${id}`, lastAt);
-    }, [changeId, id, lastAt]);
+        if (lastAt) markSeen(scope, `thread:${id}`, lastAt);
+    }, [scope, id, lastAt]);
     return (
         <Modal label={title} onClose={onClose} className="dialog-thread">
             <h2 className="dialog-title">{title}</h2>

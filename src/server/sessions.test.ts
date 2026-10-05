@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { join, relative } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import {
     CHANGE,
     defined,
@@ -136,6 +136,55 @@ describe('opening a session', () => {
         expect(resumed.view().revisions).toHaveLength(1);
     });
 
+    it('resume keeps the activity feed, and new entries number on from it', async () => {
+        const h = await harness();
+        await h.session.emit({ events: [upsert('Q-1')] });
+        await h.session.handlePage({ type: 'answer.submit', questionId: 'Q-1', version: 1, answer: { choice: 'a' } });
+        const before = h.session.view().activity;
+        expect(before.length).toBeGreaterThan(0);
+
+        const resumed = await h.reopen();
+        expect(resumed.view().activity).toEqual(before);
+        await resumed.handlePage({ type: 'question.suggest', text: 'One more' });
+        const [newest] = resumed.view().activity;
+        expect(newest?.id).toBeGreaterThan(Math.max(...before.map((entry) => entry.id)));
+    });
+
+    it("keeps a plan's local files out of git and its planning record in", async () => {
+        const h = await harness();
+        execFileSync('git', ['init', '-q'], { cwd: h.repo });
+        const dir = relative(h.repo, h.session.store.dir);
+        const ignored = (file: string) => spawnSync('git', ['check-ignore', '-q', join(dir, file)], { cwd: h.repo }).status === 0;
+        const local = [
+            'events.jsonl',
+            'events.jsonl.orphaned-x',
+            'activity.jsonl',
+            'revisions/1.json',
+            'lock',
+            '.state.json.1.tmp'
+        ];
+        expect(local.filter(ignored)).toEqual(local);
+        expect(['state.json', 'assets/diagram.png', '.gitignore'].filter(ignored)).toEqual([]);
+    });
+
+    it('a failed activity log write costs only the feed: the change still commits and its event is handed over', async () => {
+        const h = await harness();
+        await mkdir(h.session.store.activityFile);
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        await h.session.emit({ events: [upsert('Q-1')] });
+        const { seq } = await h.session.handlePage({
+            type: 'answer.submit',
+            questionId: 'Q-1',
+            version: 1,
+            answer: { choice: 'a' }
+        });
+        expect(h.session.current.questions['Q-1']?.status).toBe('answered');
+        expect((await h.session.wait(0, 0.01)).events.map((event) => event.seq)).toEqual([seq]);
+        await h.session.settled();
+        expect(errors).toHaveBeenCalledWith(expect.stringContaining('could not log activity'), expect.anything());
+        errors.mockRestore();
+    });
+
     it('resumes with the agent cursor where the last agent session left it', async () => {
         const h = await harness();
         await h.session.emit({ events: [upsert('Q-1')] });
@@ -181,6 +230,7 @@ describe('durability', () => {
         await h.session.close();
         await rm(h.session.store.stateFile);
         const fresh = await h.reopen();
+        expect(fresh.view().activity).toEqual([]);
         expect((await fresh.handlePage({ type: 'question.suggest', text: 'New one' })).seq).toBe(1);
         const restarted = await h.reopen();
         expect((await restarted.wait(0, 0.01)).events.map((event) => event.seq)).toEqual([1]);
@@ -188,6 +238,8 @@ describe('durability', () => {
         const aside = (await readdir(restarted.store.dir)).filter((name) => name.startsWith('events.jsonl.orphaned-'));
         expect(aside).toHaveLength(1);
         expect(await readFile(join(restarted.store.dir, defined(aside[0])), 'utf8')).toBe(old);
+        const activityAside = (await readdir(restarted.store.dir)).filter((name) => name.startsWith('activity.jsonl.orphaned-'));
+        expect(activityAside).toHaveLength(1);
     });
 
     it('an older state.json checked out over a newer log: the log is moved aside and seqs continue from the snapshot', async () => {

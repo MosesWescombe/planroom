@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import type { ActivityEntry } from '../shared/view';
-import { readJson, writeJson } from './local';
+import { readJson, storageScope, writeJson } from './local';
 import { useSelector } from './store';
 import { elementIdFor, useUiState } from './ui';
 
@@ -14,21 +14,21 @@ export type Seen = z.infer<typeof seenSchema>;
 
 const listeners = new Set<() => void>();
 
-/** The localStorage key a change's seen entries are kept under. */
-function seenKey(changeId: string): string {
-    return `planroom:${changeId}:seen`;
+/** The localStorage key a page's seen entries are kept under, by its `storageScope`. */
+function seenKey(scope: string): string {
+    return `planroom:${scope}:seen`;
 }
 
-/** A change's seen entries, or none when nothing valid is stored. */
-function readSeen(changeId: string): Seen {
-    return seenSchema.safeParse(readJson(seenKey(changeId))).data ?? {};
+/** A page's seen entries, or none when nothing valid is stored. */
+function readSeen(scope: string): Seen {
+    return seenSchema.safeParse(readJson(seenKey(scope))).data ?? {};
 }
 
 /** Record that the entries about `ref` up to `at` have been seen. */
-export function markSeen(changeId: string, ref: string, at: string): void {
-    const seen = readSeen(changeId);
+export function markSeen(scope: string, ref: string, at: string): void {
+    const seen = readSeen(scope);
     if ((seen[ref] ?? '') >= at) return;
-    writeJson(seenKey(changeId), { ...seen, [ref]: at });
+    writeJson(seenKey(scope), { ...seen, [ref]: at });
     listeners.forEach((listener) => listener());
 }
 
@@ -44,10 +44,10 @@ function tracked(entry: ActivityEntry): entry is ActivityEntry & { ref: string }
 
 /** What this browser has seen, updated live, including by other tabs on the same page. */
 export function useSeen(): Seen {
-    const changeId = useSelector((view) => view.changeId);
-    const [seen, setSeen] = useState(() => readSeen(changeId));
+    const scope = useSelector(storageScope);
+    const [seen, setSeen] = useState(() => readSeen(scope));
     useEffect(() => {
-        const update = () => setSeen(readSeen(changeId));
+        const update = () => setSeen(readSeen(scope));
         update();
         listeners.add(update);
         window.addEventListener('storage', update);
@@ -55,7 +55,7 @@ export function useSeen(): Seen {
             listeners.delete(update);
             window.removeEventListener('storage', update);
         };
-    }, [changeId]);
+    }, [scope]);
     return seen;
 }
 
@@ -76,7 +76,7 @@ function useInFront(): boolean {
  * since that mounts different targets.
  */
 export function useTrackSeen(): void {
-    const changeId = useSelector((view) => view.changeId);
+    const scope = useSelector(storageScope);
     const activity = useSelector((view) => view.activity);
     const seen = useSeen();
     const { tab, panelTab, panelCollapsed, drawer } = useUiState();
@@ -95,7 +95,7 @@ export function useTrackSeen(): void {
                 const target = targets.get(record.target);
                 if (!target || record.intersectionRatio <= 0) continue;
                 observer.unobserve(record.target);
-                markSeen(changeId, ...target);
+                markSeen(scope, ...target);
             }
         });
         newest.forEach((at, ref) => {
@@ -105,5 +105,5 @@ export function useTrackSeen(): void {
             observer.observe(element);
         });
         return () => observer.disconnect();
-    }, [changeId, activity, seen, tab, panelTab, panelCollapsed, drawer, inFront]);
+    }, [scope, activity, seen, tab, panelTab, panelCollapsed, drawer, inFront]);
 }

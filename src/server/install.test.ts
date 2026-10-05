@@ -4,14 +4,16 @@ import { describe, expect, it } from 'vitest';
 import { tempRepo } from '../test/serverHelpers.js';
 import { type ClaudeCli, type InstallTarget, install, uninstall } from './install.js';
 
-/** A package with a skill and two agents, and a Claude config holding copies from an older install. */
+/** A package with both skills and two agents, and a Claude config holding copies from an older install. */
 async function setup(): Promise<{ target: InstallTarget; calls: string[][]; claude: ClaudeCli }> {
     const dir = await tempRepo();
     const pkgRoot = join(dir, 'pkg');
     const configDir = join(dir, 'claude');
-    await mkdir(join(pkgRoot, 'skill'), { recursive: true });
+    await mkdir(join(pkgRoot, 'skills', 'planroom'), { recursive: true });
+    await mkdir(join(pkgRoot, 'skills', 'planroom-ask'), { recursive: true });
     await mkdir(join(pkgRoot, 'agents'), { recursive: true });
-    await writeFile(join(pkgRoot, 'skill', 'SKILL.md'), 'new skill');
+    await writeFile(join(pkgRoot, 'skills', 'planroom', 'SKILL.md'), 'new skill');
+    await writeFile(join(pkgRoot, 'skills', 'planroom-ask', 'SKILL.md'), 'ask skill');
     await writeFile(join(pkgRoot, 'agents', 'planroom-a.md'), 'agent a');
     await writeFile(join(pkgRoot, 'agents', 'planroom-b.md'), 'agent b');
     await mkdir(join(configDir, 'skills', 'planroom'), { recursive: true });
@@ -27,17 +29,23 @@ async function setup(): Promise<{ target: InstallTarget; calls: string[][]; clau
 }
 
 describe('planroom install', () => {
-    it('links the skill and agents over old copies and registers the user-scope server', async () => {
+    it('links both skills and the agents over old copies and registers both user-scope servers', async () => {
         const { target, calls, claude } = await setup();
         install(target, claude);
 
-        expect(await readlink(join(target.configDir, 'skills', 'planroom'))).toBe(join(target.pkgRoot, 'skill'));
+        expect(await readlink(join(target.configDir, 'skills', 'planroom'))).toBe(join(target.pkgRoot, 'skills', 'planroom'));
         expect(await readFile(join(target.configDir, 'skills', 'planroom', 'SKILL.md'), 'utf8')).toBe('new skill');
+        expect(await readlink(join(target.configDir, 'skills', 'planroom-ask'))).toBe(
+            join(target.pkgRoot, 'skills', 'planroom-ask')
+        );
         for (const agent of ['planroom-a.md', 'planroom-b.md'])
             expect(await readlink(join(target.configDir, 'agents', agent))).toBe(join(target.pkgRoot, 'agents', agent));
+        const cli = join(target.pkgRoot, 'dist', 'cli.js');
         expect(calls).toEqual([
             ['mcp', 'remove', 'planroom', '--scope', 'user'],
-            ['mcp', 'add', '--scope', 'user', 'planroom', '--', '/usr/bin/node', join(target.pkgRoot, 'dist', 'cli.js'), 'mcp']
+            ['mcp', 'add', '--scope', 'user', 'planroom', '--', '/usr/bin/node', cli, 'mcp'],
+            ['mcp', 'remove', 'planroom-ask', '--scope', 'user'],
+            ['mcp', 'add', '--scope', 'user', 'planroom-ask', '--', '/usr/bin/node', cli, 'mcp', '--ask']
         ]);
     });
 
@@ -45,17 +53,21 @@ describe('planroom install', () => {
         const { target } = await setup();
         const claude: ClaudeCli = (args) =>
             args[1] === 'add' ? { status: 1, output: 'spawnSync claude ENOENT\n' } : { status: 0, output: '' };
-        expect(() => install(target, claude)).toThrow('claude mcp add failed: spawnSync claude ENOENT');
+        expect(() => install(target, claude)).toThrow('claude mcp add planroom failed: spawnSync claude ENOENT');
     });
 
-    it('uninstall removes the links and the server, and leaves the package alone', async () => {
+    it('uninstall removes the links and both servers, and leaves the package alone', async () => {
         const { target, calls, claude } = await setup();
         install(target, claude);
         uninstall(target, claude);
 
         await expect(readlink(join(target.configDir, 'skills', 'planroom'))).rejects.toThrow();
+        await expect(readlink(join(target.configDir, 'skills', 'planroom-ask'))).rejects.toThrow();
         await expect(readlink(join(target.configDir, 'agents', 'planroom-a.md'))).rejects.toThrow();
-        expect(await readFile(join(target.pkgRoot, 'skill', 'SKILL.md'), 'utf8')).toBe('new skill');
-        expect(calls.at(-1)).toEqual(['mcp', 'remove', 'planroom', '--scope', 'user']);
+        expect(await readFile(join(target.pkgRoot, 'skills', 'planroom', 'SKILL.md'), 'utf8')).toBe('new skill');
+        expect(calls.slice(-2)).toEqual([
+            ['mcp', 'remove', 'planroom', '--scope', 'user'],
+            ['mcp', 'remove', 'planroom-ask', '--scope', 'user']
+        ]);
     });
 });

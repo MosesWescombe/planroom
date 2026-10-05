@@ -10,7 +10,7 @@ import {
     unreview,
     upsertQuestion
 } from '../shared/derive.js';
-import { type AgentEvent, agentEventTypes, emitBatch } from '../shared/events.js';
+import { type AgentEvent, ASK_AGENT_EVENTS, agentEventTypes, emitBatch } from '../shared/events.js';
 import { type Issue, toIssues } from '../shared/issues.js';
 import { type ContextBlock, isInfo, type QuestionRecord } from '../shared/questions.js';
 import { type BlockRecord, ownRecord, type ThreadRecord, type Touched } from '../shared/records.js';
@@ -158,6 +158,26 @@ function checkDirections(
     }
 }
 
+/** Reject a batch an ask cannot take: one with an event of a plan's phases, or a question that belongs to a direction. */
+function checkAsk(events: AgentEvent[]): void {
+    const issues = events.flatMap((event, index): Issue[] => {
+        if (!ASK_AGENT_EVENTS.has(event.type))
+            return [
+                {
+                    path: `events[${index}].type`,
+                    message: `an ask takes only ${[...ASK_AGENT_EVENTS].join(', ')}; ${event.type} belongs to a plan`
+                }
+            ];
+        if (event.type !== 'question.upsert') return [];
+        const { input, direction } = event.question;
+        if (input === 'directions') return [{ path: `events[${index}].question.input`, message: 'an ask has no directions' }];
+        if (direction !== undefined)
+            return [{ path: `events[${index}].question.direction`, message: 'an ask has no directions' }];
+        return [];
+    });
+    if (issues.length) throw new RejectedError(issues, 400);
+}
+
 /**
  * Apply a parsed batch to a draft. Any problem other than a block's own config
  * (a missing target, a broken reference, a read-only session) throws, and the
@@ -178,9 +198,16 @@ export function applyAgentBatch(
     }
     if (draft.state.phases.ended) {
         throw new RejectedError([
-            { path: '', message: `The user ${draft.state.phases.ended.how} this session, so it is read-only. Stop.` }
+            {
+                path: '',
+                message:
+                    draft.state.kind === 'ask'
+                        ? 'The user sent their answers, so this ask is read-only. Wait for the ask.done if you have not had it, then call planroom_ask with its id to ask more.'
+                        : `The user ${draft.state.phases.ended.how} this session, so it is read-only. Stop.`
+            }
         ]);
     }
+    if (draft.state.kind === 'ask') checkAsk(events);
     const now = draft.now;
     const result: BatchResult = { applied: [], blockProblems: [] };
     const issues: Issue[] = [];

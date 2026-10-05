@@ -7,6 +7,7 @@ import {
     type Tool
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { askTranscript } from '../shared/ask.js';
 import {
     currentPhase,
     decisionRows,
@@ -18,8 +19,8 @@ import {
 } from '../shared/derive.js';
 import { emitBatch, type LoggedEvent, type LoggedEventType } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
-import { type PlanFormat, StateFileError } from '../shared/state.js';
-import { DEFAULT_WAIT_SEC, openInput, stateInput, waitInput } from '../shared/tools.js';
+import { type PlanFormat, type SessionKind, StateFileError } from '../shared/state.js';
+import { askInput, DEFAULT_WAIT_SEC, openInput, stateInput, waitInput } from '../shared/tools.js';
 import type { ChannelNotifier } from './delivery.js';
 import { RejectedError } from './draft.js';
 import { type PageServer, startPageServer } from './http.js';
@@ -40,19 +41,36 @@ function inputSchema(schema: z.ZodType): Tool['inputSchema'] {
     return { ...json, type: 'object' } as Tool['inputSchema'];
 }
 
-/** The four Planroom tools as `tools/list` returns them, with input schemas generated from the shared zod schemas. */
-export const TOOLS: Tool[] = [
-    {
-        name: 'planroom_open',
-        description:
-            'Open or resume the Planroom planning page for a change. A new plan becomes an OpenSpec change in openspec/changes/<changeId>/ ' +
-            '(created when it does not exist), or with format "markdown" a plan at agent-plans/<changeId>/<changeId>.md. ' +
-            'Returns { url, resumed, phase, format, cursor, repoRoot }: print the url for the user, and pass cursor as `after` to planroom_wait. ' +
-            'Plan paths are relative to repoRoot, the repo the server plans in, which is not your working directory when the server was started with --dir. ' +
-            "Without a changeId it opens the plan browser instead, where the user picks one of the repo's plans, and returns { url, browsing: true, repoRoot }: " +
-            'print the url, then call planroom_wait with after 0. Once the user picks a plan it is refused naming that plan: call planroom_state to load it.',
-        inputSchema: inputSchema(openInput)
-    },
+/** The planning server's opener. */
+const OPEN_TOOL: Tool = {
+    name: 'planroom_open',
+    description:
+        'Open or resume the Planroom planning page for a change. A new plan becomes an OpenSpec change in openspec/changes/<changeId>/ ' +
+        '(created when it does not exist), or with format "markdown" a plan at agent-plans/<changeId>/<changeId>.md. ' +
+        'Returns { url, resumed, phase, format, cursor, repoRoot }: print the url for the user, and pass cursor as `after` to planroom_wait. ' +
+        'Plan paths are relative to repoRoot, the repo the server plans in, which is not your working directory when the server was started with --dir. ' +
+        "Without a changeId it opens the plan browser instead, where the user picks one of the repo's plans, and returns { url, browsing: true, repoRoot }: " +
+        'print the url, then call planroom_wait with after 0. Once the user picks a plan it is refused naming that plan: call planroom_state to load it.',
+    inputSchema: inputSchema(openInput)
+};
+
+/** The question server's opener. */
+const ASK_TOOL: Tool = {
+    name: 'planroom_ask',
+    description:
+        'Ask the user a series of questions on a live page, at any point in your work and in any repo: no phases, no write-up, ' +
+        'just question and info cards, comments and messages both ways. Use it instead of asking in chat whenever you have ' +
+        'more than one question for the user. Returns { url, askId, resumed, cursor, repoRoot }: print the url, then ' +
+        'planroom_emit question.upsert events (any input but "directions", no `direction`), reply to comments with comment.reply, ' +
+        'and planroom_wait from `cursor` for answers. When the user sends their answers, planroom_wait returns an ask.done ' +
+        'event whose `context` is every question, answer and thread as Markdown, and whose `file` is the `output` path it was ' +
+        'also written to. The ask is then read-only: call planroom_ask with the same askId to ask more, which reopens it once ' +
+        'you have had its ask.done. Until then it returns `sent: true` and the ask stays read-only: planroom_wait from `cursor` for the ask.done first.',
+    inputSchema: inputSchema(askInput)
+};
+
+/** The tools both servers serve after their opener, over whichever session it opened. */
+const SESSION_TOOLS: Tool[] = [
     {
         name: 'planroom_emit',
         description:
@@ -63,7 +81,7 @@ export const TOOLS: Tool[] = [
             'e.g. "researching how alarms are indexed", until your next planroom_wait. `subagents` lists what each subagent you are waiting on is doing, ' +
             'and lasts across waits until you send a new list, [] once they have all reported back. Both can be sent with no events: ' +
             'send that emit in the same message as the tool calls it describes, since one on its own costs a whole turn. ' +
-            "Block shapes: the planroom skill's references/blocks.md.",
+            'Block shapes: references/blocks.md in the planroom or planroom-ask skill.',
         inputSchema: inputSchema(emitBatch)
     },
     {
@@ -80,25 +98,54 @@ export const TOOLS: Tool[] = [
         name: 'planroom_state',
         description:
             'Return the whole planning session: questions and answers, the write-up, comment threads, phases, validation and your event cursor. ' +
+            'For an ask, `context` is its questions, answers and threads as Markdown so far. ' +
             'Use it to rebuild context after a compaction or in a resumed session.',
         inputSchema: inputSchema(stateInput)
     }
 ];
 
 /**
+ * Each server's tools as `tools/list` returns them, with input schemas generated from the shared zod schemas: the
+ * planning server (`plan`) opens plans, the question server (`ask`) opens asks, so a user can turn either off in `/mcp`.
+ */
+export const TOOLS: Record<SessionKind, Tool[]> = { plan: [OPEN_TOOL, ...SESSION_TOOLS], ask: [ASK_TOOL, ...SESSION_TOOLS] };
+
+/** Each server's name, which `planroom install` registers it under and channel messages carry as their source. */
+export const SERVER_NAMES: Record<SessionKind, string> = { plan: 'planroom', ask: 'planroom-ask' };
+
+/** How page events reach the agent, from the server named `source`. */
+const delivery = (source: string) =>
+    [
+        'Page events arrive through planroom_wait. When this Claude Code session was launched with channels, events that arrive while you',
+        `are not waiting are also pushed to you as <channel source="${source}" seq="…" kind="…" change_id="…"> messages. They are the same`,
+        'events planroom_wait returns: handle events strictly in seq order, skip any seq you have already handled, and pass the highest',
+        'seq you handled as `after` to your next planroom_wait.'
+    ].join(' ');
+
+/**
  * The server instructions the agent session receives when it connects: load the skill, print the URL, handle events in
  * seq order.
  */
-export const INSTRUCTIONS = [
-    'Planroom is the live planning page for changes in any repo with an openspec/ directory, proposed as an OpenSpec change or a Markdown plan. Load the planroom skill before calling these tools.',
-    'planroom_open returns the page URL: always print it for the user.',
-    'Page events arrive through planroom_wait. When this Claude Code session was launched with channels, events that arrive while you',
-    'are not waiting are also pushed to you as <channel source="planroom" seq="…" kind="…" change_id="…"> messages. They are the same',
-    'events planroom_wait returns: handle events strictly in seq order, skip any seq you have already handled, and pass the highest',
-    'seq you handled as `after` to your next planroom_wait.'
-].join(' ');
+export const INSTRUCTIONS: Record<SessionKind, string> = {
+    plan: [
+        'Planroom is the live planning page for changes in any repo with an openspec/ directory, proposed as an OpenSpec change or a Markdown plan.',
+        'Load the planroom skill before calling these tools.',
+        'planroom_open returns the page URL: always print it for the user.',
+        delivery(SERVER_NAMES.plan)
+    ].join(' '),
+    ask: [
+        'Planroom Ask puts a series of questions for the user on a live page of question cards, in any repo and at any point in your work,',
+        'and hands the answers back as context. Load the planroom-ask skill before calling these tools.',
+        'planroom_ask returns the page URL: always print it for the user.',
+        delivery(SERVER_NAMES.ask)
+    ].join(' ')
+};
 
 export interface PlanroomOptions {
+    /** Which server this is: `plan` serves planroom_open, `ask` serves planroom_ask. */
+    kind: SessionKind;
+    /** Planroom's version, which the server reports when the agent connects. */
+    version: string;
     repoRoot: string;
     /** The built SPA (`dist/ui`). */
     uiDir: string;
@@ -140,7 +187,7 @@ function parseArgs<T extends z.ZodType>(schema: T, input: unknown): z.output<T> 
 }
 
 /** The page events after which the session is read-only and Planroom shuts down once the agent has them. */
-const ENDS_SESSION: ReadonlySet<LoggedEventType> = new Set<LoggedEventType>(['proposal.accept', 'session.end']);
+const ENDS_SESSION: ReadonlySet<LoggedEventType> = new Set<LoggedEventType>(['proposal.accept', 'session.end', 'ask.done']);
 
 /** The channel message for one event: a readable first line, then the event itself. */
 export function channelContent(event: LoggedEvent): string {
@@ -148,14 +195,15 @@ export function channelContent(event: LoggedEvent): string {
 }
 
 /**
- * The Planroom MCP server: four tools over one session at a time, the
- * `claude/channel` capability for push delivery, and the page's web server,
- * started on the first `planroom_open`.
+ * A Planroom MCP server: the planning server or the question server, each with its four tools over one session at a
+ * time, the `claude/channel` capability for push delivery, and the page's web server, started on the first open.
  */
 export function createPlanroom(options: PlanroomOptions): Planroom {
+    const { kind } = options;
+    const opener = (kind === 'plan' ? OPEN_TOOL : ASK_TOOL).name;
     const server = new Server(
-        { name: 'planroom', version: '1.0.0' },
-        { capabilities: { tools: {}, experimental: { 'claude/channel': {} } }, instructions: INSTRUCTIONS }
+        { name: SERVER_NAMES[kind], version: options.version },
+        { capabilities: { tools: {}, experimental: { 'claude/channel': {} } }, instructions: INSTRUCTIONS[kind] }
     );
     let session: Session | undefined;
     let url: string | undefined;
@@ -181,7 +229,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
 
     const current = (): Session => {
         if (!session || session.closed)
-            throw new RejectedError([{ path: '', message: 'No Planroom session is open. Call planroom_open first.' }], 409);
+            throw new RejectedError([{ path: '', message: `No Planroom session is open. Call ${opener} first.` }], 409);
         return session;
     };
 
@@ -217,11 +265,13 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
     };
 
     /**
-     * Once the agent has the accept or end, close the session and stop the page server. The MCP connection stays up,
-     * so a later planroom_open serves the page again. A reopen in the meantime keeps it up.
+     * Once the agent has the accept or end, event `seq`, close the session and stop the page server. The agent waits on
+     * it no more, so the event counts as read and a resume carries on past it. The MCP connection stays up, so a later
+     * open serves the page again. A reopen in the meantime keeps it up.
      */
-    const shutDown = async (ended: Session) => {
+    const shutDown = async (ended: Session, seq: number) => {
         if (session !== ended || !isReadOnly(ended.current)) return;
+        await ended.acknowledge(seq);
         await closeSession();
         await pages?.close();
         pages = undefined;
@@ -237,23 +287,22 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             ...(options.registryFile ? { registryFile: options.registryFile } : {})
         }));
 
+    /** What every session opens with besides its own id and title. */
+    const base = { repoRoot: options.repoRoot, cli: options.cli, ...(options.now ? { now: options.now } : {}) };
+
+    /** Open a change's plan, for `serve`. */
+    const openPlan = (changeId: string, title?: string, format?: PlanFormat) =>
+        Session.open({ ...base, changeId, ...(title ? { title } : {}), ...(format ? { format } : {}) });
+
     /**
-     * Open a change and serve it in place of the open one. The new session is opened (id checked, lock taken) and
+     * Open a session and serve it in place of the open one. The new session is opened (id checked, lock taken) and
      * served before the previous one closes, so a failed open leaves the previous session as it was.
      */
     const serve = async (
-        changeId: string,
-        title?: string,
-        format?: PlanFormat
+        opening: () => Promise<{ session: Session; resumed: boolean }>
     ): Promise<{ live: Session; url: string; resumed: boolean }> => {
-        const opened = await Session.open({
-            repoRoot: options.repoRoot,
-            changeId,
-            ...(title ? { title } : {}),
-            ...(format ? { format } : {}),
-            cli: options.cli,
-            ...(options.now ? { now: options.now } : {})
-        });
+        const opened = await opening();
+        const { changeId } = opened.session;
         let openedUrl: string;
         try {
             openedUrl = (await pageServer()).add(opened.session);
@@ -269,6 +318,12 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         session.setNotifier(notifierFor(changeId));
         return { live: opened.session, url: openedUrl, resumed: opened.resumed };
     };
+
+    /** The open session and its page URL when it is the `wanted` kind's `id`, which opening again returns as it is. */
+    const openHere = (wanted: SessionKind, id: string): { live: Session; url: string } | undefined =>
+        session && !session.closed && session.current.kind === wanted && session.changeId === id && url
+            ? { live: session, url }
+            : undefined;
 
     /** Open the plan browser's page in the browser. Any open plan stays open until the user picks another there. */
     const browse = async () => {
@@ -287,39 +342,62 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         const { changeId, title, format } = parseArgs(openInput, input);
         if (!changeId) return browse();
         switchedTo = undefined;
-        if (session && !session.closed && session.changeId === changeId && url) {
-            if (format && format !== session.current.format)
-                throw new RejectedError(
-                    [
-                        {
-                            path: 'format',
-                            message: `${changeId} is open with format "${session.current.format}"; open it without a format`
-                        }
-                    ],
-                    409
-                );
-            session.delivery.touch();
-            return {
-                url,
-                resumed: true,
-                phase: currentPhase(session.current),
-                format: session.current.format,
-                cursor: session.current.agentCursor,
-                repoRoot: options.repoRoot,
-                browserOpened: false
-            };
-        }
-        const served = await serve(changeId, title, format);
-        served.live.delivery.touch();
-        const browserOpened = await options.openBrowser(served.url);
+        const here = openHere('plan', changeId);
+        if (here && format && format !== here.live.current.format)
+            throw new RejectedError(
+                [
+                    {
+                        path: 'format',
+                        message: `${changeId} is open with format "${here.live.current.format}"; open it without a format`
+                    }
+                ],
+                409
+            );
+        const {
+            live,
+            url: openedUrl,
+            resumed
+        } = here ? { ...here, resumed: true } : await serve(() => openPlan(changeId, title, format));
+        live.delivery.touch();
         return {
-            url: served.url,
-            resumed: served.resumed,
-            phase: currentPhase(served.live.current),
-            format: served.live.current.format,
-            cursor: served.live.current.agentCursor,
+            url: openedUrl,
+            resumed,
+            phase: currentPhase(live.current),
+            format: live.current.format,
+            cursor: live.current.agentCursor,
             repoRoot: options.repoRoot,
-            browserOpened
+            browserOpened: here ? false : await options.openBrowser(openedUrl)
+        };
+    };
+
+    /**
+     * Open an ask for the agent, or return the open one, and open its page in the browser. A sent ask reopens for more
+     * questions once the agent has had its answers; until then it stays read-only and says `sent`.
+     */
+    const ask = async (input: unknown) => {
+        const { askId, title, output } = parseArgs(askInput, input);
+        switchedTo = undefined;
+        const here = openHere('ask', askId);
+        const {
+            live,
+            url: openedUrl,
+            resumed
+        } = here
+            ? { ...here, resumed: true }
+            : await serve(() =>
+                  Session.openAsk({ ...base, askId, ...(title ? { title } : {}), ...(output !== undefined ? { output } : {}) })
+              );
+        if (output !== undefined) await live.setOutput(output);
+        const sent = !(await live.reopenAsk());
+        live.delivery.touch();
+        return {
+            url: openedUrl,
+            askId,
+            resumed,
+            ...(sent ? { sent: true } : {}),
+            cursor: live.current.agentCursor,
+            repoRoot: options.repoRoot,
+            browserOpened: here ? false : await options.openBrowser(openedUrl)
         };
     };
 
@@ -328,10 +406,13 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
      * change that already has a plan opens this way, so the page cannot create one, and the page navigates itself.
      */
     const switchPlan = async (changeId: string): Promise<string> => {
+        if (kind === 'ask')
+            throw new RejectedError([{ path: 'changeId', message: 'This Planroom only asks questions: it opens no plans' }], 404);
         if (!(await hasPlan(options.repoRoot, changeId)))
             throw new RejectedError([{ path: 'changeId', message: `${changeId} has no plan to open` }], 404);
-        if (session && !session.closed && session.changeId === changeId && url) return url;
-        const served = await serve(changeId);
+        const here = openHere('plan', changeId);
+        if (here) return here.url;
+        const served = await serve(() => openPlan(changeId));
         switchedTo = changeId;
         picks.emit('picked');
         return served.url;
@@ -339,6 +420,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
 
     const handlers: Record<string, (input: unknown, signal: AbortSignal) => Promise<unknown>> = {
         planroom_open: (input) => serially(() => open(input)),
+        planroom_ask: (input) => serially(() => ask(input)),
         planroom_emit: (input) => known().emit(input),
         planroom_wait: async (input, signal) => {
             const { after, timeoutSec } = parseArgs(waitInput, input);
@@ -355,8 +437,9 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             const result = await live.wait(after, timeout, signal);
             const last = result.events[result.events.length - 1];
             // Only an accept or end from this run: one replayed from an earlier run is history.
-            if (result.events.some((event) => event.seq > live.openedSeq && ENDS_SESSION.has(event.type)))
-                serially(() => shutDown(live)).catch((error: unknown) =>
+            const ending = result.events.find((event) => event.seq > live.openedSeq && ENDS_SESSION.has(event.type));
+            if (ending)
+                serially(() => shutDown(live, ending.seq)).catch((error: unknown) =>
                     console.error('planroom: error while shutting down', error)
                 );
             return { ...result, cursor: last?.seq ?? after };
@@ -367,13 +450,13 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             switchedTo = undefined;
             live.delivery.touch();
             const { lastEvent: _lastEvent, counters: _counters, ...state } = live.current;
+            const cursor = { cursor: live.delivery.agentCursor, latestSeq: live.delivery.lastSeq, repoRoot: options.repoRoot };
+            if (state.kind === 'ask') return { url, ...cursor, context: askTranscript(state), state };
             const gate = phase1Gate(state, state.phases.phase1.direction);
             return {
                 url,
                 phase: currentPhase(state),
-                cursor: live.delivery.agentCursor,
-                latestSeq: live.delivery.lastSeq,
-                repoRoot: options.repoRoot,
+                ...cursor,
                 phase1: {
                     stage: phase1Stage(state),
                     directions: directionTabs(state),
@@ -389,9 +472,10 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         }
     };
 
-    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS }));
+    const served = new Set(TOOLS[kind].map((tool) => tool.name));
+    server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: TOOLS[kind] }));
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-        const handler = handlers[request.params.name];
+        const handler = served.has(request.params.name) ? handlers[request.params.name] : undefined;
         if (!handler) return failed(new Error(`Unknown tool ${request.params.name}`));
         try {
             return ok(await handler(request.params.arguments, extra.signal));

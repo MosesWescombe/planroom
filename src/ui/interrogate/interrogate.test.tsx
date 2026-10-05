@@ -185,6 +185,28 @@ describe('question cards', () => {
         expect(posted).toEqual([]);
     });
 
+    it('read-only: an answered question still expands to its options and note, with no way to edit or comment', async () => {
+        const question = questionRecord('Q-14', 'answered', {
+            answer: { choice: 'b', note: 'Overrides need an expiry', version: 1, at: NOW }
+        });
+        renderWith(storeWith(makeView({ questions: [question] }, { viewOnly: true })), <QuestionCard id="Q-14" />);
+        const user = userEvent.setup();
+        await user.click(within(card('Q-14')).getByRole('button', { name: 'View' }));
+        const radios = within(card('Q-14')).getAllByRole('radio');
+        expect(radios[1]).toBeChecked();
+        radios.forEach((radio) => expect(radio).toBeDisabled());
+        expect(within(card('Q-14')).getByLabelText('Add a note (optional)')).toBeDisabled();
+        expect(within(card('Q-14')).queryByRole('button', { name: 'Edit' })).toBeNull();
+        expect(within(card('Q-14')).queryByRole('button', { name: 'Ask to clarify' })).toBeNull();
+        expect(card('Q-14')).not.toHaveTextContent('Double-click to edit');
+
+        fireEvent.doubleClick(within(card('Q-14')).getByText('Question Q-14'));
+        expect(within(card('Q-14')).getAllByRole('radio')[1]).toBeDisabled();
+        await user.click(within(card('Q-14')).getByRole('button', { name: 'Close' }));
+        expect(card('Q-14')).toHaveTextContent('You answered: Option B. Overrides need an expiry');
+        expect(posted).toEqual([]);
+    });
+
     it('draft survives reload: the selection is still there, marked "Draft kept locally", and nothing was sent', async () => {
         const view = makeView({ questions: [questionRecord('Q-14')] });
         renderWith(storeWith(view), <QuestionCard id="Q-14" />);

@@ -1,32 +1,43 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { emptyState } from '../shared/state.js';
-import { openInput, stateInput, waitInput } from '../shared/tools.js';
-import { CHANGE, connect, defined, eventually, section, tempRepo, textBlock, upsert } from '../test/serverHelpers.js';
+import { askInput, openInput, stateInput, waitInput } from '../shared/tools.js';
+import { CHANGE, connect, defined, eventually, rejection, section, tempRepo, textBlock, upsert } from '../test/serverHelpers.js';
 import { openerCommand, openInBrowser } from './opener.js';
 import { rememberRepo } from './registry.js';
 
 describe('MCP tools', () => {
-    it('lists the four tools with generated schemas, the channel capability and instructions', async () => {
+    it('lists the four planning tools with generated schemas, the channel capability and instructions', async () => {
         const { client } = await connect();
         const { tools } = await client.listTools();
         expect(tools.map((tool) => tool.name)).toEqual(['planroom_open', 'planroom_emit', 'planroom_wait', 'planroom_state']);
         const emit = defined(tools.find((tool) => tool.name === 'planroom_emit'));
         expect(JSON.stringify(emit.inputSchema)).toContain('question.upsert');
         expect(client.getServerCapabilities()?.experimental).toEqual({ 'claude/channel': {} });
-        expect(client.getInstructions()).toMatch(/skip any seq you have already handled/);
+        expect(client.getServerVersion()?.name).toBe('planroom');
+        expect(client.getInstructions()).toMatch(
+            /Load the planroom skill.*source="planroom".*skip any seq you have already handled/
+        );
     });
 
-    it('generates the open, wait and state schemas from src/shared', async () => {
-        const { client } = await connect();
+    it('the question server lists planroom_ask in place of planroom_open, with its own skill and channel source', async () => {
+        const { client } = await connect({ kind: 'ask' });
         const { tools } = await client.listTools();
-        const properties = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema.properties;
-        expect(properties('planroom_open')).toEqual(z.toJSONSchema(openInput, { io: 'input' }).properties);
-        expect(properties('planroom_wait')).toEqual(z.toJSONSchema(waitInput, { io: 'input' }).properties);
-        expect(properties('planroom_state')).toEqual(z.toJSONSchema(stateInput, { io: 'input' }).properties);
+        expect(tools.map((tool) => tool.name)).toEqual(['planroom_ask', 'planroom_emit', 'planroom_wait', 'planroom_state']);
+        expect(client.getServerVersion()?.name).toBe('planroom-ask');
+        expect(client.getInstructions()).toMatch(/Load the planroom-ask skill.*source="planroom-ask"/);
+    });
+
+    it('generates the open, ask, wait and state schemas from src/shared', async () => {
+        const properties = async (kind: 'plan' | 'ask', name: string) =>
+            (await (await connect({ kind })).client.listTools()).tools.find((tool) => tool.name === name)?.inputSchema.properties;
+        expect(await properties('plan', 'planroom_open')).toEqual(z.toJSONSchema(openInput, { io: 'input' }).properties);
+        expect(await properties('ask', 'planroom_ask')).toEqual(z.toJSONSchema(askInput, { io: 'input' }).properties);
+        expect(await properties('plan', 'planroom_wait')).toEqual(z.toJSONSchema(waitInput, { io: 'input' }).properties);
+        expect(await properties('plan', 'planroom_state')).toEqual(z.toJSONSchema(stateInput, { io: 'input' }).properties);
     });
 
     it('opens a session, returns its URL, and opens the browser', async () => {
@@ -195,6 +206,121 @@ describe('MCP tools', () => {
     });
 });
 
+describe('asking questions mid-task', () => {
+    it('opens an ask in any repo, takes only cards and replies, and sends the answers as context and a file', async () => {
+        const { call, planroom, repo } = await connect({ kind: 'ask' });
+        await rm(join(repo, 'openspec'), { recursive: true });
+        const opened = (await call('planroom_ask', { askId: 'auth-questions', title: 'Auth migration', output: 'docs/auth.md' }))
+            .body;
+        expect(opened).toMatchObject({ askId: 'auth-questions', resumed: false, cursor: 0, repoRoot: repo, browserOpened: true });
+        expect(await readFile(join(repo, '.planroom', '.gitignore'), 'utf8')).toBe('*\n');
+        expect(existsSync(join(repo, '.planroom', 'asks', 'auth-questions', 'state.json'))).toBe(true);
+        expect((await fetch(opened.url)).status).toBe(200);
+
+        expect((await call('planroom_emit', { events: [upsert('Q-1'), upsert('Q-2')] })).isError).toBe(false);
+        expect(await call('planroom_emit', { events: [textBlock('b1', 'Hi')] })).toMatchObject({
+            isError: true,
+            body: { issues: [{ path: 'events[0].type', message: expect.stringMatching(/belongs to a plan/) }] }
+        });
+        expect(await call('planroom_emit', { events: [upsert('Q-3', { input: 'directions', group: 'explore' })] })).toMatchObject(
+            { isError: true, body: { issues: [{ path: 'events[0].question.input' }] } }
+        );
+
+        const session = defined(planroom.session);
+        await session.handlePage({ type: 'answer.submit', questionId: 'Q-1', version: 1, answer: { choice: 'a' } });
+        expect((await rejection(session.handlePage({ type: 'phase.complete', path: 'finished' }))).message).toMatch(
+            /An ask has no phase.complete/
+        );
+        expect((await call('planroom_state')).body).toMatchObject({
+            cursor: 0,
+            context: expect.stringContaining('**Answer:** Option A'),
+            state: { kind: 'ask', output: 'docs/auth.md' }
+        });
+
+        const { seq } = await session.handlePage({ type: 'ask.done' });
+        expect((await call('planroom_emit', { events: [upsert('Q-4')] })).body.issues[0].message).toMatch(
+            /sent their answers.*planroom_ask/
+        );
+        const [done] = (await call('planroom_wait', { after: defined(seq) - 1 })).body.events;
+        expect(done).toMatchObject({
+            type: 'ask.done',
+            file: 'docs/auth.md',
+            context: expect.stringContaining('_Not answered._')
+        });
+        expect(await readFile(join(repo, 'docs', 'auth.md'), 'utf8')).toBe(done.context);
+        await eventually(() => expect(planroom.session).toBeUndefined());
+
+        const resumed = (await call('planroom_ask', { askId: 'auth-questions' })).body;
+        expect(resumed).toMatchObject({ resumed: true, cursor: seq });
+        expect((await call('planroom_emit', { events: [upsert('Q-4')] })).isError).toBe(false);
+        expect(defined(planroom.session).current.questions['Q-1']?.status).toBe('answered');
+    });
+
+    it('a sent ask stays read-only, its answers waiting, until the agent has had its ask.done; asking more then reopens it', async () => {
+        const { call, planroom } = await connect({ kind: 'ask' });
+        await call('planroom_ask', { askId: 'auth-questions' });
+        await call('planroom_emit', { events: [upsert('Q-1')] });
+        const { seq } = await defined(planroom.session).handlePage({ type: 'ask.done' });
+        // The agent was busy, then moved on to another ask: the ask.done never reached it.
+        await call('planroom_ask', { askId: 'other-questions' });
+
+        expect((await call('planroom_ask', { askId: 'auth-questions' })).body).toMatchObject({
+            resumed: true,
+            sent: true,
+            cursor: 0
+        });
+        expect(defined(planroom.session).current.phases.ended).toBeDefined();
+        expect((await call('planroom_emit', { events: [upsert('Q-2')] })).body.issues[0].message).toMatch(
+            /Wait for the ask.done/
+        );
+        expect((await call('planroom_wait', { after: 0 })).body.events).toMatchObject([{ type: 'ask.done', seq }]);
+
+        const reopened = (await call('planroom_ask', { askId: 'auth-questions' })).body;
+        expect(reopened).toMatchObject({ resumed: true, cursor: seq });
+        expect(reopened).not.toHaveProperty('sent');
+        expect(defined(planroom.session).current.phases.ended).toBeUndefined();
+        expect((await call('planroom_emit', { events: [upsert('Q-2')] })).isError).toBe(false);
+    });
+
+    it("each server refuses the other one's opener, and the question server opens no plan from its page", async () => {
+        const plans = await connect();
+        expect(await plans.call('planroom_ask', { askId: 'auth-questions' })).toMatchObject({
+            isError: true,
+            body: { error: 'Unknown tool planroom_ask' }
+        });
+
+        const asks = await connect({ kind: 'ask' });
+        expect(await asks.call('planroom_open', { changeId: CHANGE })).toMatchObject({
+            isError: true,
+            body: { error: 'Unknown tool planroom_open' }
+        });
+        expect(await asks.call('planroom_emit', { events: [] })).toMatchObject({
+            isError: true,
+            body: { issues: [{ message: expect.stringContaining('Call planroom_ask first') }] }
+        });
+        expect(await asks.call('planroom_ask', { askId: 'Not Kebab' })).toMatchObject({
+            isError: true,
+            body: { issues: [{ path: 'askId' }] }
+        });
+
+        const plan = join(asks.repo, 'openspec', 'changes', CHANGE, '.planroom');
+        await mkdir(plan, { recursive: true });
+        await writeFile(
+            join(plan, 'state.json'),
+            JSON.stringify(emptyState(CHANGE, 'API rate limiting', '2026-10-02T00:00:00.000Z'))
+        );
+        const { url } = (await asks.call('planroom_ask', { askId: 'auth-questions' })).body;
+        const opened = await fetch(`${url}api/plans/open`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ changeId: CHANGE })
+        });
+        expect(opened.status).toBe(404);
+        expect(JSON.stringify(await opened.json())).toContain('only asks questions');
+        expect(asks.planroom.session?.current.kind).toBe('ask');
+    });
+});
+
 describe('switching plans from the page', () => {
     /** Two plans, the agent on CHANGE, and how the page posts a switch. */
     async function twoPlans() {
@@ -249,6 +375,7 @@ describe('switching plans from the page', () => {
         const { url } = (await call('planroom_open', { changeId: CHANGE })).body;
         const listing = await (await fetch(`${url}api/plans`)).json();
         expect(listing.plans.map((plan: { changeId: string }) => plan.changeId)).toEqual([CHANGE]);
+        expect(listing.readOnly).toBe(false);
         expect(listing.elsewhere).toEqual([
             { repoRoot: other, plans: [expect.objectContaining({ changeId: 'add-elsewhere', status: 'interrogate' })] }
         ]);
@@ -329,7 +456,7 @@ describe('the plan browser from a Claude session', () => {
         const reader = defined((await fetch(`${opened.url}api/stream`)).body).getReader();
         let received = '';
         while (!received.includes('"type":"browse"')) received += new TextDecoder().decode((await reader.read()).value);
-        expect(received).toContain('{"type":"browse","readOnly":false}');
+        expect(received).toContain('{"type":"browse"}');
         await reader.cancel();
         expect((await fetch(`${opened.url}api/events`, { method: 'POST' })).status).toBe(404);
 

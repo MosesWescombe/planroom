@@ -1,4 +1,5 @@
 import { describeAnchor } from '../shared/anchors.js';
+import { askTranscript } from '../shared/ask.js';
 import { checkBlockConfig, checklistItemKey } from '../shared/blocks.js';
 import {
     acceptGate,
@@ -18,7 +19,7 @@ import {
     sectionOfBlock,
     unreview
 } from '../shared/derive.js';
-import type { LoggedAttachment, NewLoggedEvent, PageRequest } from '../shared/events.js';
+import { ASK_PAGE_REQUESTS, type LoggedAttachment, type NewLoggedEvent, type PageRequest } from '../shared/events.js';
 import { answerProblem, describeAnswer, type QuestionRecord } from '../shared/questions.js';
 import {
     type Attachment,
@@ -29,7 +30,7 @@ import {
     type ThreadRecord
 } from '../shared/records.js';
 import { type Revision, type RevisionChange, revisionMeta, undoBlocker } from '../shared/revisions.js';
-import { planDir } from '../shared/state.js';
+import { recordsDir } from '../shared/state.js';
 import type { ActivityEntry } from '../shared/view.js';
 import { type Draft, RejectedError, reject } from './draft.js';
 
@@ -94,7 +95,7 @@ function userMessage(id: string, said: Said, at: string): ThreadMessage {
 /** A message as the agent reads it: its words, and each paste with an image's repo path to open. */
 function forAgent(draft: Draft, said: Said): { text: string; attachments?: LoggedAttachment[] } {
     if (!said.attachments?.length) return { text: said.text };
-    const dir = `${planDir(draft.state.format, draft.state.changeId)}/.planroom/assets`;
+    const dir = `${recordsDir(draft.state)}/assets`;
     return {
         text: said.text,
         attachments: said.attachments.map((item) => (item.kind === 'image' ? { ...item, path: `${dir}/${item.asset}` } : item))
@@ -236,9 +237,16 @@ function reopenSession(draft: Draft): PageOutcome {
  */
 export function applyPageRequest(draft: Draft, request: PageRequest, revisions: readonly Revision[]): PageOutcome {
     const { now, state } = draft;
+    if (state.kind === 'ask' && !ASK_PAGE_REQUESTS.has(request.type)) reject(`An ask has no ${request.type}`, 'type', 400);
+    if (state.kind === 'plan' && request.type === 'ask.done') reject('Only an ask has answers to send', 'type', 400);
     if (request.type === 'session.reopen') return reopenSession(draft);
     if (state.phases.acceptedAt) reject('The proposal was accepted; this session is read-only.');
-    if (state.phases.ended) reject(`You ${state.phases.ended.how} this session; it is read-only.`);
+    if (state.phases.ended)
+        reject(
+            state.kind === 'ask'
+                ? 'You sent your answers; this ask is read-only.'
+                : `You ${state.phases.ended.how} this session; it is read-only.`
+        );
 
     switch (request.type) {
         case 'answer.submit': {
@@ -501,6 +509,11 @@ export function applyPageRequest(draft: Draft, request: PageRequest, revisions: 
                     openComments: openComments(state, ['proposal']).map((open) => open.id)
                 }
             };
+        }
+        case 'ask.done': {
+            draft.setPhases({ ...state.phases, ended: { how: 'finished', at: now } });
+            noteYours(draft, { title: 'You sent your answers' });
+            return { event: { type: 'ask.done', context: askTranscript(draft.state) } };
         }
         case 'session.end': {
             const how = endHow(state);

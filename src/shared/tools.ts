@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { repoPath } from './blocks.js';
 import { planFormat } from './state.js';
 
 /**
@@ -27,6 +28,24 @@ export const openInput = z.object({
         .describe(
             'What a new plan becomes on submit: `openspec` (the default), an OpenSpec change in openspec/changes/<changeId>/, ' +
                 'or `markdown`, a plan at agent-plans/<changeId>/<changeId>.md. A resumed plan keeps the format it was created with.'
+        )
+});
+
+/** `planroom_ask`'s input. */
+export const askInput = z.object({
+    askId: z
+        .string()
+        .describe(
+            'A kebab-case id for this set of questions, e.g. auth-migration-questions. The same id resumes it with its ' +
+                'earlier questions and answers, also after the user sent them'
+        ),
+    title: z.string().max(200).optional().describe('What the questions are about, the page heading; ignored when resuming'),
+    output: repoPath
+        .refine((path) => path.endsWith('.md'), { message: 'must be a .md file' })
+        .optional()
+        .describe(
+            'A repo-relative .md file to also write the questions and answers to when the user sends them, e.g. ' +
+                'docs/decisions/auth-migration.md. Given when resuming, it replaces the earlier one'
         )
 });
 

@@ -22,7 +22,7 @@ type Listener = () => void;
  */
 export class ViewStore {
     private view: View | undefined;
-    private browsing: { readOnly: boolean } | undefined;
+    private browsing = false;
     private connection: Connection = 'connecting';
     private readonly listeners = new Set<Listener>();
     private readonly hooks = new Set<{ before: () => void; after: () => void }>();
@@ -30,8 +30,8 @@ export class ViewStore {
     /** The current view, undefined before the first snapshot. An arrow, so it can be passed unbound. */
     getView = (): View | undefined => this.view;
 
-    /** Set when the page is the plan browser, which shows no plan; `readOnly` when the plans it opens are read-only. */
-    getBrowsing = (): { readOnly: boolean } | undefined => this.browsing;
+    /** Whether the page is the plan browser, which shows no plan. */
+    getBrowsing = (): boolean => this.browsing;
 
     /** The event stream's state. An arrow, so it can be passed unbound. */
     getConnection = (): Connection => this.connection;
@@ -98,8 +98,8 @@ export class ViewStore {
     }
 
     /** Make the page the plan browser, as the server said. */
-    browse(readOnly: boolean): void {
-        this.browsing = { readOnly };
+    browse(): void {
+        this.browsing = true;
         this.notify();
     }
 

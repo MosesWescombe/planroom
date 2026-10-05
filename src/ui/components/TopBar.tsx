@@ -54,11 +54,13 @@ function ExportButton() {
 
 /**
  * The top row, beside the rail: the phase tabs, the status pill, export, settings, End session, and the drawer toggles on
- * narrow screens, where the phase tabs wrap onto a row of their own. The change id heads the rail, under the brand.
+ * narrow screens, where the phase tabs wrap onto a row of their own. The change id heads the rail, under the brand. An
+ * ask has no phases to show or session to end: it ends by sending its answers.
  */
 export function TopBar() {
     const { drawer } = useUiState();
     const { setDrawer } = useActions();
+    const ask = useSelector((view) => view.kind === 'ask');
     return (
         <header className="topbar">
             <button
@@ -70,12 +72,12 @@ export function TopBar() {
             >
                 <MenuIcon />
             </button>
-            <PhaseTabs />
+            {!ask && <PhaseTabs />}
             <div className="topbar-end">
                 <ConnectionPill />
                 <ExportButton />
                 <SettingsButton />
-                <EndSessionButton />
+                {!ask && <EndSessionButton />}
                 <button
                     type="button"
                     className="icon-button narrow-only"

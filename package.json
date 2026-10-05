@@ -10,7 +10,7 @@
     "dist/cli.js",
     "dist/ui",
     "!dist/ui/**/*.map",
-    "skill",
+    "skills",
     "agents"
   ],
   "repository": {
