@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from 'react';
-import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/shim/with-selector';
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import { readSetting, writeSetting } from './local';
 
 /** The keys a message box can send on, the default first. */

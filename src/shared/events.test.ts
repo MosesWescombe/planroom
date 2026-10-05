@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-    agentEvent,
     type AgentEventType,
+    agentEvent,
     agentEventTypes,
     emitBatch,
-    loggedEvent,
     type LoggedEventType,
-    pageRequest,
-    type PageRequestType
+    loggedEvent,
+    type PageRequestType,
+    pageRequest
 } from './events.js';
 
 const anchor = { target: 'block:b1', position: { start: 0, end: 5 }, quote: { exact: 'hello', prefix: '', suffix: ' world' } };

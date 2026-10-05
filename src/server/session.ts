@@ -5,11 +5,11 @@ import { type LoggedEvent, type NewLoggedEvent, pageRequest } from '../shared/ev
 import { toIssues } from '../shared/issues.js';
 import type { ValidationRecord } from '../shared/records.js';
 import { type Revision, revisionMeta } from '../shared/revisions.js';
-import { emptyState, planDir, planFormat, type PlanFormat, type SessionState } from '../shared/state.js';
+import { emptyState, type PlanFormat, planDir, planFormat, type SessionState } from '../shared/state.js';
 import type { ActivityEntry, AgentStatus, Patch, ProposalView, View } from '../shared/view.js';
 import { applyAgentBatch, type BatchResult, parseBatch } from './agentApply.js';
 import { checkMarkdownPlan, scanChangeFolder, watchChangeFolder } from './changeFolder.js';
-import { EventDelivery, type ChannelNotifier, type WaitResult } from './delivery.js';
+import { type ChannelNotifier, EventDelivery, type WaitResult } from './delivery.js';
 import { Draft, RejectedError } from './draft.js';
 import { acquireLock, releaseLock, releaseLockSync, updateLock } from './lock.js';
 import type { OpenSpecRunner } from './openspec.js';

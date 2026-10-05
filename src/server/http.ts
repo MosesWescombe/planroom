@@ -8,11 +8,11 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { repoPath } from '../shared/blocks.js';
 import type { Revision } from '../shared/revisions.js';
 import type { Patch, StreamMessage, View } from '../shared/view.js';
-import { PlanViewer } from './viewer.js';
-import { isErrno } from './fsutil.js';
 import { RejectedError } from './draft.js';
+import { isErrno } from './fsutil.js';
 import { ChangeLockedError } from './lock.js';
 import { listPlans, listPlansElsewhere } from './plans.js';
+import { PlanViewer } from './viewer.js';
 
 /** The most lines one code excerpt returns. */
 const MAX_EXCERPT_LINES = 400;
@@ -78,7 +78,7 @@ function planOf(res: Response): ServedPlan {
 }
 
 /** Refuse a plan's API on the plan browser's page, which shows none. */
-function needsPlan(_req: Request, res: Response, next: NextFunction): void {
+function needsPlan<P>(_req: Request<P>, res: Response, next: NextFunction): void {
     if ((res.locals.served as Served).plan) next();
     else res.status(404).json({ error: 'the plan browser shows no plan' });
 }
@@ -173,7 +173,8 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
                 "frame-ancestors 'none'"
             ].join('; ')
         );
-        res.sendFile(join(options.uiDir, 'index.html'), (error) => {
+        // `root`, so a dot directory above it (`~/.nvm`, `~/.npm/_npx`) is not taken for a hidden file.
+        res.sendFile('index.html', { root: options.uiDir }, (error) => {
             if (error && !res.headersSent)
                 res.status(503).type('text').send('The Planroom page is not built. Run pnpm build in the Planroom checkout.');
         });
@@ -288,7 +289,8 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         }
         // An SVG opened directly must not run script in the page's origin.
         res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-        res.sendFile(join(planOf(res).store.assetsDir, name), (error) => {
+        // `root`, as assets live under `.planroom/`, which a rootless `sendFile` refuses as a dotfile.
+        res.sendFile(name, { root: planOf(res).store.assetsDir }, (error) => {
             if (error && !res.headersSent) res.status(404).json({ error: `asset ${name} not found` });
         });
     });
@@ -303,7 +305,7 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
 
     app.use(
         '/:token',
-        (req: Request, res: Response, next: NextFunction) => {
+        (req: Request<{ token: string }>, res: Response, next: NextFunction) => {
             const token = req.params.token ?? '';
             const entry = [...served].find((candidate) => sameToken(token, candidate.token));
             if (!entry) {

@@ -2,7 +2,7 @@ import { mkdir, readFile, readlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { tempRepo } from '../test/serverHelpers.js';
-import { type ClaudeCli, install, type InstallTarget, uninstall } from './install.js';
+import { type ClaudeCli, type InstallTarget, install, uninstall } from './install.js';
 
 /** A package with a skill and two agents, and a Claude config holding copies from an older install. */
 async function setup(): Promise<{ target: InstallTarget; calls: string[][]; claude: ClaudeCli }> {

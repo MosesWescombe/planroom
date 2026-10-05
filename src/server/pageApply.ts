@@ -1,4 +1,5 @@
 import { describeAnchor } from '../shared/anchors.js';
+import { checkBlockConfig, checklistItemKey } from '../shared/blocks.js';
 import {
     acceptGate,
     afterConflict,
@@ -28,10 +29,9 @@ import {
     type ThreadRecord
 } from '../shared/records.js';
 import { type Revision, type RevisionChange, revisionMeta, undoBlocker } from '../shared/revisions.js';
-import { checkBlockConfig, checklistItemKey } from '../shared/blocks.js';
 import { planDir } from '../shared/state.js';
 import type { ActivityEntry } from '../shared/view.js';
-import { type Draft, reject, RejectedError } from './draft.js';
+import { type Draft, RejectedError, reject } from './draft.js';
 
 /** The outcome of one page request: the event to log (if any) and follow-up work. */
 export interface PageOutcome {

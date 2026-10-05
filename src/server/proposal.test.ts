@@ -11,15 +11,15 @@ import {
     defined,
     eventually,
     harness,
-    onCleanup,
     type Outcome,
+    onCleanup,
     section,
     tempRepo,
     textBlock,
     upsert
 } from '../test/serverHelpers.js';
-import { openSpecCli } from './openspec.js';
 import { RejectedError } from './draft.js';
+import { openSpecCli } from './openspec.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 

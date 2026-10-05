@@ -206,7 +206,7 @@ export function CommentLayer() {
     const readOnly = useReadOnly();
     const composition = useComposition();
     const [selection, setSelection] = useState<SelectionAnchor>();
-    const latest = useRef<SelectionAnchor>();
+    const latest = useRef<SelectionAnchor>(undefined);
     latest.current = selection;
     useHighlights();
 

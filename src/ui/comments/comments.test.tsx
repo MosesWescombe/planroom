@@ -4,16 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QuestionRecord, QuestionStatus } from '../../shared/questions';
 import type { Attachment, ThreadMessage } from '../../shared/records';
 import type { AgentStatus } from '../../shared/view';
+import { commentThread, NOW, questionRecord } from '../../test/fixtures';
+import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
 import { SidePanel } from '../components/SidePanel';
 import { Thread } from '../components/Thread';
 import { QuestionCard } from '../interrogate/QuestionCard';
 import { readSetting } from '../local';
-import { commentThread, NOW, questionRecord } from '../../test/fixtures';
-import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
-import { captureSelection, rangeFromOffsets } from './selection';
-import { closeComposer, commentOnWhole } from './composer';
-import { CommentLayer } from './CommentLayer';
 import { setAnchorStates } from './anchorStatus';
+import { CommentLayer } from './CommentLayer';
+import { closeComposer, commentOnWhole } from './composer';
+import { captureSelection, rangeFromOffsets } from './selection';
 
 /** Make `range` the page's only selection. */
 function selectRange(range: Range): void {

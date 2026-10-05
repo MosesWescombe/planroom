@@ -46,8 +46,8 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
     const current = useRef(scale);
     current.current = scale;
     /** The scroll position that keeps the zoom's focal point still, applied once the new size has rendered. */
-    const scrollAfter = useRef<Point>();
-    const drag = useRef<{ from: Point; scroll: Point }>();
+    const scrollAfter = useRef<Point>(undefined);
+    const drag = useRef<{ from: Point; scroll: Point }>(undefined);
 
     const zoomTo = (next: number, focus?: Point) => {
         const view = viewport.current;

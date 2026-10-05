@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { z } from 'zod';
-import { answer, type Answer, type QuestionRecord } from '../../shared/questions';
+import { type Answer, answer, type QuestionRecord } from '../../shared/questions';
 import { readJson, writeJson } from '../local';
 
 /**

@@ -1,8 +1,8 @@
-import { render } from 'react-dom';
-import { openStream } from './api';
+import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { ViewStore } from './store';
+import { openStream } from './api';
 import { applyPageWidth, readPageWidth } from './pageWidth';
+import { ViewStore } from './store';
 import { applyTheme, readPreference, resolveTheme } from './theme';
 import './app.css';
 
@@ -23,4 +23,4 @@ openStream({
     onState: (state) => store.setConnection(state)
 });
 
-render(<App store={store} />, document.getElementById('root'));
+createRoot(document.getElementById('root')!).render(<App store={store} />);

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import isEqual from 'lodash/isEqual.js';
 import { type LoggedEvent, loggedEvent } from '../shared/events.js';
 import { type Revision, revision as revisionSchema } from '../shared/revisions.js';
-import { parseStateFile, planDir, type PlanFormat, type SessionState } from '../shared/state.js';
+import { type PlanFormat, parseStateFile, planDir, type SessionState } from '../shared/state.js';
 import { appendLineSynced, isErrno, readIfExists, writeAtomic } from './fsutil.js';
 
 /** A plan's `.planroom` folder: in its OpenSpec change folder, or its folder under `agent-plans/`. */

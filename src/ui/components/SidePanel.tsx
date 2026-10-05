@@ -1,6 +1,6 @@
 import upperFirst from 'lodash/upperFirst';
 import { memo, useRef, useState } from 'react';
-import { openComments, RESOLVED, threadScope, type ThreadScope } from '../../shared/derive';
+import { openComments, RESOLVED, type ThreadScope, threadScope } from '../../shared/derive';
 import type { ActivityEntry, AgentStatus } from '../../shared/view';
 import { plural, relativeTime } from '../format';
 import { useNarrow, useNow } from '../hooks';
@@ -268,7 +268,7 @@ const Comments = memo(function Comments() {
 });
 
 /** The box for messaging the agent directly, pastes included. Hidden while the session is read-only. */
-function MessageBox({ inputRef }: { inputRef: React.RefObject<HTMLTextAreaElement> }) {
+function MessageBox({ inputRef }: { inputRef: React.RefObject<HTMLTextAreaElement | null> }) {
     const { send } = useActions();
     const readOnly = useReadOnly();
     const [text, setText] = useState('');

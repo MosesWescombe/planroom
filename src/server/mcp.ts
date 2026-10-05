@@ -24,8 +24,8 @@ import type { ChannelNotifier } from './delivery.js';
 import { RejectedError } from './draft.js';
 import { type PageServer, startPageServer } from './http.js';
 import { ChangeLockedError } from './lock.js';
-import type { OpenSpecRunner } from './openspec.js';
 import type { BrowserOpener } from './opener.js';
+import type { OpenSpecRunner } from './openspec.js';
 import { hasPlan } from './plans.js';
 import { Session } from './session.js';
 

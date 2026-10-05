@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/shim/with-selector';
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import { pagePhase } from '../shared/derive';
 import { PlanBrowser } from './components/PlanSwitcher';
 import { Shell, tabForPhase } from './components/Shell';

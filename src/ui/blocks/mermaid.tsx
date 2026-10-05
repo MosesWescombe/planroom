@@ -76,6 +76,6 @@ export default function MermaidBlock({ config }: BlockProps<'mermaid'>) {
     }
     if (!state.svg) return <div className="block-loading">Drawing…</div>;
     // Mermaid's own output, sanitized by Mermaid in strict mode: the one block the page does not build itself.
-    // eslint-disable-next-line react/no-danger
+    // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid sanitizes its own SVG in strict mode.
     return <div className="mermaid-output" dangerouslySetInnerHTML={{ __html: state.svg }} />;
 }

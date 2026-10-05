@@ -4,8 +4,8 @@ import { useRecord } from '../store';
 import type { BlockProps } from './Block';
 import {
     architectureGraph,
-    c4Graph,
     C4_SHAPE,
+    c4Graph,
     compareTones,
     curvePath,
     flowGraph,
@@ -19,8 +19,8 @@ import {
     type NodeTone,
     rowCentre,
     rowNameAt,
-    schemaGraph,
     type SequenceLayout,
+    schemaGraph,
     stateGraph,
     TABLE
 } from './layout';
@@ -37,7 +37,7 @@ interface MarkerIds {
 
 /** A per-instance prefix for SVG marker ids, which must be unique in the document. */
 function useMarkerIds(): MarkerIds {
-    const ref = useRef<string>();
+    const ref = useRef<string>(undefined);
     if (!ref.current) {
         diagramCount += 1;
         ref.current = `dg${diagramCount}`;

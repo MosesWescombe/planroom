@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { startPageServer } from './server/http.js';
-import { type ClaudeCli, claudeConfigDir, install, type InstallTarget, uninstall } from './server/install.js';
+import { type ClaudeCli, claudeConfigDir, type InstallTarget, install, uninstall } from './server/install.js';
 import { createPlanroom } from './server/mcp.js';
 import { openInBrowser } from './server/opener.js';
 import { findOpenSpecRoot, openSpecCli } from './server/openspec.js';

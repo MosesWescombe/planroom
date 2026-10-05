@@ -1,7 +1,7 @@
 import isEqual from 'lodash/isEqual';
 import { createContext, useContext } from 'react';
-import { unstable_batchedUpdates } from 'react-dom';
-import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/shim/with-selector';
+import { flushSync } from 'react-dom';
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import { isMapPatch, MAP_FIELDS, type MapField, type Patch, type View } from '../shared/view';
 
 /**
@@ -116,10 +116,10 @@ export class ViewStore {
         this.notify();
     }
 
-    /** Tell every listener in one React batch, between the `around` hooks. */
+    /** Tell every listener in one synchronous React batch, so the DOM has the update when the `around` hooks' `after` runs. */
     private notify(): void {
         for (const hook of this.hooks) hook.before();
-        unstable_batchedUpdates(() => {
+        flushSync(() => {
             for (const listener of [...this.listeners]) listener();
         });
         for (const hook of this.hooks) hook.after();

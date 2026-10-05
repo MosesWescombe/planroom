@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { type PagePhase, pagePhase } from '../../shared/derive';
+import { CommentLayer } from '../comments/CommentLayer';
 import { DirectionSwitcher, DirectionsPhase, Interrogate } from '../interrogate/Interrogate';
 import { Proposal } from '../proposal/Proposal';
 import { useTrackSeen } from '../seen';
 import { useConnection, useSelector } from '../store';
 import { quietly, type Tab, useActions, useBusy, useUiState } from '../ui';
 import { Writeup } from '../writeup/Writeup';
-import { CommentLayer } from '../comments/CommentLayer';
 import { Notices } from './Notices';
 import { SidePanel } from './SidePanel';
 import { TopBar } from './TopBar';

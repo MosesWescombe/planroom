@@ -15,7 +15,7 @@ import { Rail } from '../components/Rail';
 import { plural } from '../format';
 import { deepEqual, useSelector } from '../store';
 import { useActions } from '../ui';
-import { Decisions, DECISIONS_ID } from './Decisions';
+import { DECISIONS_ID, Decisions } from './Decisions';
 import { History } from './History';
 import { Section } from './Section';
 import { SubmitDialog } from './SubmitDialog';
@@ -118,7 +118,7 @@ const ContentsStrip = memo(function ContentsStrip() {
                         entry.derived && 'from your answers',
                         entry.reviewed && 'reviewed',
                         entry.changed && 'changed by agent, needs review',
-                        entry.assumptions > 0 && plural(entry.assumptions, 'assumption') + ' to confirm'
+                        entry.assumptions > 0 && `${plural(entry.assumptions, 'assumption')} to confirm`
                     ]
                         .filter(Boolean)
                         .join(', ');

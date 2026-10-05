@@ -126,6 +126,7 @@ function renderToken(token: Token, key: number): ReactNode {
         <Fragment key={key}>
             {token.scopes.reduceRight<ReactNode>(
                 (child, scope) => (
+                    // biome-ignore lint/correctness/useJsxKeyInIterable: each span wraps the last, so there are no siblings to key.
                     <span className={scope}>{child}</span>
                 ),
                 token.text

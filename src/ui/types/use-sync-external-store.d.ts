@@ -1,5 +1,5 @@
-/** The React 17 shim for `useSyncExternalStore`, with a selector. The package ships no types. */
-declare module 'use-sync-external-store/shim/with-selector' {
+/** React's `useSyncExternalStore` with a selector, which React itself does not export. The package ships no types. */
+declare module 'use-sync-external-store/with-selector' {
     export function useSyncExternalStoreWithSelector<Snapshot, Selection>(
         subscribe: (onStoreChange: () => void) => () => void,
         getSnapshot: () => Snapshot,

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-    answerProblem,
     ASSUMPTION_HOLDS,
+    answerProblem,
     describeAnswer,
+    type QuestionContent,
     questionContent,
-    questionRecord,
-    type QuestionContent
+    questionRecord
 } from './questions.js';
 
 /** The question record from HANDOFF.md, as the agent would send it. */

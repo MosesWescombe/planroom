@@ -201,7 +201,8 @@ export function PlanSwitcher() {
     return (
         <>
             <button type="button" className="plan-switch" aria-haspopup="dialog" onClick={() => setOpen(true)}>
-                <span className="visually-hidden">Switch plan: </span>
+                {/* The space is its own node: the flex button never renders it, and accessible-name tools trim a span's own. */}
+                <span className="visually-hidden">Switch plan:</span>{' '}
                 <span className="change-id" title={path}>
                     {changeId}
                 </span>

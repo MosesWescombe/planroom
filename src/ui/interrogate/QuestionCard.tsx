@@ -1,7 +1,7 @@
 import {
     type KeyboardEvent,
-    memo,
     type MouseEvent,
+    memo,
     type ReactElement,
     type RefCallback,
     useCallback,
@@ -11,11 +11,11 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    answerProblem,
+    type Answer,
     ASSUMPTION_HOLDS,
+    answerProblem,
     describeAnswer,
     isInfo,
-    type Answer,
     type QuestionRecord
 } from '../../shared/questions';
 import { BlockView } from '../blocks/Block';

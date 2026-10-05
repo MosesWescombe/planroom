@@ -7,7 +7,7 @@ One package holds the `planroom` command, the MCP server, the page, the `planroo
 
 ## Install
 
-Needs Node 22.18 or newer and Claude Code. The package is public on npm, so no token is needed:
+Needs Node 24 or newer and Claude Code. The package is public on npm, so no token is needed:
 
 ```sh
 npm i -g @moses-wescombe/planroom

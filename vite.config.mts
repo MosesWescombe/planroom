@@ -17,10 +17,11 @@ export default defineConfig({
     },
     test: {
         root,
-        include: ['src/**/*.test.{ts,tsx}'],
-        environment: 'node',
-        environmentMatchGlobs: [['src/ui/**', 'jsdom']],
         setupFiles: ['src/test/setup.ts'],
-        testTimeout: 20000
+        testTimeout: 20000,
+        projects: [
+            { extends: true, test: { name: 'node', include: ['src/{server,shared}/**/*.test.ts'], environment: 'node' } },
+            { extends: true, test: { name: 'ui', include: ['src/ui/**/*.test.{ts,tsx}'], environment: 'jsdom' } }
+        ]
     }
 });

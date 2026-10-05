@@ -2,14 +2,14 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { ActivityEntry, AgentStatus, PlanSummary, RepoPlans } from '../../shared/view';
+import { AGREED, commentThread, NOW, phasesWith, questionRecord } from '../../test/fixtures';
+import { instance, makeView, posted, storeWith } from '../../test/harness';
 import { App } from '../App';
 import { keepScroll } from '../scrollKeeper';
 import { ViewStore } from '../store';
 import { applyTheme, cssName, resolveTheme, TEXT_PAIRS, themes } from '../theme';
-import { AGREED, commentThread, NOW, phasesWith, questionRecord } from '../../test/fixtures';
-import { instance, makeView, posted, storeWith } from '../../test/harness';
-import { describeConnection } from './TopBar';
 import { describeAgentNow } from './SidePanel';
+import { describeConnection } from './TopBar';
 
 function renderApp(store: ViewStore) {
     return render(<App store={store} />);

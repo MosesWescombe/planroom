@@ -9,7 +9,6 @@ import {
     sectionRecord,
     stateWith
 } from '../test/fixtures.js';
-import type { QuestionRecord } from './questions.js';
 import {
     acceptGate,
     canRequestChanges,
@@ -32,6 +31,7 @@ import {
     unreview,
     upsertQuestion
 } from './derive.js';
+import type { QuestionRecord } from './questions.js';
 
 const LATER = '2026-09-29T01:00:00.000Z';
 const passed = { passed: true, issues: [], trigger: 'proposal.ready' as const, at: NOW };

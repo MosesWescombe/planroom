@@ -1,12 +1,12 @@
-import { request } from 'node:http';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { request } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Patch, StreamMessage, View } from '../shared/view.js';
-import { CHANGE, defined, harness, onCleanup, rejection, tempRepo, textBlock, upsert, section } from '../test/serverHelpers.js';
+import { CHANGE, defined, harness, onCleanup, rejection, section, tempRepo, textBlock, upsert } from '../test/serverHelpers.js';
 import { type PageServer, startPageServer } from './http.js';
 import { PlanViewer } from './viewer.js';
 
@@ -74,9 +74,10 @@ async function readStream(
 
 async function served() {
     const h = await harness();
-    const uiDir = await tempRepo();
+    // Under a dot directory, as a global install is (`~/.nvm/...`): serving must not take it for a hidden file.
+    const uiDir = join(await tempRepo(), '.install', 'ui');
+    await mkdir(join(uiDir, 'assets'), { recursive: true });
     await writeFile(join(uiDir, 'index.html'), '<!doctype html><title>Planroom</title>');
-    await mkdir(join(uiDir, 'assets'));
     await writeFile(join(uiDir, 'assets', 'app.js'), 'console.log(1)');
     const pages: PageServer = await startPageServer({
         uiDir,

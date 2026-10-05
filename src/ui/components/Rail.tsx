@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from 'react';
+import { planDir } from '../../shared/state';
 import { useNarrow } from '../hooks';
 import { readSetting, writeSetting } from '../local';
-import { planDir } from '../../shared/state';
 import { useSelector } from '../store';
 import { Logo, PanelIcon } from './icons';
 import { PlanSwitcher } from './PlanSwitcher';

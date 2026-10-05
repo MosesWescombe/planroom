@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import sortBy from 'lodash/sortBy.js';
 import { pagePhase } from '../shared/derive.js';
-import { parseStateFile, PLAN_ROOTS, type PlanFormat, planFormat } from '../shared/state.js';
+import { PLAN_ROOTS, type PlanFormat, parseStateFile, planFormat } from '../shared/state.js';
 import type { PlanSummary, RepoPlans } from '../shared/view.js';
 import { liveHolder } from './lock.js';
 import { knownRepos } from './registry.js';

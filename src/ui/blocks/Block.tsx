@@ -3,8 +3,8 @@ import { type BlockConfigs, type BlockType, checkBlockConfig } from '../../share
 import type { Issue } from '../../shared/issues';
 import { commentOnWhole } from '../comments/composer';
 import { CommentIcon, ExpandIcon, WarningIcon } from '../components/icons';
-import { Modal } from '../components/Modal';
 import { LinkedText, QuestionLink } from '../components/LinkedText';
+import { Modal } from '../components/Modal';
 import { ZoomView } from '../components/ZoomView';
 import { useReadOnly } from '../readOnly';
 import { quietly, useActions, useBusy } from '../ui';

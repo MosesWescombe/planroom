@@ -11,11 +11,9 @@ export default defineConfig({
         ssr: `${root}src/cli.ts`,
         outDir: `${root}dist`,
         emptyOutDir: false,
-        target: 'node22',
-        rollupOptions: {
-            output: { entryFileNames: 'cli.js', banner: '#!/usr/bin/env node' },
-            // zod's misplaced `@__PURE__` comments; Rollup drops them, which changes nothing.
-            onwarn: (warning, warn) => (warning.code === 'INVALID_ANNOTATION' ? undefined : warn(warning))
+        target: 'node24',
+        rolldownOptions: {
+            output: { entryFileNames: 'cli.js', banner: '#!/usr/bin/env node' }
         }
     }
 });

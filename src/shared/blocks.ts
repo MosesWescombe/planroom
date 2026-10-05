@@ -818,7 +818,7 @@ export type BlockConfigs = { [K in BlockType]: z.output<(typeof blockConfigSchem
 
 /** Whether `type` is a registered block type. An inherited name such as `constructor` is not. */
 export function isBlockType(type: string): type is BlockType {
-    return Object.prototype.hasOwnProperty.call(blockConfigSchemas, type);
+    return Object.hasOwn(blockConfigSchemas, type);
 }
 
 /**

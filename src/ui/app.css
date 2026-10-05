@@ -3,9 +3,9 @@
    radii 8 / 10 / 14. */
 
 :root {
-    --font-display: 'Newsreader', Georgia, serif;
-    --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --font-display: "Newsreader", Georgia, serif;
+    --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
     --topbar: 56px;
     --tabs: 64px;
     --rail: 272px;
@@ -15,11 +15,11 @@
 }
 
 /* The top bar's page width choice, set on the root by pageWidth.ts. */
-:root[data-width='narrow'] {
+:root[data-width="narrow"] {
     --page-width: 720px;
 }
 
-:root[data-width='wide'] {
+:root[data-width="wide"] {
     --page-width: 1440px;
 }
 
@@ -419,7 +419,7 @@ p {
 }
 
 textarea,
-input[type='text'],
+input[type="text"],
 select {
     border: 1px solid var(--line-strong);
     border-radius: 8px;
@@ -434,8 +434,8 @@ textarea {
     resize: vertical;
 }
 
-input[type='radio'],
-input[type='checkbox'] {
+input[type="radio"],
+input[type="checkbox"] {
     width: 18px;
     height: 18px;
     margin: 2px 0 0;
@@ -719,7 +719,7 @@ div.plan-item:hover {
     text-align: left;
 }
 
-.phase-tab[aria-current='page'] {
+.phase-tab[aria-current="page"] {
     border-bottom-color: var(--ink);
     color: var(--ink);
 }
@@ -1071,7 +1071,7 @@ div.plan-item:hover {
     color: var(--ink-2);
 }
 
-.panel-tab[aria-selected='true'] {
+.panel-tab[aria-selected="true"] {
     border-bottom-color: var(--ink);
     color: var(--ink);
     font-weight: 600;
@@ -1294,7 +1294,7 @@ div.plan-item:hover {
 
 .activity-yours:not(.is-expandable)::before,
 .activity-question.is-resolved::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 1px;
     top: 6px;
@@ -1315,7 +1315,7 @@ div.plan-item:hover {
 }
 
 .activity-yours summary::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 1px;
     top: 6px;
@@ -1768,15 +1768,15 @@ div.plan-item:hover {
 }
 
 .nav-item:hover,
-.nav-item[aria-current='true'] {
+.nav-item[aria-current="true"] {
     background: var(--raised);
     color: var(--ink);
 }
 
 .nav-item:hover .muted,
-.nav-item[aria-current='true'] .muted,
+.nav-item[aria-current="true"] .muted,
 .file-link:hover .muted,
-.file-link[aria-current='true'] .muted {
+.file-link[aria-current="true"] .muted {
     /* Muted text is below AA on the raised row; the handoff uses ink-2 there. */
     color: var(--ink-2);
 }
@@ -1811,7 +1811,7 @@ div.plan-item:hover {
 }
 
 .ring-part::after {
-    content: '';
+    content: "";
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -1876,7 +1876,7 @@ div.plan-item:hover {
     flex-shrink: 0;
 }
 
-.direction-switch-tab[aria-current='page'] {
+.direction-switch-tab[aria-current="page"] {
     border-bottom-color: var(--ink);
     color: var(--ink);
 }
@@ -2061,7 +2061,7 @@ button.rail-strip-item {
     text-align: left;
 }
 
-.direction-tab[aria-selected='true'] {
+.direction-tab[aria-selected="true"] {
     border: 1.5px solid var(--ink);
     color: var(--ink);
 }
@@ -3069,7 +3069,7 @@ button.rail-strip-item {
 }
 
 .timeline-step:not(:last-child)::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 9px;
     left: calc(50% + 14px);
@@ -3315,14 +3315,14 @@ button.rail-strip-item {
     color: var(--ink);
 }
 
-.fold-toggle[aria-expanded='false'] svg {
+.fold-toggle[aria-expanded="false"] svg {
     transform: rotate(-90deg);
 }
 
 /* Shown on hover like an editor gutter, and always when folded, focused, or on touch screens. */
 .code-viewer:hover .fold-toggle,
 .fold-toggle:focus-visible,
-.fold-toggle[aria-expanded='false'] {
+.fold-toggle[aria-expanded="false"] {
     opacity: 1;
 }
 
@@ -4416,7 +4416,7 @@ button.rail-strip-item {
     border-radius: 8px;
     background: var(--surface);
     color: var(--ink-2);
-    font: 500 12px/1 var(--font-ui);
+    font: 500 12px / 1 var(--font-ui);
     font-variant-numeric: tabular-nums;
 }
 
@@ -4628,7 +4628,7 @@ button.rail-strip-item {
 }
 
 .step:not(:last-child)::before {
-    content: '';
+    content: "";
     position: absolute;
     left: 8.25px;
     top: 20px;
@@ -4679,7 +4679,7 @@ button.rail-strip-item {
 }
 
 .step-mark.is-current::after {
-    content: '';
+    content: "";
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -5050,12 +5050,12 @@ button.rail-strip-item {
 }
 
 .file-link:hover,
-.file-link[aria-current='true'] {
+.file-link[aria-current="true"] {
     background: var(--raised);
     color: var(--ink);
 }
 
-.file-link[aria-current='true'] {
+.file-link[aria-current="true"] {
     font-weight: 500;
 }
 
@@ -5165,7 +5165,7 @@ button.rail-strip-item {
     color: var(--ink-2);
 }
 
-.segmented button[aria-selected='true'] {
+.segmented button[aria-selected="true"] {
     background: var(--surface);
     color: var(--ink);
     font-weight: 600;
@@ -5605,8 +5605,8 @@ button.rail-strip-item {
         padding: 0;
     }
 
-    .app[data-drawer='nav'] .rail-wrap,
-    .app[data-drawer='panel'] .panel {
+    .app[data-drawer="nav"] .rail-wrap,
+    .app[data-drawer="panel"] .panel {
         visibility: visible;
         transform: none;
     }

@@ -5,13 +5,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResultSchema, type Notification } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, vi } from 'vitest';
-import type { AgentEvent } from '../shared/events.js';
-import type { SectionItem, ValidationRecord } from '../shared/records.js';
-import type { PlanFormat } from '../shared/state.js';
 import { RejectedError } from '../server/draft.js';
 import { createPlanroom } from '../server/mcp.js';
 import type { OpenSpecRunner } from '../server/openspec.js';
 import { Session } from '../server/session.js';
+import type { AgentEvent } from '../shared/events.js';
+import type { SectionItem, ValidationRecord } from '../shared/records.js';
+import type { PlanFormat } from '../shared/state.js';
 import { questionContent } from './fixtures.js';
 
 export const CHANGE = 'add-api-rate-limiting';

@@ -25,7 +25,7 @@ export function Modal({
     // The latest onClose, so a parent passing a new function each render does not re-run the focus setup.
     const close = useRef(onClose);
     close.current = onClose;
-    // A layout effect, so a closed dialog leaves the stack in the same commit: React 17 defers passive cleanups.
+    // A layout effect, so a closed dialog leaves the stack in the same commit: React defers passive cleanups.
     useLayoutEffect(() => {
         const token = {};
         openDialogs.push(token);

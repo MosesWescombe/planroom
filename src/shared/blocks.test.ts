@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blockCatalog } from './blockCatalog.js';
-import { block, blockTypes, type BlockType, checkBlockConfig, recordId } from './blocks.js';
+import { type BlockType, block, blockTypes, checkBlockConfig, recordId } from './blocks.js';
 
 /** One broken config per type, and the field path its first error must name. */
 const broken: Record<BlockType, { config: Record<string, unknown>; path: string }> = {

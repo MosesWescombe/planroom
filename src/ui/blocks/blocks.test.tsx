@@ -4,13 +4,13 @@ import dagre from 'dagre';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { blockCatalog } from '../../shared/blockCatalog';
 import { blockTypes, c4Config, codeConfig, ganttConfig, mindmapConfig, sankeyConfig, schemaConfig } from '../../shared/blocks';
-import { CommentLayer } from '../comments/CommentLayer';
-import { parsePatch } from '../code/CodeViewer';
 import { blockRecord, sectionRecord } from '../../test/fixtures';
 import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
+import { parsePatch } from '../code/CodeViewer';
+import { CommentLayer } from '../comments/CommentLayer';
 import { formatValue } from '../format';
-import { ImageBlock } from './basic';
 import { type BlockInput, BlockView } from './Block';
+import { ImageBlock } from './basic';
 import { niceTicks } from './charts';
 import {
     c4Graph,

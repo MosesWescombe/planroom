@@ -1,4 +1,4 @@
-import { cleanup, render, type RenderResult } from '@testing-library/react';
+import { cleanup, type RenderResult, render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { SessionState } from '../shared/state';

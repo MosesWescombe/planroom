@@ -1,13 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { writeSetting } from '../local';
-import { setSendKey } from '../sendKey';
 import { AGREED, NOW, phasesWith, questionRecord } from '../../test/fixtures';
 import { instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
 import { App } from '../App';
-import { QuestionCard } from './QuestionCard';
+import { writeSetting } from '../local';
+import { setSendKey } from '../sendKey';
 import { DirectionSwitcher, DirectionsPhase, Interrogate } from './Interrogate';
+import { QuestionCard } from './QuestionCard';
 
 /** The card of question `id`, failing the test when it is not on the page. */
 const card = (id: string) => instance(document.getElementById(`q-${id}`), HTMLElement);

@@ -1,7 +1,7 @@
 import type { PagePhase } from './derive.js';
 import type { RevisionMeta } from './revisions.js';
-import type { PlanFormat, SessionState } from './state.js';
 import type { SpecDelta } from './specDelta.js';
+import type { PlanFormat, SessionState } from './state.js';
 
 /**
  * What the page receives: a snapshot on connect, then patches. The view mirrors the
@@ -61,25 +61,26 @@ export interface ProposalView {
     scannedAt: string;
 }
 
-export interface View extends Pick<
-    SessionState,
-    | 'changeId'
-    | 'title'
-    | 'format'
-    | 'createdAt'
-    | 'questions'
-    | 'suggestions'
-    | 'understanding'
-    | 'sections'
-    | 'blocks'
-    | 'threads'
-    | 'checklistTicks'
-    | 'confirmedAssumptions'
-    | 'traces'
-    | 'validation'
-    | 'phases'
-    | 'revision'
-> {
+export interface View
+    extends Pick<
+        SessionState,
+        | 'changeId'
+        | 'title'
+        | 'format'
+        | 'createdAt'
+        | 'questions'
+        | 'suggestions'
+        | 'understanding'
+        | 'sections'
+        | 'blocks'
+        | 'threads'
+        | 'checklistTicks'
+        | 'confirmedAssumptions'
+        | 'traces'
+        | 'validation'
+        | 'phases'
+        | 'revision'
+    > {
     agent: AgentStatus;
     activity: ActivityEntry[];
     revisions: RevisionMeta[];

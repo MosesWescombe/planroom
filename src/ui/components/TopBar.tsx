@@ -1,7 +1,7 @@
 import upperFirst from 'lodash/upperFirst';
+import type { AgentStatus } from '../../shared/view';
 import { type Connection, deepEqual, useConnection, useSelector } from '../store';
 import { useActions, useUiState } from '../ui';
-import type { AgentStatus } from '../../shared/view';
 import { EndSessionButton } from './EndSession';
 import { DownloadIcon, MenuIcon, PanelIcon } from './icons';
 import { PhaseTabs } from './PhaseTabs';

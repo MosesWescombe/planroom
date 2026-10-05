@@ -416,6 +416,7 @@ const PhaseGate = memo(function PhaseGate({ scope }: { scope: string | null }) {
                         <span className="truncate">{gate.activity}</span>
                     </span>
                 )}
+                {/* The flex button never renders this space; it keeps the activity and the label apart in the accessible name. */}{' '}
                 {/* A direction's label can be long, so it is cut short and shown whole on hover. */}
                 <span className="truncate">{label}</span>
             </button>
