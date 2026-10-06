@@ -77,10 +77,13 @@ describe('phase tabs', () => {
         expect(within(rail).getByText('add-x')).toHaveAttribute('title', 'openspec/changes/add-x');
     });
 
-    it('Export PDF opens the print dialog', () => {
-        const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+    it('Export PDF closes the export dialog, then opens the print dialog', () => {
+        const print = vi.spyOn(window, 'print').mockImplementation(() => {
+            expect(screen.queryByRole('dialog', { name: 'Export' })).toBeNull();
+        });
         renderApp(storeWith(makeView({ questions: [questionRecord('Q-1')] })));
-        fireEvent.click(screen.getByRole('button', { name: 'Export PDF' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Export' })).getByRole('button', { name: 'PDF' }));
         expect(print).toHaveBeenCalledOnce();
         print.mockRestore();
     });

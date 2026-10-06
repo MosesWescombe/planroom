@@ -5663,8 +5663,32 @@ button.rail-strip-item {
 
 /* ------------------------------------------------------------ print */
 
-/* Export PDF prints the open tab's column alone: the chrome, the review controls and the overlays go, the scrolling
-   column unrolls onto as many pages as it needs, and block colours print as shown. main.tsx swaps in the light theme. */
+/* Export PDF prints the open tab's column alone as a document: the chrome, the review controls and the overlays go,
+   the scrolling column unrolls onto as many pages as it needs, and block colours print as shown. main.tsx swaps in the
+   light theme and sets --print-title, which heads every page after the first; every page is numbered at its foot.
+   Browsers without page margin boxes (Firefox) print without the running head and numbers. */
+@page {
+    margin: 16mm 16mm 18mm;
+
+    @top-left {
+        content: var(--print-title, "");
+        font: 8pt var(--font-ui);
+        color: var(--muted);
+    }
+
+    @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font: 8pt var(--font-mono);
+        color: var(--muted);
+    }
+}
+
+@page :first {
+    @top-left {
+        content: none;
+    }
+}
+
 @media print {
     html,
     body,
@@ -5690,7 +5714,12 @@ button.rail-strip-item {
     .selection-toolbar,
     .composer,
     .section-tools,
-    .submit-bar {
+    .submit-bar,
+    .phase-gate,
+    .block-tools,
+    .segmented,
+    .chart-head > button,
+    .q-card > .button-link {
         display: none !important;
     }
 
@@ -5704,18 +5733,88 @@ button.rail-strip-item {
         padding: 0;
     }
 
-    .doc {
+    .doc,
+    .file-view {
         padding: 0;
         border: none;
+        border-radius: 0;
         background: none;
     }
 
-    /* A block stays on one page where it fits, and a section's title stays with its first block. */
-    .section-block {
+    .doc {
+        gap: 36px;
+    }
+
+    .doc-head h1 {
+        font-size: 36px;
+    }
+
+    .page-head h1 {
+        font-size: 32px;
+    }
+
+    .doc-lede {
+        font-size: 17px;
+    }
+
+    .doc-section h2 {
+        font-size: 24px;
+    }
+
+    /* Question refs read as quiet citations: there is nothing to click on paper. */
+    .q-link {
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--muted);
+    }
+
+    /* Nothing scrolls on paper: wide tables and long lines wrap onto the page instead of being cut off. */
+    .table-wrap {
+        overflow: visible;
+    }
+
+    /* Chrome repeats a table's header on each page it spans only when the header holds no button. */
+    .sort-button {
+        display: contents;
+    }
+
+    pre,
+    .raw-config {
+        max-height: none;
+        overflow: visible;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    /* Text, tables and lists flow across pages, breaking between rows and items; a figure, a chart, a card or a row of
+       blocks side by side stays on one page where it fits. A title stays with what follows it, a caption with its block. */
+    .block:not(.block-text, .block-table, .block-checklist, .block-code, .block-fileTree, .block-timeline),
+    .section-row,
+    tr,
+    li,
+    .q-card,
+    .option-card,
+    .direction-card,
+    .scenario {
         break-inside: avoid;
     }
 
-    .section-head {
+    h1,
+    h2,
+    h3,
+    .section-head,
+    .requirement-head {
         break-after: avoid;
+    }
+
+    .block-caption {
+        break-before: avoid;
+    }
+
+    p,
+    li {
+        orphans: 3;
+        widows: 3;
     }
 }

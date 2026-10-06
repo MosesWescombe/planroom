@@ -9,8 +9,12 @@ import './app.css';
 // Apply the theme and width before the first paint, so a dark-mode page never flashes light and nothing reflows.
 applyTheme(resolveTheme(readPreference()));
 applyPageWidth(readPageWidth());
-// Printing, and so Export PDF, always uses the light theme; the chosen one comes back after.
-window.addEventListener('beforeprint', () => applyTheme('light'));
+// Printing, and so Export PDF, always uses the light theme; the chosen one comes back after. The page title heads each
+// printed page through app.css; JSON quoting makes it a valid CSS string.
+window.addEventListener('beforeprint', () => {
+    applyTheme('light');
+    document.documentElement.style.setProperty('--print-title', JSON.stringify(document.title));
+});
 window.addEventListener('afterprint', () => applyTheme(resolveTheme(readPreference())));
 
 const store = new ViewStore();

@@ -1,9 +1,13 @@
 import upperFirst from 'lodash/upperFirst';
+import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { AgentStatus } from '../../shared/view';
+import { exportHtml } from '../exportHtml';
 import { type Connection, deepEqual, useConnection, useSelector } from '../store';
 import { useActions, useUiState } from '../ui';
 import { EndSessionButton } from './EndSession';
 import { DownloadIcon, MenuIcon, PanelIcon } from './icons';
+import { Modal } from './Modal';
 import { PhaseTabs } from './PhaseTabs';
 import { SettingsButton } from './Settings';
 
@@ -41,14 +45,46 @@ export function ConnectionPill() {
 }
 
 /**
- * Exports the open tab as a PDF through the browser's print dialog ("Save as PDF"), which keeps text selectable and
- * diagrams as vectors. The print styles in app.css drop the page chrome and unroll the scrolling column.
+ * Exports the open tab without the page's controls, as a PDF through the browser's print dialog ("Save as PDF"), which
+ * keeps text selectable and diagrams as vectors, or as one standalone HTML file. The print styles in app.css drop the
+ * page chrome and unroll the scrolling column; exportHtml.ts applies the same styles to its file.
  */
 function ExportButton() {
+    const [open, setOpen] = useState(false);
+    const { tab } = useUiState();
+    const name = useSelector((view) => (view.kind === 'ask' ? view.changeId : `${view.changeId}-${tab}`));
+    // The dialog closes first, so neither the print nor the file shows it.
+    const pdf = () => {
+        flushSync(() => setOpen(false));
+        window.print();
+    };
+    const html = () => {
+        setOpen(false);
+        void exportHtml(`${name}.html`);
+    };
     return (
-        <button type="button" className="icon-button" aria-label="Export PDF" title="Export PDF" onClick={() => window.print()}>
-            <DownloadIcon />
-        </button>
+        <>
+            <button type="button" className="icon-button" aria-label="Export" title="Export" onClick={() => setOpen(true)}>
+                <DownloadIcon />
+            </button>
+            {open && (
+                <Modal label="Export" onClose={() => setOpen(false)} className="dialog dialog-narrow">
+                    <h2 className="dialog-title">Export</h2>
+                    <p>
+                        This tab as a document, without the page's controls. PDF opens the print dialog: choose Save as PDF. HTML
+                        saves one file that opens in any browser.
+                    </p>
+                    <div className="dialog-actions">
+                        <button type="button" className="button-secondary" onClick={html}>
+                            HTML
+                        </button>
+                        <button type="button" className="button-primary" onClick={pdf}>
+                            PDF
+                        </button>
+                    </div>
+                </Modal>
+            )}
+        </>
     );
 }
 
