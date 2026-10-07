@@ -3,12 +3,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BLOCKS_DOC_PATHS, renderBlocksDoc } from '../dist/shared/blocksDoc.js';
+import { BLOCKS_DOCS, renderBlocksDoc } from '../dist/shared/blocksDoc.js';
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
-const doc = renderBlocksDoc();
-for (const path of BLOCKS_DOC_PATHS) {
+for (const { path, kind } of BLOCKS_DOCS) {
     mkdirSync(dirname(`${repoRoot}${path}`), { recursive: true });
-    writeFileSync(`${repoRoot}${path}`, doc);
+    writeFileSync(`${repoRoot}${path}`, renderBlocksDoc(kind));
     console.log(`Wrote ${path}`);
 }

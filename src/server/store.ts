@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import isEqual from 'lodash/isEqual.js';
 import { type LoggedEvent, loggedEvent } from '../shared/events.js';
 import { type Revision, revision as revisionSchema } from '../shared/revisions.js';
-import { ASK_ROOT, type PlanFormat, parseStateFile, planDir, type SessionState } from '../shared/state.js';
+import { ASK_ROOT, type PlanFormat, parseStateFile, planDir, REVIEW_ROOT, type SessionState } from '../shared/state.js';
 import { type ActivityEntry, activityEntry } from '../shared/view.js';
 import { appendLineSynced, isErrno, readIfExists, writeAtomic } from './fsutil.js';
 
@@ -15,6 +15,11 @@ export function planroomDir(repoRoot: string, format: PlanFormat, changeId: stri
 /** An ask's records folder, under `.planroom/asks/`. */
 export function askDir(repoRoot: string, askId: string): string {
     return join(repoRoot, ASK_ROOT, askId);
+}
+
+/** A review's folder, under `.planroom/reviews/`: its records, its assets and its worktree. */
+export function reviewDir(repoRoot: string, reviewId: string): string {
+    return join(repoRoot, REVIEW_ROOT, reviewId);
 }
 
 /** The files in a plan's `.planroom/` that are local mechanics rather than the planning record, which git leaves out. */

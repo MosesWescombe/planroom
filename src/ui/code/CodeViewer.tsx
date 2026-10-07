@@ -152,7 +152,8 @@ export function CodeViewer({
     start,
     language,
     title,
-    label
+    label,
+    notes
 }: {
     source: string;
     format?: 'code' | 'diff';
@@ -162,6 +163,8 @@ export function CodeViewer({
     title?: string;
     /** Names the lines for assistive technology. */
     label: string;
+    /** What to show under a line, such as the review findings on it; nothing when it returns nothing. */
+    notes?: (row: CodeRow) => ReactNode;
 }) {
     const rows = useMemo(() => (format === 'diff' ? parsePatch(source) : plainRows(source, start)), [source, format, start]);
     const tokens = useMemo(() => highlightRows(rows, language), [rows, language]);
@@ -244,6 +247,14 @@ export function CodeViewer({
                 </span>
             </span>
         );
+        const note = notes?.(row);
+        if (note) {
+            lines.push(
+                <div key={`note-${index}`} className="code-note">
+                    {note}
+                </div>
+            );
+        }
         next = closed ? end + 1 : index + 1;
     }
 

@@ -451,15 +451,6 @@ const inlineDiagram = z.discriminatedUnion('type', [
     z.object({ type: z.literal('state'), config: stateConfig })
 ]);
 
-const compareSide = z.object({ label: label.optional(), block: z.union([recordId, inlineDiagram]) });
-
-/** `compare`: two sides, each a block id or an inline diagram under an optional label, with which differences to highlight. */
-export const compareConfig = z.object({
-    left: compareSide,
-    right: compareSide,
-    highlight: z.enum(['added', 'removed', 'both', 'none']).default('added')
-});
-
 /** `timeline`: ordered steps, with `current` marking the step in progress. */
 export const timelineConfig = z
     .object({
@@ -775,11 +766,214 @@ export const imageConfig = z.object({
         .default([])
 });
 
+/** Block types a `compare` side can hold besides diagrams: code or an image, inline or by id. */
+export const compareTypes = [...diagramTypes, 'code', 'image'] as const;
+export type CompareType = (typeof compareTypes)[number];
+
+/** A `compare` side: the id of a diagram, `code` or `image` block, or one of those inline as `{ type, config }`. */
+const compareSide = z.object({
+    label: label.optional(),
+    block: z.union([
+        recordId,
+        z.discriminatedUnion('type', [
+            ...inlineDiagram.options,
+            z.object({ type: z.literal('code'), config: codeConfig }),
+            z.object({ type: z.literal('image'), config: imageConfig })
+        ])
+    ])
+});
+
+/**
+ * `compare`: two sides, each a block id or an inline diagram, code or image under an optional label, with which
+ * differences to highlight. Highlighting matches diagram nodes by id, so it only applies when both sides are diagrams.
+ */
+export const compareConfig = z.object({
+    left: compareSide,
+    right: compareSide,
+    highlight: z.enum(['added', 'removed', 'both', 'none']).default('added')
+});
+
 /** `mermaid`: Mermaid source, rendered as the agent wrote it. */
 export const mermaidConfig = z.object({ source: z.string().min(1).max(20000) });
 
 /** `text`: prose in the markdown subset the page renders. */
 export const textConfig = z.object({ body: z.string().min(1).max(40000) });
+
+/**
+ * `analogy`: "this change is like X", each real part of the change mapped to its counterpart in the analogy, with an
+ * optional illustration and where the analogy breaks down.
+ */
+export const analogyConfig = z.object({
+    /** The analogy itself, e.g. "A ticket counter". */
+    title: label,
+    pairs: z
+        .array(z.object({ real: label, like: label, note: label.optional() }))
+        .min(1)
+        .max(12),
+    illustration: imageConfig.optional(),
+    /** Where the analogy stops holding. */
+    breaks: text.optional()
+});
+
+/** The diagram a step-through walks: a flow, whose steps light nodes, or a sequence, whose steps light messages. */
+const stepDiagram = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('flow'), config: flowConfig }),
+    z.object({ type: z.literal('sequence'), config: sequenceConfig })
+]);
+
+/**
+ * `stepThrough`: a flow or sequence diagram and ordered steps, each lighting flow nodes by id or sequence messages by
+ * index under a caption.
+ */
+export const stepThroughConfig = z
+    .object({
+        diagram: stepDiagram,
+        steps: z
+            .array(
+                z.object({
+                    caption: label,
+                    nodes: z.array(recordId).max(60).default([]),
+                    messages: z.array(z.number().int().min(0)).max(60).default([])
+                })
+            )
+            .min(1)
+            .max(20)
+    })
+    .superRefine((config, ctx) => {
+        const { diagram } = config;
+        config.steps.forEach((step, index) => {
+            if (diagram.type === 'flow') {
+                const known = new Set(diagram.config.nodes.map((node) => node.id));
+                step.nodes.forEach((id, position) => {
+                    if (!known.has(id))
+                        ctx.addIssue({
+                            code: 'custom',
+                            path: ['steps', index, 'nodes', position],
+                            message: `node "${id}" is not in the flow`
+                        });
+                });
+                if (step.messages.length)
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: ['steps', index, 'messages'],
+                        message: 'a flow lights nodes; use `nodes`'
+                    });
+            } else {
+                const count = diagram.config.messages.length;
+                step.messages.forEach((message, position) => {
+                    if (message >= count)
+                        ctx.addIssue({
+                            code: 'custom',
+                            path: ['steps', index, 'messages', position],
+                            message: `message ${message} does not exist (${count} messages)`
+                        });
+                });
+                if (step.nodes.length)
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: ['steps', index, 'nodes'],
+                        message: 'a sequence lights messages by index; use `messages`'
+                    });
+            }
+        });
+    });
+
+/** The four areas a risk-rating take rates, 1 (low risk) to 5 (high). */
+export const RISK_AREAS = ['correctness', 'performance', 'security', 'maintainability'] as const;
+export type RiskArea = (typeof RISK_AREAS)[number];
+const rating = z.number().int().min(1).max(5);
+
+/**
+ * `yourTake`: a card that asks the reviewer for their own view before showing the agent's. The agent's view (`answer`,
+ * `pros` and `cons`, `ratings`, `correct`) is written with the card and shown only once the reviewer has answered.
+ */
+export const yourTakeConfig = z
+    .discriminatedUnion('kind', [
+        z.object({
+            kind: z.literal('predict'),
+            prompt: label,
+            /** Guesses to pick from; without them the reviewer writes one. */
+            options: z.array(label).min(2).max(6).optional(),
+            answer: label,
+            explanation: text
+        }),
+        z.object({
+            kind: z.literal('prosCons'),
+            prompt: label.optional(),
+            pros: z.array(label).max(12),
+            cons: z.array(label).max(12)
+        }),
+        z.object({
+            kind: z.literal('risk'),
+            prompt: label.optional(),
+            ratings: z.object({ correctness: rating, performance: rating, security: rating, maintainability: rating }),
+            why: text.optional()
+        }),
+        z.object({
+            kind: z.literal('check'),
+            question: label,
+            options: z.array(label).min(2).max(6),
+            /** The index of the right option. */
+            correct: z.number().int().min(0),
+            explanation: text.optional(),
+            /** The slide that explains the answer, linked when the reviewer answers wrongly. */
+            slide: recordId.optional()
+        })
+    ])
+    .superRefine((config, ctx) => {
+        if (config.kind === 'predict' && config.options && !config.options.includes(config.answer))
+            ctx.addIssue({ code: 'custom', path: ['answer'], message: 'must be one of the options' });
+        if (config.kind === 'check' && config.correct >= config.options.length)
+            ctx.addIssue({ code: 'custom', path: ['correct'], message: `must be below ${config.options.length}` });
+    });
+export type YourTakeConfig = z.output<typeof yourTakeConfig>;
+export type TakeKind = YourTakeConfig['kind'];
+export const TAKE_KINDS: readonly TakeKind[] = ['predict', 'prosCons', 'risk', 'check'];
+
+/**
+ * `html`: an interactive visual no other block can show, run in a sandboxed frame with no network. `html` is the body
+ * of a document the page builds, with its CSS and script inline.
+ */
+export const htmlConfig = z.object({
+    title: label,
+    alt: label,
+    /** The frame's height in pixels. */
+    height: z.number().int().min(80).max(1200).default(360),
+    html: z.string().min(1).max(100_000)
+});
+
+/**
+ * `impactMap`: the areas a change might reach beyond its diff, drawn around it. Each area names the blocks that explain
+ * it, sent with `doc.block.upsert`; the reviewer opens one to read them and add their questions and concerns under it.
+ */
+export const impactMapConfig = z
+    .object({
+        areas: z
+            .array(
+                z.object({
+                    id: z
+                        .string()
+                        .min(1)
+                        .max(40)
+                        .regex(/^[a-z0-9][a-z0-9-]*$/, 'must be lowercase letters, digits and hyphens'),
+                    title: z.string().min(1).max(80),
+                    /** One line on how the change reaches it. */
+                    summary: z.string().min(1).max(400),
+                    /** The blocks that explain it, by id: a diagram, a step-through, code, an interactive visual. */
+                    blocks: z.array(recordId).max(4).default([])
+                })
+            )
+            .min(2)
+            .max(8)
+    })
+    .superRefine((config, ctx) =>
+        checkUnique(
+            config.areas.map((area) => area.id),
+            'areas',
+            ctx
+        )
+    );
+export type ImpactMapConfig = z.output<typeof impactMapConfig>;
 
 /** Every config schema, keyed by block type. The order is the catalog order. */
 export const blockConfigSchemas = {
@@ -806,12 +1000,20 @@ export const blockConfigSchemas = {
     fileTree: fileTreeConfig,
     code: codeConfig,
     image: imageConfig,
-    mermaid: mermaidConfig
+    mermaid: mermaidConfig,
+    analogy: analogyConfig,
+    stepThrough: stepThroughConfig,
+    yourTake: yourTakeConfig,
+    impactMap: impactMapConfig,
+    html: htmlConfig
 } as const;
 
 export type BlockType = keyof typeof blockConfigSchemas;
 /** Every block type, in catalog order. */
 export const blockTypes = Object.keys(blockConfigSchemas) as BlockType[];
+
+/** Block types only a review takes: a plan or an ask refuses a batch that sends one. */
+export const REVIEW_BLOCK_TYPES: ReadonlySet<string> = new Set<BlockType>(['yourTake', 'impactMap', 'html']);
 
 /** Parsed config for each block type. */
 export type BlockConfigs = { [K in BlockType]: z.output<(typeof blockConfigSchemas)[K]> };
@@ -860,7 +1062,12 @@ export const block = z.discriminatedUnion('type', [
     blockEnvelope.extend({ type: z.literal('fileTree'), config: fileTreeConfig }),
     blockEnvelope.extend({ type: z.literal('code'), config: codeConfig }),
     blockEnvelope.extend({ type: z.literal('image'), config: imageConfig }),
-    blockEnvelope.extend({ type: z.literal('mermaid'), config: mermaidConfig })
+    blockEnvelope.extend({ type: z.literal('mermaid'), config: mermaidConfig }),
+    blockEnvelope.extend({ type: z.literal('analogy'), config: analogyConfig }),
+    blockEnvelope.extend({ type: z.literal('stepThrough'), config: stepThroughConfig }),
+    blockEnvelope.extend({ type: z.literal('yourTake'), config: yourTakeConfig }),
+    blockEnvelope.extend({ type: z.literal('impactMap'), config: impactMapConfig }),
+    blockEnvelope.extend({ type: z.literal('html'), config: htmlConfig })
 ]);
 export type Block = z.output<typeof block>;
 

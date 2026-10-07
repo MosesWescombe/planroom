@@ -82,12 +82,31 @@ const broken: Record<BlockType, { config: Record<string, unknown>; path: string 
     fileTree: { config: { files: [] }, path: 'files' },
     code: { config: { mode: 'excerpt', file: 'src/a.ts' }, path: 'lines' },
     image: { config: { src: 'https://example.com/a.png', alt: 'A' }, path: 'src' },
-    mermaid: { config: { source: '' }, path: 'source' }
+    mermaid: { config: { source: '' }, path: 'source' },
+    analogy: { config: { title: 'A queue', pairs: [] }, path: 'pairs' },
+    stepThrough: {
+        config: {
+            diagram: { type: 'flow', config: { nodes: [{ id: 'a', label: 'A' }], edges: [] } },
+            steps: [{ caption: 'Start', nodes: ['ghost'] }]
+        },
+        path: 'steps[0].nodes[0]'
+    },
+    yourTake: { config: { kind: 'check', question: 'Q?', options: ['a', 'b'], correct: 2 }, path: 'correct' },
+    impactMap: {
+        config: {
+            areas: [
+                { id: 'billing', title: 'Billing', summary: 'Reads the count.' },
+                { id: 'billing', title: 'Alerts', summary: 'Fire sooner.' }
+            ]
+        },
+        path: 'areas[1].id'
+    },
+    html: { config: { title: 'Slider', alt: 'A slider', html: '' }, path: 'html' }
 };
 
 describe('block catalog', () => {
-    it('has the handoff catalog of 18 types, text, and the schema, c4, mindmap, gantt and sankey diagrams', () => {
-        expect(blockTypes).toHaveLength(24);
+    it('has the handoff catalog of 18 types, text, the schema, c4, mindmap, gantt and sankey diagrams, and the review blocks', () => {
+        expect(blockTypes).toHaveLength(29);
         expect(Object.keys(blockCatalog).sort()).toEqual([...blockTypes].sort());
     });
 
@@ -217,6 +236,52 @@ describe('the diagram and chart schemas', () => {
     it('a compare side needs no label', () => {
         const side = { block: { type: 'flow', config: blockCatalog.flow.example } };
         expect(checkBlockConfig('compare', { left: side, right: side }).ok).toBe(true);
+    });
+
+    it('a compare side can be code or an image, inline or by id, but not a chart', () => {
+        const code = { label: 'Before', block: { type: 'code', config: { mode: 'snippet', source: 'retry(3)' } } };
+        const image = { label: 'After', block: { type: 'image', config: { src: 'asset:after.svg', alt: 'After' } } };
+        expect(checkBlockConfig('compare', { left: code, right: image }).ok).toBe(true);
+        expect(checkBlockConfig('compare', { left: code, right: { block: 'after-image' } }).ok).toBe(true);
+        const chart = { block: { type: 'bar', config: blockCatalog.bar.example } };
+        expect(checkBlockConfig('compare', { left: code, right: chart }).ok).toBe(false);
+    });
+
+    it('a step-through lights flow nodes by id and sequence messages by index, never the other', () => {
+        const sequence = { type: 'sequence', config: blockCatalog.sequence.example };
+        const check = checkBlockConfig('stepThrough', {
+            diagram: sequence,
+            steps: [
+                { caption: 'One', messages: [0, 9] },
+                { caption: 'Two', nodes: ['c'] }
+            ]
+        });
+        expect(check.ok ? [] : check.issues.map((issue) => issue.path)).toEqual(['steps[0].messages[1]', 'steps[1].nodes']);
+    });
+
+    it('a predict take with options gives one of them as its answer', () => {
+        const check = checkBlockConfig('yourTake', {
+            kind: 'predict',
+            prompt: 'What happens?',
+            options: ['A', 'B'],
+            answer: 'C',
+            explanation: 'Because.'
+        });
+        expect(check.ok ? [] : check.issues.map((issue) => issue.path)).toEqual(['answer']);
+    });
+
+    it('a risk take rates all four areas from 1 to 5', () => {
+        const ratings = { correctness: 2, performance: 1, security: 6 };
+        const check = checkBlockConfig('yourTake', { kind: 'risk', ratings });
+        expect(check.ok ? [] : check.issues.map((issue) => issue.path).sort()).toEqual([
+            'ratings.maintainability',
+            'ratings.security'
+        ]);
+    });
+
+    it('an image without alt text is refused naming it', () => {
+        const check = checkBlockConfig('image', { src: 'asset:retry.svg' });
+        expect(check.ok ? [] : check.issues.map((issue) => issue.path)).toEqual(['alt']);
     });
 });
 

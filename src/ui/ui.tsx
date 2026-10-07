@@ -3,11 +3,15 @@ import { type PageInput, postEvent, RequestError } from './api';
 import { readSetting, writeSetting } from './local';
 import { useStore } from './store';
 
-export type Tab = 'interrogate' | 'directions' | 'writeup' | 'proposal';
+/** A plan's four phase tabs, or a review's three: the walkthrough deck, its findings and the comments to post. */
+export type Tab = 'interrogate' | 'directions' | 'writeup' | 'proposal' | 'walkthrough' | 'findings' | 'comments';
 export type PanelTab = 'review' | 'activity' | 'comments';
 export type Drawer = 'nav' | 'panel' | undefined;
 
-/** A record the page can navigate to: `Q-12`, `section:s4`, `block:b1`, `thread:C-1`, `file:specs/x/spec.md`. */
+/**
+ * A record the page can navigate to: `Q-12`, `section:s4`, `block:b1`, `thread:C-1`, `file:specs/x/spec.md`, and in a
+ * review `slide:why-1` and `item:I-3`.
+ */
 export type Target = string;
 
 export interface Notice {
@@ -25,6 +29,10 @@ export interface UiState {
     drawer: Drawer;
     file: string | undefined;
     notices: Notice[];
+    /** A review's slide on show, by id; undefined for the first. */
+    slide: string | undefined;
+    /** A review's round on show; undefined for the current one. */
+    round: number | undefined;
 }
 
 /** Stable actions. Components that only act (cards, blocks) use these and never re-render for UI state. */
@@ -37,6 +45,8 @@ export interface UiActions {
     setPanelTab: (tab: PanelTab) => void;
     setDrawer: (drawer: Drawer) => void;
     setFile: (file: string | undefined) => void;
+    setSlide: (slide: string | undefined) => void;
+    setRound: (round: number | undefined) => void;
     /** Send a page event; a refusal is shown as a notice and rethrown for the caller. */
     send: (request: PageInput) => Promise<{ seq?: number }>;
     notify: (text: string) => void;
@@ -75,6 +85,8 @@ function tabFor(target: Target): Tab | undefined {
     if (/^Q-\d+$/.test(target) || target === 'understanding' || target.startsWith('suggestion:')) return 'interrogate';
     if (target.startsWith('section:') || target.startsWith('block:')) return 'writeup';
     if (target.startsWith('file:')) return 'proposal';
+    if (target.startsWith('slide:')) return 'walkthrough';
+    if (target.startsWith('item:')) return 'findings';
     return undefined;
 }
 
@@ -108,6 +120,8 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
     const [panelTab, setPanelTab] = useState<PanelTab>(initialTab === 'proposal' ? 'review' : 'activity');
     const [drawer, setDrawer] = useState<Drawer>();
     const [file, setFile] = useState<string | undefined>();
+    const [slide, setSlide] = useState<string | undefined>();
+    const [round, setRound] = useState<number | undefined>();
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
 
@@ -129,6 +143,8 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
             setPanelTab,
             setDrawer,
             setFile,
+            setSlide,
+            setRound,
             notify,
             dismiss: (id) => setNotices((current) => current.filter((notice) => notice.id !== id)),
             goTo: (target) => {
@@ -143,6 +159,15 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
                     if (next) setTab(direction ? 'directions' : next);
                     if (next === 'interrogate') setDirection(direction);
                     if (target.startsWith('file:')) setFile(target.slice(5));
+                    // A slide shows on its own; one of an earlier round shows that round.
+                    if (target.startsWith('slide:')) {
+                        const id = target.slice(6);
+                        const view = store.getView();
+                        const of = view?.slides[id]?.round;
+                        const last = view?.review?.rounds.at(-1)?.n;
+                        setRound(of === last ? undefined : of);
+                        setSlide(id);
+                    }
                     setDrawer(undefined);
                 }
                 reveal(elementIdFor(target));
@@ -159,8 +184,8 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
     }, [store]);
 
     const state = useMemo<UiState>(
-        () => ({ tab, direction, panelCollapsed, panelTab, drawer, file, notices }),
-        [tab, direction, panelCollapsed, panelTab, drawer, file, notices]
+        () => ({ tab, direction, panelCollapsed, panelTab, drawer, file, notices, slide, round }),
+        [tab, direction, panelCollapsed, panelTab, drawer, file, notices, slide, round]
     );
     return (
         <ActionsContext.Provider value={actions}>

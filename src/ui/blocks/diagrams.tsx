@@ -2,6 +2,7 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { type BlockConfigs, checkBlockConfig, type DiagramType, diagramTypes } from '../../shared/blocks';
 import { useRecord } from '../store';
 import type { BlockProps } from './Block';
+import { CodeBlock, ImageBlock } from './basic';
 import {
     architectureGraph,
     C4_SHAPE,
@@ -24,6 +25,7 @@ import {
     stateGraph,
     TABLE
 } from './layout';
+import { type Pins, usePins } from './pins';
 
 let diagramCount = 0;
 
@@ -273,14 +275,46 @@ function describeGraph(layout: Layout): string {
     return `Diagram of ${layout.nodes.map((node) => node.lines.join(' ')).join(', ')}${parts.length ? `; ${parts.join('; ')}` : ''}`;
 }
 
+/** A finding's badge at the top right of a node or actor: the count, its titles on hover, and a click to the findings. */
+function PinBadge({ x, y, pin }: { x: number; y: number; pin: { count: number; label: string; open: () => void } }) {
+    return (
+        <g
+            className="dg-pin"
+            role="button"
+            tabIndex={0}
+            aria-label={`${pin.count} finding${pin.count === 1 ? '' : 's'}: ${pin.label}`}
+            onClick={pin.open}
+            onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && pin.open()}
+        >
+            <title>{pin.label}</title>
+            <circle cx={x} cy={y} r={10} />
+            <text x={x} y={y + 4} textAnchor="middle">
+                {pin.count}
+            </text>
+        </g>
+    );
+}
+
 /**
  * Draw a laid-out graph in the handoff's diagram vocabulary, edges curved through dagre's points. Hovering a node
- * fades everything but it, its neighbours and the edges between them.
+ * fades everything but it, its neighbours and the edges between them; a step-through's `highlight` does the same for
+ * its step's nodes. `pins` badge the nodes findings sit on.
  */
-export function GraphDiagram({ layout, label }: { layout: Layout; label?: string }) {
+export function GraphDiagram({
+    layout,
+    label,
+    highlight,
+    pins
+}: {
+    layout: Layout;
+    label?: string;
+    highlight?: ReadonlySet<string>;
+    pins?: Pins;
+}) {
     const ids = useMarkerIds();
     const [focus, setFocus] = useState<string>();
-    const lit = useMemo(() => (focus === undefined ? undefined : neighbours(layout, focus)), [layout, focus]);
+    const hovered = useMemo(() => (focus === undefined ? undefined : neighbours(layout, focus)), [layout, focus]);
+    const lit = hovered ?? highlight;
     return (
         <svg
             className={`diagram${lit ? ' has-focus' : ''}`}
@@ -299,7 +333,18 @@ export function GraphDiagram({ layout, label }: { layout: Layout; label?: string
                 </g>
             ))}
             {layout.edges.map((edge) => (
-                <g key={edge.id} className={`dg-link${lit && (edge.from === focus || edge.to === focus) ? ' is-lit' : ''}`}>
+                <g
+                    key={edge.id}
+                    className={`dg-link${
+                        hovered
+                            ? edge.from === focus || edge.to === focus
+                                ? ' is-lit'
+                                : ''
+                            : lit?.has(edge.from) && lit.has(edge.to)
+                              ? ' is-lit'
+                              : ''
+                    }`}
+                >
                     <path
                         className={`dg-edge${edge.dashed ? ' is-dashed' : ''}${edge.tone === 'plain' ? '' : ` is-${edge.tone}`}`}
                         d={curvePath(edge.points)}
@@ -334,19 +379,42 @@ export function GraphDiagram({ layout, label }: { layout: Layout; label?: string
                     )}
                 </g>
             ))}
+            {pins &&
+                layout.nodes.map((node) => {
+                    const pin = pins.get(node.id);
+                    return pin ? (
+                        <PinBadge
+                            key={`pin-${node.id}`}
+                            x={node.x + node.width / 2 - 2}
+                            y={node.y - node.height / 2 + 2}
+                            pin={pin}
+                        />
+                    ) : null;
+                })}
         </svg>
     );
 }
 
-/** Draw a laid-out sequence: actors with lifelines, and messages between them, dashed for replies, looped for self-calls. */
-export function SequenceDiagram({ layout }: { layout: SequenceLayout }) {
+/**
+ * Draw a laid-out sequence: actors with lifelines, and messages between them, dashed for replies, looped for
+ * self-calls. A step-through's `highlight` lights its step's messages, by index; `pins` badge actors by label.
+ */
+export function SequenceDiagram({
+    layout,
+    highlight,
+    pins
+}: {
+    layout: SequenceLayout;
+    highlight?: ReadonlySet<number>;
+    pins?: Pins;
+}) {
     const ids = useMarkerIds();
     const label = `Sequence between ${layout.actors.map((actor) => actor.label).join(', ')}: ${layout.messages
         .map((message) => `${layout.actors[message.from]?.label} to ${layout.actors[message.to]?.label}, ${message.text}`)
         .join('; ')}`;
     return (
         <svg
-            className="diagram"
+            className={`diagram${highlight ? ' has-focus' : ''}`}
             viewBox={`0 0 ${layout.width} ${layout.height}`}
             style={{ maxWidth: layout.width }}
             role="img"
@@ -366,10 +434,11 @@ export function SequenceDiagram({ layout }: { layout: SequenceLayout }) {
                 const from = layout.actors[message.from];
                 const to = layout.actors[message.to];
                 if (!from || !to) return null;
+                const lit = highlight?.has(index) ? ' is-lit' : '';
                 if (from === to) {
                     const x = from.x;
                     return (
-                        <g key={index}>
+                        <g key={index} className={`dg-message${lit}`}>
                             <polyline
                                 className="dg-edge"
                                 points={`${x},${message.y - 8} ${x + 28},${message.y - 8} ${x + 28},${message.y + 6} ${x + 3},${message.y + 6}`}
@@ -383,7 +452,7 @@ export function SequenceDiagram({ layout }: { layout: SequenceLayout }) {
                 }
                 const direction = to.x > from.x ? 1 : -1;
                 return (
-                    <g key={index}>
+                    <g key={index} className={`dg-message${lit}`}>
                         <line
                             x1={from.x}
                             y1={message.y}
@@ -403,14 +472,19 @@ export function SequenceDiagram({ layout }: { layout: SequenceLayout }) {
                     </g>
                 );
             })}
+            {pins &&
+                layout.actors.map((actor) => {
+                    const pin = pins.get(actor.label);
+                    return pin ? <PinBadge key={`pin-${actor.label}`} x={actor.x + actor.width / 2 - 2} y={6} pin={pin} /> : null;
+                })}
         </svg>
     );
 }
 
 /** A `flow` block, laid out once per config. */
-export function FlowBlock({ config }: BlockProps<'flow'>) {
+export function FlowBlock({ id, config }: BlockProps<'flow'>) {
     const layout = useMemo(() => layoutGraph(flowGraph(config)), [config]);
-    return <GraphDiagram layout={layout} />;
+    return <GraphDiagram layout={layout} pins={usePins(id)} />;
 }
 
 /** A `state` block, laid out once per config. */
@@ -420,9 +494,9 @@ export function StateBlock({ config }: BlockProps<'state'>) {
 }
 
 /** An `architecture` block, laid out once per config. */
-export function ArchitectureBlock({ config }: BlockProps<'architecture'>) {
+export function ArchitectureBlock({ id, config }: BlockProps<'architecture'>) {
     const layout = useMemo(() => layoutGraph(architectureGraph(config)), [config]);
-    return <GraphDiagram layout={layout} />;
+    return <GraphDiagram layout={layout} pins={usePins(id)} />;
 }
 
 /** A `schema` block: tables and their relations, laid out once per config. */
@@ -517,9 +591,9 @@ export function MindmapBlock({ config }: BlockProps<'mindmap'>) {
 }
 
 /** A `sequence` block, laid out once per config. */
-export function SequenceBlock({ config }: BlockProps<'sequence'>) {
+export function SequenceBlock({ id, config }: BlockProps<'sequence'>) {
     const layout = useMemo(() => layoutSequence(config), [config]);
-    return <SequenceDiagram layout={layout} />;
+    return <SequenceDiagram layout={layout} pins={usePins(id)} />;
 }
 
 type Diagram = { [T in DiagramType]: { type: T; config: BlockConfigs[T] } }[DiagramType];
@@ -570,26 +644,44 @@ function DiagramOf({ diagram, tones }: { diagram: Diagram; tones: Map<string, No
     }
 }
 
-type Side = { diagram: Diagram } | { error: string };
+/** A compare side that is not a diagram: code or an image, drawn as its own block. */
+type Other = { [T in 'code' | 'image']: { type: T; config: BlockConfigs[T] } }['code' | 'image'];
 
-/** Resolve a compare side: an inline diagram, or the id of a diagram block in the write-up. */
+type Side = { diagram: Diagram } | { other: Other } | { error: string };
+
+/** Resolve a compare side: an inline diagram, code or image, or the id of one of those blocks. */
 function useSide(side: BlockConfigs['compare']['left']): Side {
     const referenced = useRecord('blocks', typeof side.block === 'string' ? side.block : '');
-    if (typeof side.block !== 'string') return { diagram: side.block as Diagram };
-    if (!referenced) return { error: `Block "${side.block}" is not in the write-up` };
-    if (!(diagramTypes as readonly string[]).includes(referenced.type))
-        return { error: `Block "${side.block}" is a ${referenced.type}, not a diagram` };
+    const inline = typeof side.block === 'string' ? undefined : side.block;
+    if (inline) return inline.type === 'code' || inline.type === 'image' ? { other: inline } : { diagram: inline };
+    if (!referenced) return { error: `Block "${side.block}" is not on the page` };
     const check = checkBlockConfig(referenced.type, referenced.config);
     if (!check.ok) return { error: `Block "${side.block}" has an invalid config` };
+    if (check.type === 'code' || check.type === 'image') return { other: { type: check.type, config: check.config } as Other };
+    if (!(diagramTypes as readonly string[]).includes(referenced.type))
+        return { error: `Block "${side.block}" is a ${referenced.type}, not a diagram, code or image` };
     return { diagram: { type: check.type, config: check.config } as Diagram };
 }
 
-/** Two diagrams side by side, with what one side lacks painted on the other. An unresolvable side errors alone. */
+/** A non-diagram side: code in the code viewer, or an image with its pins. */
+function OtherSide({ other }: { other: Other }) {
+    return other.type === 'code' ? (
+        <CodeBlock id="compare-code" config={other.config} placement="question" />
+    ) : (
+        <ImageBlock id="compare-image" config={other.config} placement="question" />
+    );
+}
+
+/**
+ * Two diagrams, code excerpts or images side by side. Between two diagrams, what one side lacks is painted on the
+ * other. An unresolvable side errors alone.
+ */
 export function CompareBlock({ config }: BlockProps<'compare'>) {
     const left = useSide(config.left);
     const right = useSide(config.right);
-    const leftIds = 'diagram' in left ? nodeIds(left.diagram) : [];
-    const rightIds = 'diagram' in right ? nodeIds(right.diagram) : [];
+    const both = 'diagram' in left && 'diagram' in right;
+    const leftIds = both ? nodeIds(left.diagram) : [];
+    const rightIds = both ? nodeIds(right.diagram) : [];
     const sides = [
         { key: 'left', label: config.left.label, side: left, tones: compareTones(leftIds, rightIds, 'left', config.highlight) },
         {
@@ -606,6 +698,8 @@ export function CompareBlock({ config }: BlockProps<'compare'>) {
                     {label && <span className="eyebrow">{label}</span>}
                     {'diagram' in side ? (
                         <DiagramOf diagram={side.diagram} tones={tones} />
+                    ) : 'other' in side ? (
+                        <OtherSide other={side.other} />
                     ) : (
                         <p className="side-error">{side.error}</p>
                     )}

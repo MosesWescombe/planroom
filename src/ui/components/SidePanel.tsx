@@ -27,7 +27,7 @@ export function describeAgentNow(connection: Connection, agent: AgentStatus): { 
 }
 
 /** The feed's live first row: the agent's current state, animated while it works, and what its subagents are doing. */
-function AgentNow() {
+export function AgentNow() {
     const connection = useConnection();
     const agent = useSelector((view) => view.agent, deepEqual);
     const { busy, label } = describeAgentNow(connection, agent);
@@ -183,6 +183,7 @@ const SCOPE_TITLES: Record<ThreadScope, string> = {
     interrogate: 'On questions',
     writeup: 'On the write-up',
     proposal: 'On the proposal',
+    review: 'On the review',
     message: 'Messages to the agent'
 };
 
@@ -191,6 +192,7 @@ const DIALOG_TITLES: Record<ThreadScope, string> = {
     interrogate: 'Comment on a question',
     writeup: 'Comment on the write-up',
     proposal: 'Comment on the proposal',
+    review: 'Comment on the review',
     message: 'Message to the agent'
 };
 
@@ -227,15 +229,15 @@ const PanelThread = memo(function PanelThread({ id, scope }: { id: string; scope
 const Comments = memo(function Comments() {
     const groups = useSelector((view) => {
         const threads = Object.values(view.threads).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        const order: ThreadScope[] = ['interrogate', 'writeup', 'proposal', 'message'];
+        const order: ThreadScope[] = ['interrogate', 'writeup', 'proposal', 'review', 'message'];
         return order
             .map((scope) => ({
                 scope,
                 open: threads
-                    .filter((thread) => threadScope(thread) === scope && thread.status === 'open')
+                    .filter((thread) => threadScope(thread, view.kind) === scope && thread.status === 'open')
                     .map((thread) => thread.id),
                 resolved: threads
-                    .filter((thread) => threadScope(thread) === scope && thread.status === 'resolved')
+                    .filter((thread) => threadScope(thread, view.kind) === scope && thread.status === 'resolved')
                     .map((thread) => thread.id)
             }))
             .filter((group) => group.open.length + group.resolved.length > 0);

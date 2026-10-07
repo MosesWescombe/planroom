@@ -1894,6 +1894,10 @@ input[type="checkbox"] {
     color: var(--ink);
 }
 
+.rail .contents-number {
+    white-space: nowrap;
+}
+
 button.nav-item {
     width: 100%;
     border: none;
@@ -5651,6 +5655,1177 @@ button.rail-strip-item {
     }
 }
 
+/* ------------------------------------------------------------ review */
+
+/* The walkthrough: one slide at a time at full width, the chapter bar above it, the overview grid in its place. */
+.deck-inner {
+    gap: 24px;
+}
+
+.deck-screen {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* While the deck builds: an indeterminate bar over the agent's live status, centred in the column. */
+.deck-building {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 560px;
+    margin: 18vh auto 0;
+}
+
+.loading-bar {
+    position: relative;
+    height: 4px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--line);
+}
+
+.loading-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 40%;
+    border-radius: inherit;
+    background: var(--accent);
+    animation: loading-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-slide {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(250%);
+    }
+}
+
+.deck-building .agent-now {
+    position: static;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.start-review {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.start-review h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.start-review .button-primary {
+    align-self: flex-end;
+    margin-top: 6px;
+}
+
+.progress-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 20px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.deck-head {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+}
+
+.chapter-bar {
+    display: flex;
+    flex-grow: 1;
+    gap: 12px;
+    min-width: 0;
+}
+
+.chapter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.chapter-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapter-segments {
+    display: flex;
+    gap: 3px;
+}
+
+.segment {
+    flex: 1 1 0;
+    height: 8px;
+    min-width: 8px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: var(--line);
+}
+
+.segment.is-read {
+    background: var(--accent-soft);
+}
+
+.segment.is-current {
+    background: var(--accent);
+}
+
+.slide-frame {
+    view-transition-name: slide;
+    animation: slide-in 220ms ease-out;
+}
+
+@keyframes slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+}
+
+.slide {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 52vh;
+    padding: 32px 36px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    scroll-margin-top: 16px;
+}
+
+.slide-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    line-height: 1.15;
+    font-weight: 500;
+}
+
+.slide.is-fill .html-frame {
+    height: max(var(--frame-height), 60vh);
+}
+
+.deck-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.deck-foot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.overview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    width: 100%;
+    min-height: 120px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    text-align: left;
+}
+
+.overview-card:hover,
+.overview-card.is-current {
+    border-color: var(--ink);
+}
+
+.overview-title {
+    font-weight: 600;
+}
+
+.deck-print {
+    display: none;
+}
+
+.nav-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.nav-item[aria-current="step"] {
+    background: var(--raised);
+}
+
+button.nav-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+}
+
+/* Blocks a review brings: an analogy, a step-through, a your-take card and the sandboxed html frame. */
+.analogy {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.analogy-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.analogy-title {
+    font-family: var(--font-display);
+    font-size: 24px;
+}
+
+.analogy-pairs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+}
+
+.analogy-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--paper);
+}
+
+.analogy-pair dt {
+    font-weight: 600;
+}
+
+.analogy-pair dd {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+}
+
+.analogy-arrow {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.analogy-breaks {
+    padding: 10px 14px;
+    border-left: 3px solid var(--agent-border);
+    background: var(--agent-wash);
+    border-radius: 0 8px 8px 0;
+}
+
+.step-through {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 10px;
+}
+
+.step-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.step-caption {
+    flex-grow: 1;
+    min-height: 24px;
+}
+
+.step-captions {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.diagram.has-focus .dg-message:not(.is-lit) {
+    opacity: 0.25;
+}
+
+.dg-message {
+    transition: opacity 200ms ease;
+}
+
+.dg-pin {
+    cursor: pointer;
+}
+
+.dg-pin circle {
+    fill: var(--agent);
+    stroke: var(--surface);
+    stroke-width: 2;
+}
+
+.dg-pin text {
+    fill: var(--surface);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.take {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    border: 1px dashed var(--agent-border);
+    border-radius: 12px;
+    background: var(--agent-wash);
+}
+
+.take.is-answered {
+    border-style: solid;
+}
+
+.take-form,
+.take-reveal {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.take-prompt {
+    font-size: 17px;
+    font-weight: 600;
+}
+
+/* The impact map: the areas a change might reach, around it, each opening its explanation and the reviewer's concerns. */
+.impact {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.impact-map {
+    position: relative;
+    height: 360px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.impact-lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.impact-lines line {
+    stroke: var(--line-strong);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+
+.impact-center,
+.impact-node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+}
+
+.impact-center {
+    left: 50%;
+    top: 50%;
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.impact-node {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--paper);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.impact-node:hover {
+    border-color: var(--accent);
+}
+
+.impact-node[aria-pressed="true"] {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.impact-node.is-added {
+    border-style: dashed;
+}
+
+.impact-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.impact-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.impact-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.impact-concerns {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.concern-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.concern-list li > span {
+    margin-right: 6px;
+}
+
+.concern-form .field-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.impact-remove {
+    align-self: flex-start;
+}
+
+/* A predict take's reveal: the reviewer's guess and what happens as two tiles, the explanation below a rule. */
+.take-answer {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.take-answer.is-agent {
+    border-color: var(--agent-border);
+    box-shadow: inset 3px 0 0 var(--agent-dot);
+}
+
+.take-why {
+    padding-top: 12px;
+    border-top: 1px solid var(--agent-border);
+}
+
+.take-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.take-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.take-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.risk-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.risk-scale {
+    max-width: 380px;
+    color: var(--ink-2);
+}
+
+.risk-area {
+    width: 140px;
+    padding: 0;
+    text-transform: capitalize;
+}
+
+.risk-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.take-points ul {
+    margin: 4px 0 8px;
+    padding-left: 18px;
+}
+
+.take-points li.is-shared {
+    background: var(--accent-soft);
+    border-radius: 4px;
+}
+
+.take-mark {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.take-points li.is-shared .take-mark {
+    color: var(--accent-text);
+    font-weight: 600;
+}
+
+.risk-compare {
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.risk-compare th,
+.risk-compare td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+    text-transform: capitalize;
+}
+
+.risk-compare th[scope="row"] {
+    text-align: left;
+}
+
+.risk-mark {
+    display: inline-block;
+    margin: 1px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.risk-mark.is-yours {
+    background: var(--ink);
+    color: var(--paper);
+}
+
+.risk-mark.is-agent {
+    background: var(--agent-soft);
+    color: var(--agent-text);
+}
+
+.take-reveal.is-right .strong {
+    color: var(--accent-text);
+}
+
+.take-reveal.is-wrong .strong {
+    color: var(--agent-text);
+}
+
+.html-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.html-frame {
+    width: 100%;
+    height: var(--frame-height, 360px);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.field-input {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 8px 10px;
+    font-size: 14px;
+}
+
+/* Findings: a card each, then the views of them and the diff with cards beside their lines. */
+.finding {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 20px 24px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    scroll-margin-top: 16px;
+}
+
+.finding.is-blocker {
+    border-left: 4px solid var(--agent);
+}
+
+.finding-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.severity-blocker {
+    background: var(--agent);
+    color: var(--surface);
+}
+
+.severity-important {
+    background: var(--agent-soft);
+    color: var(--agent-text);
+}
+
+.severity-minor {
+    background: var(--sunken);
+    color: var(--ink-2);
+}
+
+.finding-title {
+    font-size: 18px;
+}
+
+/* A finding's place in the code: a chip that opens the change it sits on. */
+.finding-anchor {
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 2px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: var(--sunken);
+    color: var(--accent-text);
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.finding-anchor:hover {
+    border-color: var(--line-strong);
+    text-decoration: underline;
+}
+
+.finding-part {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.finding-draft {
+    align-self: flex-start;
+}
+
+/* A comment's editor: one Markdown editor that renders every part but the one being typed in. */
+.comment-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.markdown-editor .cm-editor {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.markdown-editor .cm-editor.cm-focused {
+    outline: 2px solid var(--accent);
+}
+
+.markdown-editor .cm-content {
+    min-height: 10em;
+    padding: 10px 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+.cm-md-strong {
+    font-weight: 700;
+}
+
+.cm-md-em {
+    font-style: italic;
+}
+
+.cm-md-code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+}
+
+.cm-md-link {
+    text-decoration: underline;
+}
+
+.cm-md-h1,
+.cm-md-h2,
+.cm-md-h3,
+.cm-md-h4 {
+    font-weight: 700;
+}
+
+.cm-md-h1 {
+    font-size: 1.5em;
+}
+
+.cm-md-h2 {
+    font-size: 1.3em;
+}
+
+.cm-md-h3 {
+    font-size: 1.15em;
+}
+
+.comment-signoff {
+    color: var(--muted);
+}
+
+.reaction,
+.reaction-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.reaction-buttons {
+    flex-wrap: wrap;
+}
+
+.reaction-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--accent-text);
+}
+
+.reaction-status.is-reject {
+    color: var(--muted);
+}
+
+.review-views {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.review-files {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.review-file {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.review-file > summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+}
+
+.change-add {
+    color: var(--accent-text);
+}
+
+.change-remove {
+    color: var(--agent-text);
+}
+
+.code-note {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 12px 10px 64px;
+    background: var(--agent-wash);
+}
+
+.diff-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--agent-border);
+    border-radius: 8px;
+    background: var(--surface);
+    text-align: left;
+    font-family: var(--font-ui);
+    font-size: 14px;
+}
+
+.locked {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 48px 0;
+}
+
+.locked h1 {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 500;
+}
+
+/* Comments drawn as Bitbucket shows them: the file and its lines, then the comment, in Bitbucket's system font. */
+.bb-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    scroll-margin-top: 16px;
+}
+
+.bb-card.is-summary {
+    border-top: 3px solid var(--accent);
+}
+
+/* An earlier round's comment: its label, the comment, the code that shows it and the replies, padded as one block. */
+.bb-card.is-earlier {
+    gap: 10px;
+    padding: 16px 18px;
+}
+
+.bb-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.bb-file-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--sunken);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.bb-comment {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+}
+
+.bb-comment-main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    font-size: 14px;
+}
+
+.bb-avatar {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.bb-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.bb-body pre {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: var(--sunken);
+    overflow-x: auto;
+}
+
+.bb-body ul,
+.bb-body ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.bb-context {
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.bb-context .code-line {
+    display: flex;
+    gap: 10px;
+    padding: 0 8px;
+}
+
+.bb-context .line-number {
+    width: 36px;
+    flex-shrink: 0;
+    color: var(--muted);
+    text-align: right;
+}
+
+.bb-context .code-line.is-marked {
+    box-shadow: inset 3px 0 var(--agent);
+}
+
+.bb-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-ui);
+}
+
+.toggle-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.posted-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent-text);
+}
+
+.error-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--agent-text);
+}
+
+.note-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.note-open {
+    align-self: flex-start;
+}
+
+.dialog-note {
+    width: min(780px, 100%);
+    overflow: visible;
+}
+
+.note-where {
+    flex-wrap: wrap;
+}
+
+.note-where .field-input {
+    width: 90px;
+}
+
+.earlier {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.label-addressed {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+.label-partly,
+.label-not-addressed {
+    background: var(--agent-soft);
+    color: var(--agent-text);
+}
+
+.label-outdated,
+.label-none {
+    background: var(--sunken);
+    color: var(--ink-2);
+}
+
+.replies {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--paper);
+    list-style: none;
+    font-size: 14px;
+}
+
+.head-moved {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 20px;
+    border: 1px solid var(--agent-border);
+    border-radius: 12px;
+    background: var(--agent-wash);
+}
+
+.moved-row {
+    gap: 12px;
+}
+
+.waiting {
+    margin: 4px 0 0;
+    padding-left: 18px;
+}
+
+.round-switcher {
+    align-self: center;
+    margin-left: 8px;
+}
+
+.dialog-settings {
+    width: min(860px, 100%);
+}
+
+/* Outside a review there is only the general column, so the dialog keeps its narrow width. */
+.dialog-settings:not(:has(.settings-review)) {
+    width: min(420px, 100%);
+}
+
+/* General settings beside the review's; auto-fit drops to one column on a narrow screen, or when there is no review. */
+.settings-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    align-items: start;
+    gap: 18px 32px;
+}
+
+.settings-column {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.settings-review {
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+@media (max-width: 959.98px) {
+    .slide {
+        padding: 20px;
+    }
+
+    .deck-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .take-columns,
+    .analogy-pair {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* On a narrow screen the map is a list: the change, then each area under it. */
+    .impact-map {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: auto;
+        padding: 12px;
+    }
+
+    .impact-lines {
+        display: none;
+    }
+
+    .impact-center,
+    .impact-node {
+        position: static;
+        transform: none;
+        max-width: none;
+    }
+
+    .impact-center {
+        align-self: flex-start;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -5658,6 +6833,16 @@ button.rail-strip-item {
         animation: none !important;
         transition: none !important;
         scroll-behavior: auto !important;
+    }
+
+    .slide-frame {
+        view-transition-name: none;
+    }
+
+    /* A still bar would read as part-done: fill it faintly instead. */
+    .loading-bar::after {
+        width: 100%;
+        opacity: 0.35;
     }
 }
 
@@ -5812,9 +6997,96 @@ button.rail-strip-item {
         break-before: avoid;
     }
 
+    /* A review's walkthrough prints one slide to a page, laid out in full by the deck's print copy. */
+    .deck-screen {
+        display: none !important;
+    }
+
+    .deck-print {
+        display: block;
+    }
+
+    .print-slide {
+        break-after: page;
+    }
+
+    .print-slide .slide {
+        min-height: 0;
+        padding: 0;
+        border: none;
+    }
+
     p,
     li {
         orphans: 3;
         widows: 3;
     }
+}
+
+.file-tree-select {
+    position: relative;
+}
+
+.file-tree-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 320px;
+    cursor: pointer;
+}
+
+.file-tree-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-tree-popup {
+    position: absolute;
+    z-index: 10;
+    top: 100%;
+    left: 0;
+    min-width: 260px;
+    max-height: 320px;
+    overflow: auto;
+    margin-top: 4px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper);
+}
+
+.file-tree-list {
+    margin: 0;
+    padding-left: 14px;
+    list-style: none;
+}
+
+.file-tree-popup > .file-tree-list {
+    padding-left: 0;
+}
+
+.file-tree-folder {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.file-tree-file {
+    width: 100%;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.file-tree-file:hover,
+.file-tree-file[aria-current="true"] {
+    background: var(--raised);
 }

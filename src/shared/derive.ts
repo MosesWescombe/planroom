@@ -10,7 +10,7 @@ import {
     type QuestionStatus
 } from './questions.js';
 import { type BlockRecord, blockIdsOf, type Outstanding, type SectionRecord, type ThreadRecord } from './records.js';
-import type { SessionState } from './state.js';
+import type { SessionKind, SessionState } from './state.js';
 
 /**
  * Pure functions over session state: the status and review transitions the server
@@ -435,16 +435,19 @@ export function decisionRows(state: Pick<SessionState, 'questions' | 'phases'>):
 
 // ---------------------------------------------------------------- comments
 
-export type ThreadScope = 'interrogate' | 'writeup' | 'proposal' | 'message';
+export type ThreadScope = 'interrogate' | 'writeup' | 'proposal' | 'review' | 'message';
 
 /**
  * Which phase a thread belongs to, from its anchor target:
  * `question:Q-1`, `qblock:Q-1:0` and `understanding` are Phase 1,
- * `section:s1` and `block:b1` are the write-up, `file:<path>` is the proposal.
+ * `section:s1` and `block:b1` are the write-up, `file:<path>` is the proposal, and a review's `slide:` and `item:`, and
+ * its blocks, are the review.
  */
-export function threadScope(thread: Pick<ThreadRecord, 'kind' | 'anchor'>): ThreadScope {
+export function threadScope(thread: Pick<ThreadRecord, 'kind' | 'anchor'>, kind: SessionKind = 'plan'): ThreadScope {
     if (thread.kind === 'message' || !thread.anchor) return 'message';
     const target = thread.anchor.target;
+    if (target.startsWith('slide:') || target.startsWith('item:') || (kind === 'review' && target.startsWith('block:')))
+        return 'review';
     if (target.startsWith('file:')) return 'proposal';
     if (target.startsWith('section:') || target.startsWith('block:')) return 'writeup';
     return 'interrogate';
@@ -553,8 +556,8 @@ export function checkCommand(state: Pick<SessionState, 'changeId' | 'format' | '
 }
 
 /** How ending the session now reads: Cancel until the proposal has validated, Finish from then on. */
-export function endHow(state: Pick<SessionState, 'phases'>): 'cancelled' | 'finished' {
-    return state.phases.proposalUnlocked ? 'finished' : 'cancelled';
+export function endHow(state: Pick<SessionState, 'phases'> & { kind?: SessionKind }): 'cancelled' | 'finished' {
+    return state.kind === 'review' || state.phases.proposalUnlocked ? 'finished' : 'cancelled';
 }
 
 /** True once the proposal is accepted or the user ended the session: it then takes no more edits. */

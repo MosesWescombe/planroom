@@ -4,6 +4,10 @@ import { Ask } from '../ask/Ask';
 import { CommentLayer } from '../comments/CommentLayer';
 import { DirectionSwitcher, DirectionsPhase, Interrogate } from '../interrogate/Interrogate';
 import { Proposal } from '../proposal/Proposal';
+import { CommentsTab } from '../review/Comments';
+import { Findings } from '../review/Findings';
+import { ReviewPins } from '../review/hooks';
+import { Walkthrough } from '../review/Walkthrough';
 import { useTrackSeen } from '../seen';
 import { useConnection, useSelector } from '../store';
 import { quietly, type Tab, useActions, useBusy, useUiState } from '../ui';
@@ -25,15 +29,31 @@ export function tabForPhase(phase: PagePhase): Tab {
  */
 function useFollowPhase(): void {
     const phase = useSelector((view) => pagePhase(view));
+    const review = useSelector((view) => view.kind === 'review');
     const { setTab, setPanelTab } = useActions();
     const previous = useRef(phase);
     useEffect(() => {
-        if (ORDER[phase] > ORDER[previous.current] && phase !== 'accepted') {
+        if (!review && ORDER[phase] > ORDER[previous.current] && phase !== 'accepted') {
             setTab(tabForPhase(phase));
             if (phase === 'proposal') setPanelTab('review');
         }
         previous.current = phase;
-    }, [phase, setTab, setPanelTab]);
+    }, [phase, review, setTab, setPanelTab]);
+}
+
+/** When the author's push starts a new round, show its walkthrough from the start. */
+function useFollowRound(): void {
+    const rounds = useSelector((view) => view.review?.rounds.length ?? 0);
+    const { setTab, setRound, setSlide } = useActions();
+    const previous = useRef(rounds);
+    useEffect(() => {
+        if (rounds > previous.current) {
+            setTab('walkthrough');
+            setRound(undefined);
+            setSlide(undefined);
+        }
+        previous.current = rounds;
+    }, [rounds, setTab, setRound, setSlide]);
 }
 
 /** Makes a read-only session editable again; the agent is told, and picks the plan up where it stands. */
@@ -60,6 +80,7 @@ function ReopenButton() {
 function Accepted() {
     const changeId = useSelector((view) => view.changeId);
     const ask = useSelector((view) => view.kind === 'ask');
+    const review = useSelector((view) => view.kind === 'review');
     const accepted = useSelector((view) => Boolean(view.phases.acceptedAt));
     const ended = useSelector((view) => view.phases.ended?.how);
     const viewOnly = useSelector((view) => Boolean(view.viewOnly));
@@ -70,6 +91,12 @@ function Accepted() {
         return (
             <div className="banner" role="status">
                 You sent your answers to the agent. This page is read-only.
+            </div>
+        );
+    if (review && ended)
+        return (
+            <div className="banner" role="status">
+                You ended this review. It is read-only; ask Claude to review it again to pick it up.
             </div>
         );
     if (viewOnly)
@@ -93,14 +120,39 @@ function Accepted() {
 /**
  * The page layout: the rail runs the full height on the left, beside the top row (phase tabs, change, status and
  * settings), the Directions tabs under it while in Directions, then the current phase with the side panel, and the
- * comment and notice layers. An ask has no phases: its questions stand where Interrogate would. Escape closes an open
- * drawer.
+ * comment and notice layers. An ask has no phases: its questions stand where Interrogate would. A review has its own
+ * three tabs, with its findings pinned on the deck's diagrams once they show. Escape closes an open drawer.
  */
+/** While an earlier round shows, a note that it is as it was, with the way back to the current one. */
+function EarlierRound() {
+    const { round } = useUiState();
+    const { setRound, setSlide } = useActions();
+    const last = useSelector((view) => view.review?.rounds.at(-1)?.n);
+    if (round === undefined || round === last) return null;
+    return (
+        <div className="banner banner-actions">
+            <span role="status">Round {round}, as it was. It is read-only.</span>
+            <button
+                type="button"
+                className="button-secondary button-small"
+                onClick={() => {
+                    setRound(undefined);
+                    setSlide(undefined);
+                }}
+            >
+                Back to round {last}
+            </button>
+        </div>
+    );
+}
+
 export function Shell() {
     const { tab, drawer } = useUiState();
     const { setDrawer } = useActions();
     const ask = useSelector((view) => view.kind === 'ask');
+    const review = useSelector((view) => view.kind === 'review');
     useFollowPhase();
+    useFollowRound();
     useTrackSeen();
     useEffect(() => {
         if (!drawer) return undefined;
@@ -113,11 +165,19 @@ export function Shell() {
             <TopBar />
             {tab === 'directions' && <DirectionSwitcher />}
             <Accepted />
+            {review && <EarlierRound />}
             <div className="body">
                 {tab === 'interrogate' && (ask ? <Ask /> : <Interrogate />)}
                 {tab === 'directions' && <DirectionsPhase />}
                 {tab === 'writeup' && <Writeup />}
                 {tab === 'proposal' && <Proposal />}
+                {review && (
+                    <ReviewPins>
+                        {tab === 'walkthrough' && <Walkthrough />}
+                        {tab === 'findings' && <Findings />}
+                        {tab === 'comments' && <CommentsTab />}
+                    </ReviewPins>
+                )}
                 <SidePanel />
                 {drawer && <button type="button" className="scrim" aria-label="Close" onClick={() => setDrawer(undefined)} />}
             </div>

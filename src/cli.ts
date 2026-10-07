@@ -4,26 +4,30 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { bitbucketAccess } from './server/bitbucket.js';
 import { startPageServer } from './server/http.js';
 import { type ClaudeCli, claudeConfigDir, type InstallTarget, install, uninstall } from './server/install.js';
 import { createPlanroom } from './server/mcp.js';
 import { openInBrowser } from './server/opener.js';
 import { findOpenSpecRoot, openSpecCli } from './server/openspec.js';
 import { listPlans } from './server/plans.js';
+import { preferencesFile } from './server/preferences.js';
 import { knownRepos, registryFile, rememberRepo } from './server/registry.js';
 import { PlanViewer } from './server/viewer.js';
 
 /**
  * The `planroom` command, bundled with the server into `dist/cli.js` beside the built page in `dist/ui`. `mcp` is
- * what Claude Code starts over stdio, as the planning server or with `--ask` the question server; there nothing may
- * write to stdout except the MCP transport. The repo is the nearest directory up from `--dir <path>` (default: the
- * launch directory) with an `openspec/`.
+ * what Claude Code starts over stdio, as the planning server, with `--ask` the question server or with `--review` the
+ * review server; there nothing may write to stdout except the MCP transport. The repo is the nearest directory up from
+ * `--dir <path>` (default: the launch directory) with an `openspec/`.
  */
 
 const USAGE = `Usage: planroom <command> [--dir <path>]
 
 Commands:
-  mcp [--ask]       Run the MCP server that Claude Code starts over stdio: planning, or with --ask questions
+  mcp [--ask|--review]
+                    Run the MCP server that Claude Code starts over stdio: planning, with --ask questions, or with
+                    --review reviews
   open [change-id]  Open this repo's plans read-only in the browser, or one plan
   list              List the plans in every repo Planroom has run in
   install           Link the skills and agents into ~/.claude and register the MCP servers
@@ -43,6 +47,7 @@ const { values, positionals } = parseArgs({
     options: {
         dir: { type: 'string' },
         ask: { type: 'boolean' },
+        review: { type: 'boolean' },
         version: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' }
     }
@@ -75,11 +80,16 @@ function repo(): { repoRoot: string; openSpecRoot?: string } {
     return { repoRoot: openSpecRoot ?? startDir, openSpecRoot };
 }
 
-/** Serve the planning server, or with `--ask` the question server, over stdio until Claude Code closes it. */
+/**
+ * Serve the planning server, with `--ask` the question server or with `--review` the review server, over stdio until
+ * Claude Code closes it. A review reads its Bitbucket credentials from the environment and git, on the server only.
+ */
 async function mcp(): Promise<void> {
     const { repoRoot } = repo();
+    if (values.ask && values.review) fail('choose --ask or --review, not both');
     const planroom = createPlanroom({
-        kind: values.ask ? 'ask' : 'plan',
+        kind: values.ask ? 'ask' : values.review ? 'review' : 'plan',
+        reviewHost: async () => ({ access: await bitbucketAccess(repoRoot), preferencesFile: preferencesFile() }),
         version,
         repoRoot,
         uiDir,
@@ -168,14 +178,20 @@ if (values.version) {
 } else if (command === 'install') {
     install(target, claude);
     console.log(
-        `Planroom installed: skills and agents linked into ${target.configDir} from ${pkgRoot}, planroom and planroom-ask MCP servers registered.`
+        `Planroom installed: skills and agents linked into ${target.configDir} from ${pkgRoot}, planroom, planroom-ask and planroom-review MCP servers registered.`
     );
     if (spawnSync('openspec', ['--version']).error)
         console.log(
             'openspec is not on PATH. OpenSpec-format plans need it, pinned in the repo or from npm i -g @fission-ai/openspec.'
         );
-    console.log('Running Claude Code sessions keep their old servers: reconnect planroom and planroom-ask in /mcp.');
-    console.log('To turn planning or asking off, disable its server in /mcp and its skill in /skills.');
+    console.log(
+        'Running Claude Code sessions keep their old servers: reconnect planroom, planroom-ask and planroom-review in /mcp.'
+    );
+    console.log('To turn planning, asking or reviewing off, disable its server in /mcp and its skill in /skills.');
+    if (!process.env.BITBUCKET_API_TOKEN)
+        console.log(
+            'To post reviews to Bitbucket, set BITBUCKET_API_TOKEN (scope read:pullrequest:bitbucket) for Claude Code; local branches need none.'
+        );
 } else if (command === 'uninstall') {
     uninstall(target, claude);
     console.log(`Planroom uninstalled from ${target.configDir}. Plans and their records are left in place.`);

@@ -30,9 +30,14 @@ import {
     SequenceBlock,
     StateBlock
 } from './diagrams';
+import { ImpactMapBlock } from './impact';
+import { AnalogyBlock, HtmlBlock, StepThroughBlock, YourTakeBlock } from './review';
 
-/** Where a block sits: the write-up owns interactive blocks; question context, replies and history are read-only. */
-export type Placement = 'writeup' | 'question' | 'thread' | 'history';
+/**
+ * Where a block sits: the write-up and a review's slides own interactive blocks; question context, replies and history
+ * are read-only.
+ */
+export type Placement = 'writeup' | 'slide' | 'question' | 'thread' | 'history';
 
 /** What every renderer receives: its parsed config, its id and where it sits. */
 export interface BlockProps<T extends BlockType> {
@@ -71,7 +76,12 @@ export const renderers: { [T in BlockType]: Renderer<T> } = {
     fileTree: FileTreeBlock,
     code: CodeBlock,
     image: ImageBlock,
-    mermaid: MermaidBlock
+    mermaid: MermaidBlock,
+    analogy: AnalogyBlock,
+    stepThrough: StepThroughBlock,
+    yourTake: YourTakeBlock,
+    impactMap: ImpactMapBlock,
+    html: HtmlBlock
 };
 
 /** Blocks drawn as pictures, which zoom and scroll in full screen; text-like blocks keep their plain full screen. */
@@ -89,7 +99,9 @@ const ZOOMS: ReadonlySet<string> = new Set<BlockType>([
     'sankey',
     'riskMatrix',
     'image',
-    'mermaid'
+    'mermaid',
+    'stepThrough',
+    'compare'
 ]);
 
 /** A block as the page holds it: the agent's envelope, and the server's verdict when its config failed. */
@@ -270,7 +282,7 @@ export function BlockContent({ block, placement }: { block: BlockInput; placemen
 export const BlockView = memo(function BlockView({ block, placement }: { block: BlockInput; placement: Placement }) {
     const [full, setFull] = useState(false);
     const readOnly = useReadOnly();
-    const target = placement === 'writeup' ? `block:${block.id}` : undefined;
+    const target = placement === 'writeup' || placement === 'slide' ? `block:${block.id}` : undefined;
     const label = block.caption ?? `${block.type} ${block.id}`;
     const zooms = !block.problem && ZOOMS.has(block.type);
     return (

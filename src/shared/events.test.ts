@@ -30,7 +30,25 @@ const agentSamples: Record<AgentEventType, unknown> = {
     'comment.edit': { type: 'comment.edit', messageId: 'C-1.2', text: 'Done, with an expiry' },
     'suggestion.decline': { type: 'suggestion.decline', id: 'S-1', reason: 'Covered by Q-3' },
     'proposal.trace': { type: 'proposal.trace', spec: 'rate-limits', requirement: 'Fail open', questions: ['Q-12'] },
-    'proposal.ready': { type: 'proposal.ready' }
+    'proposal.ready': { type: 'proposal.ready' },
+    'slide.upsert': { type: 'slide.upsert', slide: { id: 'why-1', chapter: 'why', order: 1, title: 'Why', blocks: ['b1'] } },
+    'deck.progress': { type: 'deck.progress', pictures: { drawn: 2, total: 4 }, review: '3 of 5 reviewers done' },
+    'deck.publish': { type: 'deck.publish' },
+    'item.upsert': {
+        type: 'item.upsert',
+        item: {
+            id: 'I-1',
+            kind: 'question',
+            title: 'Why three retries?',
+            body: 'Three retries at 100 ms can outlast the caller timeout.',
+            confidence: 0.8,
+            anchor: { file: 'src/retry.ts', side: 'new', start: 40, end: 44 },
+            draft: 'Why three retries here?'
+        }
+    },
+    'item.withdraw': { type: 'item.withdraw', id: 'I-2', reason: 'The caller handles it' },
+    'summary.draft': { type: 'summary.draft', text: 'Looks good once the retry cap is fixed.' },
+    'earlier.label': { type: 'earlier.label', key: '1/item:I-1', label: 'addressed', note: 'Capped at two' }
 };
 
 const pageSamples: Record<PageRequestType, unknown> = {
@@ -55,7 +73,28 @@ const pageSamples: Record<PageRequestType, unknown> = {
     'proposal.requestChanges': { type: 'proposal.requestChanges', text: 'Split the spec' },
     'session.end': { type: 'session.end' },
     'session.reopen': { type: 'session.reopen' },
-    'ask.done': { type: 'ask.done' }
+    'ask.done': { type: 'ask.done' },
+    'take.answer': { type: 'take.answer', blockId: 'take-1', answer: { kind: 'predict', guess: 'It fails open' } },
+    'walkthrough.done': { type: 'walkthrough.done', how: 'skipped' },
+    'impact.save': { type: 'impact.save', concerns: { billing: ['Does the export retry?'] }, added: [] },
+    'impact.send': { type: 'impact.send' },
+    'reviewers.start': { type: 'reviewers.start', reviewers: { strength: 'single', model: 'haiku', effort: 'low' } },
+    'item.react': { type: 'item.react', itemId: 'I-1', verdict: 'reject', reason: 'Handled in the caller' },
+    'comment.choose': { type: 'comment.choose', key: 'item:I-1', task: true },
+    'note.save': { type: 'note.save', anchor: { file: 'src/retry.ts', side: 'new', start: 12 }, text: 'Nice' },
+    'note.delete': { type: 'note.delete', id: 'N-1' },
+    'summary.edit': { type: 'summary.edit', text: 'Ship it' },
+    'comments.open': { type: 'comments.open' },
+    'comments.post': { type: 'comments.post', choices: { 'item:I-1': 'reanchor' } },
+    'earlier.confirm': { type: 'earlier.confirm', key: '1/item:I-1', confirmed: true },
+    'preferences.set': {
+        type: 'preferences.set',
+        preferences: {
+            takes: { predict: true, prosCons: true, risk: false, check: true },
+            density: 'light',
+            views: { pins: true, diff: true, charts: false, heatmap: true, matrix: true }
+        }
+    }
 };
 
 const at = { seq: 1, at: '2026-09-29T00:00:00.000Z' };
@@ -100,7 +139,42 @@ const loggedSamples: Record<LoggedEventType, unknown> = {
         issues: [{ level: 'ERROR', path: 'specs', message: 'x' }],
         trigger: 'rerun'
     },
-    'edit.undone': { ...at, type: 'edit.undone', revision: 3, newRevision: 5, blocks: ['b1'], sections: [] }
+    'edit.undone': { ...at, type: 'edit.undone', revision: 3, newRevision: 5, blocks: ['b1'], sections: [] },
+    'take.answer': {
+        ...at,
+        type: 'take.answer',
+        blockId: 'take-1',
+        kind: 'risk',
+        answer: { kind: 'risk', ratings: { security: 4, correctness: 2 } },
+        summary: 'correctness 2, security 4'
+    },
+    'walkthrough.done': { ...at, type: 'walkthrough.done', how: 'finished', round: 1 },
+    'impact.send': {
+        ...at,
+        type: 'impact.send',
+        round: 1,
+        areas: [
+            { id: 'billing', title: 'Billing exports', concerns: ['Does the export retry?'] },
+            { title: 'Search', concerns: [] }
+        ]
+    },
+    'item.react': { ...at, type: 'item.react', itemId: 'I-1', title: 'Retry cap', verdict: 'reword', text: 'Cap it at two?' },
+    'reviewers.start': {
+        ...at,
+        type: 'reviewers.start',
+        round: 1,
+        reviewers: { strength: 'thorough', model: 'opus', effort: 'medium' }
+    },
+    'preferences.change': {
+        ...at,
+        type: 'preferences.change',
+        preferences: {
+            takes: { predict: false, prosCons: true, risk: true, check: true },
+            density: 'normal',
+            views: { pins: true, diff: true, charts: true, heatmap: true, matrix: true }
+        }
+    },
+    'review.posted': { ...at, type: 'review.posted', round: 1, posted: 6, total: 7, failed: ['item:I-5'], drafts: true }
 };
 
 describe('agent events', () => {
@@ -134,6 +208,12 @@ describe('page requests and logged events', () => {
     it.each(Object.entries(loggedSamples))('logged event %s round-trips', (_type, sample) => {
         const parsed = loggedEvent.parse(sample);
         expect(loggedEvent.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+    });
+
+    it('a rewording needs its text and a rejection its reason', () => {
+        expect(pageRequest.safeParse({ type: 'item.react', itemId: 'I-1', verdict: 'reword' }).success).toBe(false);
+        expect(pageRequest.safeParse({ type: 'item.react', itemId: 'I-1', verdict: 'reject' }).success).toBe(false);
+        expect(pageRequest.safeParse({ type: 'item.react', itemId: 'I-1', verdict: 'agree' }).success).toBe(true);
     });
 
     it('trims page text and refuses blank text', () => {

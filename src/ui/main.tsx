@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { openStream } from './api';
+import { setPrinting } from './hooks';
 import { applyPageWidth, readPageWidth } from './pageWidth';
 import { ViewStore } from './store';
 import { applyTheme, readPreference, resolveTheme } from './theme';
@@ -14,8 +15,12 @@ applyPageWidth(readPageWidth());
 window.addEventListener('beforeprint', () => {
     applyTheme('light');
     document.documentElement.style.setProperty('--print-title', JSON.stringify(document.title));
+    setPrinting(true);
 });
-window.addEventListener('afterprint', () => applyTheme(resolveTheme(readPreference())));
+window.addEventListener('afterprint', () => {
+    applyTheme(resolveTheme(readPreference()));
+    setPrinting(false);
+});
 
 const store = new ViewStore();
 openStream({

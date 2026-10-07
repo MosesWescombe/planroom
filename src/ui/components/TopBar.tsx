@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { AgentStatus } from '../../shared/view';
 import { exportHtml } from '../exportHtml';
+import { setPrinting } from '../hooks';
+import { ReviewTabs } from '../review/ReviewTabs';
 import { type Connection, deepEqual, useConnection, useSelector } from '../store';
 import { useActions, useUiState } from '../ui';
 import { EndSessionButton } from './EndSession';
@@ -58,9 +60,11 @@ function ExportButton() {
         flushSync(() => setOpen(false));
         window.print();
     };
+    // A review's deck lays out every slide while it is copied.
     const html = () => {
         setOpen(false);
-        void exportHtml(`${name}.html`);
+        setPrinting(true);
+        void exportHtml(`${name}.html`).finally(() => setPrinting(false));
     };
     return (
         <>
@@ -71,8 +75,8 @@ function ExportButton() {
                 <Modal label="Export" onClose={() => setOpen(false)} className="dialog dialog-narrow">
                     <h2 className="dialog-title">Export</h2>
                     <p>
-                        This tab as a document, without the page's controls. PDF opens the print dialog: choose Save as PDF. HTML
-                        saves one file that opens in any browser.
+                        This tab as a document, without the page's controls{tab === 'walkthrough' ? ', one slide to a page' : ''}.
+                        PDF opens the print dialog: choose Save as PDF. HTML saves one file that opens in any browser.
                     </p>
                     <div className="dialog-actions">
                         <button type="button" className="button-secondary" onClick={html}>
@@ -97,6 +101,7 @@ export function TopBar() {
     const { drawer } = useUiState();
     const { setDrawer } = useActions();
     const ask = useSelector((view) => view.kind === 'ask');
+    const review = useSelector((view) => view.kind === 'review');
     return (
         <header className="topbar">
             <button
@@ -108,7 +113,7 @@ export function TopBar() {
             >
                 <MenuIcon />
             </button>
-            {!ask && <PhaseTabs />}
+            {review ? <ReviewTabs /> : !ask && <PhaseTabs />}
             <div className="topbar-end">
                 <ConnectionPill />
                 <ExportButton />

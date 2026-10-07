@@ -1,7 +1,19 @@
 import { z } from 'zod';
-import { blockEnvelope, recordId } from './blocks.js';
+import { blockEnvelope, recordId, TAKE_KINDS } from './blocks.js';
 import { answer, contextBlock, questionContent, questionId } from './questions.js';
 import { anchor, attachment, commentIntent, outstanding, sectionContent, touched, validationIssue } from './records.js';
+import {
+    chapter,
+    EARLIER_LABELS,
+    itemContent,
+    noteContent,
+    reviewerSettings,
+    reviewPreferences,
+    slideContent,
+    takeAnswer,
+    verdict
+} from './review.js';
+import type { SessionKind } from './state.js';
 
 /**
  * Both directions of the agent-page contract.
@@ -65,12 +77,58 @@ export const agentEvent = z.discriminatedUnion('type', [
         requirement: z.string().min(1).max(300),
         questions: z.array(questionId).max(40)
     }),
-    z.object({ type: z.literal('proposal.ready') })
+    z.object({ type: z.literal('proposal.ready') }),
+    /** Stage a slide of the round's deck. It stays off the page until `deck.publish`, and is fixed after it. */
+    z.object({ type: z.literal('slide.upsert'), slide: slideContent }),
+    /** What the page shows while the deck builds: the planned outline, pictures drawn of those briefed, review progress. */
+    z
+        .object({
+            type: z.literal('deck.progress'),
+            outline: z
+                .array(z.object({ chapter, title: z.string().trim().min(1).max(200) }))
+                .max(30)
+                .optional(),
+            pictures: z.object({ drawn: z.number().int().min(0), total: z.number().int().min(0) }).optional(),
+            review: z.string().trim().min(1).max(200).optional()
+        })
+        .refine((event) => event.outline || event.pictures || event.review, {
+            message: 'send `outline`, `pictures` or `review`',
+            path: ['outline']
+        }),
+    /**
+     * Release the round's staged deck, in two parts: first Why to What it might impact, then, after the reviewer's
+     * `impact.send`, Trade-offs.
+     */
+    z.object({ type: z.literal('deck.publish') }),
+    z.object({ type: z.literal('item.upsert'), item: itemContent }),
+    /** Take a finding back, e.g. after a rejection undermined it, before the reviewer reacts to it. */
+    z.object({ type: z.literal('item.withdraw'), id: recordId, reason: z.string().trim().min(1).max(1000) }),
+    /** The summary comment, drafted from the reviewer's takes and triage. */
+    z.object({ type: z.literal('summary.draft'), text: z.string().trim().min(1).max(8000) }),
+    /** How an earlier round's comment stands now, with the code that shows it. */
+    z.object({
+        type: z.literal('earlier.label'),
+        key: z.string().min(1).max(200),
+        label: z.enum(EARLIER_LABELS),
+        note: z.string().trim().max(2000).optional(),
+        code: z.string().max(20000).optional()
+    })
 ]);
 export type AgentEvent = z.infer<typeof agentEvent>;
 export type AgentEventType = AgentEvent['type'];
 /** Every agent event type, in union order. */
 export const agentEventTypes = agentEvent.options.map((option) => option.shape.type.value);
+
+/** The agent events only a review takes. */
+const REVIEW_ONLY_AGENT_EVENTS: readonly AgentEventType[] = [
+    'slide.upsert',
+    'deck.progress',
+    'deck.publish',
+    'item.upsert',
+    'item.withdraw',
+    'summary.draft',
+    'earlier.label'
+];
 
 /** The agent events an ask takes: its question and info cards, and replies. The rest belong to a plan's phases. */
 export const ASK_AGENT_EVENTS: ReadonlySet<AgentEventType> = new Set<AgentEventType>([
@@ -81,6 +139,21 @@ export const ASK_AGENT_EVENTS: ReadonlySet<AgentEventType> = new Set<AgentEventT
     'comment.edit',
     'suggestion.decline'
 ]);
+
+/** The agent events a review takes: its blocks, slides and findings, the summary, and replies. */
+export const REVIEW_AGENT_EVENTS: ReadonlySet<AgentEventType> = new Set<AgentEventType>([
+    'doc.block.upsert',
+    'comment.reply',
+    'comment.edit',
+    ...REVIEW_ONLY_AGENT_EVENTS
+]);
+
+/** The agent events each session kind takes. */
+export const AGENT_EVENTS: Record<SessionKind, ReadonlySet<AgentEventType>> = {
+    plan: new Set(agentEventTypes.filter((type) => !REVIEW_ONLY_AGENT_EVENTS.includes(type))),
+    ask: ASK_AGENT_EVENTS,
+    review: REVIEW_AGENT_EVENTS
+};
 
 /** One `planroom_emit` call: some events, a new `doing`, the subagents you are waiting on, or any mix. */
 export const emitBatch = z
@@ -106,6 +179,8 @@ export const emitBatch = z
 // ---------------------------------------------------------------- page -> server
 
 const text = z.string().trim().min(1).max(8000);
+/** One of the reviewer's questions or concerns on an impact map area. */
+const concern = z.string().trim().min(1).max(1000);
 
 /** A message's words and pastes: either may be empty, not both. */
 const message = {
@@ -154,10 +229,95 @@ export const pageRequest = z.discriminatedUnion('type', [
     /** Make a read-only session editable again: one the user ended, or whose proposal they accepted. */
     z.object({ type: z.literal('session.reopen') }),
     /** Send an ask's answers to the agent, ending it. */
-    z.object({ type: z.literal('ask.done') })
+    z.object({ type: z.literal('ask.done') }),
+    /** Answer a `yourTake` card, which then reveals the agent's view. */
+    z.object({ type: z.literal('take.answer'), blockId: recordId, answer: takeAnswer }),
+    /** Start the round's reviewer subagents, as many as the strength says and at this model and effort. */
+    z.object({ type: z.literal('reviewers.start'), reviewers: reviewerSettings }),
+    /** Finish or skip the round's walkthrough, which unlocks its findings. */
+    z.object({ type: z.literal('walkthrough.done'), how: z.enum(['finished', 'skipped']) }),
+    /** Save the reviewer's questions and concerns on the impact map, all of them, as they write them. */
+    z.object({
+        type: z.literal('impact.save'),
+        concerns: z.record(z.string().min(1).max(40), z.array(concern).max(20)),
+        added: z.array(z.object({ title: z.string().trim().min(1).max(80), concerns: z.array(concern).max(20) })).max(6)
+    }),
+    /** Send the saved concerns to the agent, which investigates them and writes Trade-offs. */
+    z.object({ type: z.literal('impact.send') }),
+    /** Agree with a finding, reword it, or reject it with a reason. */
+    z
+        .object({
+            type: z.literal('item.react'),
+            itemId: recordId,
+            verdict,
+            text: z.string().trim().max(8000).optional(),
+            reason: z.string().trim().max(2000).optional()
+        })
+        .refine((react) => react.verdict !== 'reword' || Boolean(react.text), {
+            message: 'a rewording needs your text',
+            path: ['text']
+        })
+        .refine((react) => react.verdict !== 'reject' || Boolean(react.reason), {
+            message: 'say why you reject it',
+            path: ['reason']
+        }),
+    /** Turn a comment's task on or off, or take its sign-off off. Its key is `item:<id>`, `note:<id>` or `summary`. */
+    z
+        .object({
+            type: z.literal('comment.choose'),
+            key: z.string().min(1).max(200),
+            task: z.boolean().optional(),
+            unsigned: z.boolean().optional()
+        })
+        .refine((choice) => choice.task !== undefined || choice.unsigned !== undefined, {
+            message: 'send `task` or `unsigned`',
+            path: ['task']
+        }),
+    /** Write a comment of the reviewer's own on a line or a file, or change one by its id. */
+    z.object({ type: z.literal('note.save'), id: z.string().min(1).max(40).optional(), ...noteContent.shape }),
+    z.object({ type: z.literal('note.delete'), id: z.string().min(1).max(40) }),
+    /** Edit the summary, delete it, or bring it back. */
+    z
+        .object({
+            type: z.literal('summary.edit'),
+            text: z.string().max(8000).optional(),
+            deleted: z.boolean().optional()
+        })
+        .refine((edit) => edit.text !== undefined || edit.deleted !== undefined, {
+            message: 'send `text` or `deleted`',
+            path: ['text']
+        }),
+    /** The reviewer opened Comments: with every finding reacted to, the round moves to the preview. */
+    z.object({ type: z.literal('comments.open') }),
+    /** Post the round's comments, choosing for each comment on lines the author changed since whether to move it, drop it or post it anyway. */
+    z.object({
+        type: z.literal('comments.post'),
+        choices: z.record(z.string(), z.enum(['reanchor', 'drop', 'anyway'])).optional()
+    }),
+    /** Confirm an earlier comment the agent labelled addressed, so Post resolves it. */
+    z.object({ type: z.literal('earlier.confirm'), key: z.string().min(1).max(200), confirmed: z.boolean() }),
+    z.object({ type: z.literal('preferences.set'), preferences: reviewPreferences })
 ]);
 export type PageRequest = z.infer<typeof pageRequest>;
 export type PageRequestType = PageRequest['type'];
+
+/** The page requests only a review takes. */
+const REVIEW_ONLY_PAGE_REQUESTS: readonly PageRequestType[] = [
+    'take.answer',
+    'reviewers.start',
+    'walkthrough.done',
+    'impact.save',
+    'impact.send',
+    'item.react',
+    'comment.choose',
+    'note.save',
+    'note.delete',
+    'summary.edit',
+    'comments.open',
+    'comments.post',
+    'earlier.confirm',
+    'preferences.set'
+];
 
 /** The page requests an ask takes: answers, suggestions, comments, messages and sending the answers. */
 export const ASK_PAGE_REQUESTS: ReadonlySet<PageRequestType> = new Set<PageRequestType>([
@@ -171,6 +331,28 @@ export const ASK_PAGE_REQUESTS: ReadonlySet<PageRequestType> = new Set<PageReque
     'message.send',
     'ask.done'
 ]);
+
+/** The page requests a review takes: its own, comments and messages, and ending or reopening it. */
+export const REVIEW_PAGE_REQUESTS: ReadonlySet<PageRequestType> = new Set<PageRequestType>([
+    'comment.create',
+    'thread.reply',
+    'comment.resolve',
+    'message.send',
+    'session.end',
+    'session.reopen',
+    ...REVIEW_ONLY_PAGE_REQUESTS
+]);
+
+/** The page requests each session kind takes. */
+export const PAGE_REQUESTS: Record<SessionKind, ReadonlySet<PageRequestType>> = {
+    plan: new Set(
+        pageRequest.options
+            .map((option) => option.shape.type.value)
+            .filter((type) => type !== 'ask.done' && !REVIEW_ONLY_PAGE_REQUESTS.includes(type))
+    ),
+    ask: ASK_PAGE_REQUESTS,
+    review: REVIEW_PAGE_REQUESTS
+};
 
 // ---------------------------------------------------------------- logged events (what the agent reads)
 
@@ -273,13 +455,55 @@ export const loggedEvent = z.discriminatedUnion('type', [
         newRevision: z.number().int(),
         blocks: z.array(z.string()),
         sections: z.array(z.string())
+    }),
+    /** The reviewer answered a your-take card; the page now shows your view beside theirs. */
+    logged.extend({
+        type: z.literal('take.answer'),
+        blockId: z.string(),
+        kind: z.enum(TAKE_KINDS),
+        answer: takeAnswer,
+        /** The answer in words. */
+        summary: z.string()
+    }),
+    /** The reviewer started the round's review: start the `planroom-reviewer` subagents it names, at its model and effort. */
+    logged.extend({ type: z.literal('reviewers.start'), round: z.number().int(), reviewers: reviewerSettings }),
+    /** The reviewer finished or skipped the walkthrough: the findings are showing. */
+    logged.extend({ type: z.literal('walkthrough.done'), how: z.enum(['finished', 'skipped']), round: z.number().int() }),
+    /**
+     * The reviewer sent their questions and concerns on the impact map, under each of your areas (by `id`) and under
+     * areas they added (no `id`): investigate them, then write and publish Trade-offs.
+     */
+    logged.extend({
+        type: z.literal('impact.send'),
+        round: z.number().int(),
+        areas: z.array(z.object({ id: z.string().optional(), title: z.string(), concerns: z.array(z.string()) }))
+    }),
+    logged.extend({
+        type: z.literal('item.react'),
+        itemId: z.string(),
+        title: z.string(),
+        verdict,
+        text: z.string().optional(),
+        reason: z.string().optional()
+    }),
+    /** The reviewer changed their preferences: follow them for slides you have not written yet. */
+    logged.extend({ type: z.literal('preferences.change'), preferences: reviewPreferences }),
+    /** Post ended: how many of the round's comments are on Bitbucket, and which failed. */
+    logged.extend({
+        type: z.literal('review.posted'),
+        round: z.number().int(),
+        posted: z.number().int(),
+        total: z.number().int(),
+        failed: z.array(z.string()),
+        /** Whether the comments went up as drafts the reviewer finishes in Bitbucket. */
+        drafts: z.boolean()
     })
 ]);
 export type LoggedEvent = z.infer<typeof loggedEvent>;
 export type LoggedEventType = LoggedEvent['type'];
 
 /** Logged events that come from the server rather than a page action. */
-export const serverEventTypes: readonly LoggedEventType[] = ['validation.result', 'edit.undone'];
+export const serverEventTypes: readonly LoggedEventType[] = ['validation.result', 'edit.undone', 'review.posted'];
 
 /** A logged event before the log assigns its sequence number and time. */
 export type NewLoggedEvent = LoggedEvent extends infer E ? (E extends LoggedEvent ? Omit<E, 'seq' | 'at'> : never) : never;

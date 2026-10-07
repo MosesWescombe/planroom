@@ -2,6 +2,15 @@ import isEqual from 'lodash/isEqual.js';
 import type { Issue } from '../shared/issues.js';
 import type { QuestionRecord } from '../shared/questions.js';
 import type { BlockRecord, SectionContent, SectionRecord, SuggestionRecord, ThreadRecord } from '../shared/records.js';
+import type {
+    ItemRecord,
+    NoteRecord,
+    ReactionRecord,
+    ReviewRecord,
+    RoundRecord,
+    SlideRecord,
+    TakeRecord
+} from '../shared/review.js';
 import type { BlockContent, RevisionChange } from '../shared/revisions.js';
 import type { SessionState } from '../shared/state.js';
 import type { ActivityEntry, MapField, Patch } from '../shared/view.js';
@@ -172,6 +181,61 @@ export class Draft {
         this.state.sections = this.own('sections', this.state.sections);
         delete this.state.sections[id];
         this.patches.set(`sections:${id}`, { field: 'sections', id, value: null });
+    }
+
+    /** Store a review slide and record its page patch. */
+    putSlide(record: SlideRecord): void {
+        this.state.slides = this.own('slides', this.state.slides);
+        this.state.slides[record.id] = record;
+        this.patches.set(`slides:${record.id}`, { field: 'slides', id: record.id, value: record });
+    }
+
+    /** Store a review finding and record its page patch. */
+    putItem(record: ItemRecord): void {
+        this.state.items = this.own('items', this.state.items);
+        this.state.items[record.id] = record;
+        this.patches.set(`items:${record.id}`, { field: 'items', id: record.id, value: record });
+    }
+
+    /** Store the reviewer's reaction to a finding and record its page patch. */
+    putReaction(itemId: string, record: ReactionRecord): void {
+        this.state.reactions = this.own('reactions', this.state.reactions);
+        this.state.reactions[itemId] = record;
+        this.patches.set(`reactions:${itemId}`, { field: 'reactions', id: itemId, value: record });
+    }
+
+    /** Store the reviewer's answer to a your-take card and record its page patch. */
+    putTake(blockId: string, record: TakeRecord): void {
+        this.state.takes = this.own('takes', this.state.takes);
+        this.state.takes[blockId] = record;
+        this.patches.set(`takes:${blockId}`, { field: 'takes', id: blockId, value: record });
+    }
+
+    /** Store a comment the reviewer wrote and record its page patch. */
+    putNote(record: NoteRecord): void {
+        this.state.notes = this.own('notes', this.state.notes);
+        this.state.notes[record.id] = record;
+        this.patches.set(`notes:${record.id}`, { field: 'notes', id: record.id, value: record });
+    }
+
+    /** Remove a comment the reviewer wrote, and send the page the patch that deletes it. */
+    removeNote(id: string): void {
+        this.state.notes = this.own('notes', this.state.notes);
+        delete this.state.notes[id];
+        this.patches.set(`notes:${id}`, { field: 'notes', id, value: null });
+    }
+
+    /** Replace the review record and record the page patch. */
+    setReview(value: ReviewRecord): void {
+        this.state.review = value;
+        this.patches.set('review', { field: 'review', value });
+    }
+
+    /** Replace one round of the review with `change` applied to it, and record the page patch. */
+    updateRound(n: number, change: (round: RoundRecord) => RoundRecord): void {
+        const review = this.state.review;
+        if (!review) throw new Error('updateRound outside a review');
+        this.setReview({ ...review, rounds: review.rounds.map((round) => (round.n === n ? change(round) : round)) });
     }
 
     /** Replace the agent's understanding and record the page patch. */

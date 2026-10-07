@@ -11,6 +11,7 @@ import {
     understandingRecord,
     validationRecord
 } from './records.js';
+import { itemRecord, noteRecord, reactionRecord, reviewRecord, slideRecord, takeRecord } from './review.js';
 
 /** Bump when the persisted shape changes incompatibly; older files are rejected with a clear message. */
 export const STATE_SCHEMA_VERSION = 1;
@@ -31,18 +32,24 @@ export function planDir(format: PlanFormat, changeId: string): string {
 }
 
 /**
- * What a session is: a `plan`, taken through the four phases to a proposal, or an `ask`, a page of question cards an
- * agent puts to the user at any point in its work, which ends in a transcript of the answers.
+ * What a session is: a `plan`, taken through the four phases to a proposal, an `ask`, a page of question cards an
+ * agent puts to the user at any point in its work, which ends in a transcript of the answers, or a `review` of a PR or
+ * a branch, walked through as a deck, reviewed and turned into comments.
  */
-export const sessionKind = z.enum(['plan', 'ask']);
+export const sessionKind = z.enum(['plan', 'ask', 'review']);
 export type SessionKind = z.infer<typeof sessionKind>;
 
 /** The repo folder asks keep their records in, one folder per ask. Its parent ignores itself in git. */
 export const ASK_ROOT = '.planroom/asks';
 
-/** The repo-relative folder a session keeps its records in: a plan's `.planroom/`, or an ask's own folder. */
+/** The repo folder reviews keep their records and worktree in, one folder per review. */
+export const REVIEW_ROOT = '.planroom/reviews';
+
+/** The repo-relative folder a session keeps its records in: a plan's `.planroom/`, or an ask's or a review's own folder. */
 export function recordsDir(state: Pick<SessionState, 'kind' | 'format' | 'changeId'>): string {
-    return state.kind === 'ask' ? `${ASK_ROOT}/${state.changeId}` : `${planDir(state.format, state.changeId)}/.planroom`;
+    if (state.kind === 'ask') return `${ASK_ROOT}/${state.changeId}`;
+    if (state.kind === 'review') return `${REVIEW_ROOT}/${state.changeId}`;
+    return `${planDir(state.format, state.changeId)}/.planroom`;
 }
 
 /**
@@ -73,9 +80,26 @@ export const sessionState = z.object({
     traces: z.array(traceRecord),
     validation: validationRecord.nullable(),
     phases: phaseState,
+    /** A review's target, PR summary and rounds; null for a plan or an ask. */
+    review: reviewRecord.nullable().default(null),
+    /** A review's slides, staged until the agent publishes its round's deck. */
+    slides: z.record(z.string(), slideRecord).default({}),
+    /** A review's findings. */
+    items: z.record(z.string(), itemRecord).default({}),
+    /** Page-owned: the reviewer's reaction to each finding, by finding id. */
+    reactions: z.record(z.string(), reactionRecord).default({}),
+    /** Page-owned: the reviewer's answer to each `yourTake` card, by block id. */
+    takes: z.record(z.string(), takeRecord).default({}),
+    /** Page-owned: the comments the reviewer wrote on lines and files. */
+    notes: z.record(z.string(), noteRecord).default({}),
     /** The number of write-up revisions recorded; the next one is `revision + 1`. */
     revision: z.number().int().min(0),
-    counters: z.object({ thread: z.number().int(), message: z.number().int(), suggestion: z.number().int() }),
+    counters: z.object({
+        thread: z.number().int(),
+        message: z.number().int(),
+        suggestion: z.number().int(),
+        note: z.number().int().default(0)
+    }),
     /** The highest cursor the agent has read from, returned by `planroom_open` so a new agent session resumes there. */
     agentCursor: z.number().int().min(0),
     /**
@@ -113,8 +137,14 @@ export function emptyState(changeId: string, title: string, now: string, format:
             proposalUnlocked: false,
             acceptedAt: null
         },
+        review: null,
+        slides: {},
+        items: {},
+        reactions: {},
+        takes: {},
+        notes: {},
         revision: 0,
-        counters: { thread: 0, message: 0, suggestion: 0 },
+        counters: { thread: 0, message: 0, suggestion: 0, note: 0 },
         agentCursor: 0,
         lastEvent: null
     };

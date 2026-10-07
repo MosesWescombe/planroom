@@ -5,7 +5,8 @@ import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { repoPath } from '../shared/blocks.js';
+import { htmlConfig, repoPath } from '../shared/blocks.js';
+import { FRAME_CSP, frameDocument } from '../shared/review.js';
 import type { Revision } from '../shared/revisions.js';
 import type { Patch, PlanListing, StreamMessage, View } from '../shared/view.js';
 import { RejectedError } from './draft.js';
@@ -36,6 +37,10 @@ export interface ServedPlan {
     handlePage(input: unknown): Promise<{ seq?: number }>;
     revision(n: number): Revision | undefined;
     readonly store: { readonly assetsDir: string };
+    /** Where code excerpts are read from, when not the repo: a review's worktree. */
+    readonly codeRoot?: string;
+    /** A review round's diff, of one file or all of them. */
+    reviewDiff?(round: number | undefined, file?: string): Promise<{ round: number; patch: string }>;
 }
 
 export interface PageServer {
@@ -109,6 +114,21 @@ export async function readExcerpt(repoRoot: string, file: string, lines: string)
         throw new RejectedError([{ path: 'file', message: `${file} is not a file git tracks` }], 404);
     const text = await fs.readFile(join(repoRoot, file), 'utf8');
     return { file, start, end, lines: text.split('\n').slice(start - 1, end) };
+}
+
+/**
+ * An SVG with its animation taken out, for a reader who asked for reduced motion: CSS animation and transitions off,
+ * and SMIL animation elements removed.
+ * ponytail: a regex over the markup, enough for the illustrator's SVGs; parse it if a hand-made SVG trips it.
+ */
+export function stillSvg(svg: string): string {
+    const without = svg
+        .replace(/<(animate|animateTransform|animateMotion|set)\b[^>]*\/>/gi, '')
+        .replace(/<(animate|animateTransform|animateMotion|set)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+    return without.replace(
+        /<svg\b[^>]*>/i,
+        (tag) => `${tag}<style>*{animation:none!important;transition:none!important}</style>`
+    );
 }
 
 /** End a page's event stream, telling it first that the session is closed so it stops reconnecting. */
@@ -273,10 +293,40 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         else res.json(revision);
     });
 
+    router.get('/api/review/diff', needsPlan, async (req, res) => {
+        const plan = planOf(res);
+        if (!plan.reviewDiff) {
+            res.status(404).json({ error: 'this page is not a review' });
+            return;
+        }
+        const round = req.query.round === undefined ? undefined : Number(req.query.round);
+        const file = req.query.file === undefined ? undefined : String(req.query.file);
+        try {
+            res.json(await plan.reviewDiff(round, file));
+        } catch (error) {
+            sendError(res, error);
+        }
+    });
+
+    /**
+     * An `html` block's document, served on its own with its own policy rather than as a `srcdoc`, which would inherit
+     * the page's `script-src 'self'` and so never run its script. The `sandbox` keeps it off the page's origin.
+     */
+    router.get('/api/frame/:blockId', needsPlan, (req, res) => {
+        const block = planOf(res).view().blocks[req.params.blockId ?? ''];
+        const config = block?.type === 'html' ? htmlConfig.safeParse(block.config).data : undefined;
+        if (!config) {
+            res.status(404).json({ error: 'no such html block' });
+            return;
+        }
+        res.setHeader('Content-Security-Policy', `${FRAME_CSP}; sandbox allow-scripts`);
+        res.type('html').send(frameDocument(config.html));
+    });
+
     router.get('/api/code', async (req, res) => {
         const { plan } = res.locals.served as Served;
-        // A plan from another repo quotes that repo's files.
-        const root = plan instanceof PlanViewer ? plan.repoRoot : options.repoRoot;
+        // A plan from another repo quotes that repo's files, and a review the commit under review.
+        const root = plan instanceof PlanViewer ? plan.repoRoot : (plan?.codeRoot ?? options.repoRoot);
         try {
             res.json(await readExcerpt(root, String(req.query.file ?? ''), String(req.query.lines ?? '')));
         } catch (error) {
@@ -309,7 +359,7 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         }
     });
 
-    router.get('/api/assets/:name', needsPlan, (req, res) => {
+    router.get('/api/assets/:name', needsPlan, async (req, res) => {
         const name = req.params.name ?? '';
         if (!ASSET_NAME.test(name)) {
             res.status(400).json({ error: 'not an asset name' });
@@ -317,6 +367,15 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         }
         // An SVG opened directly must not run script in the page's origin.
         res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        if (req.query.still !== undefined && /\.svg$/i.test(name)) {
+            try {
+                const svg = await fs.readFile(join(planOf(res).store.assetsDir, name), 'utf8');
+                res.type('image/svg+xml').send(stillSvg(svg));
+            } catch {
+                res.status(404).json({ error: `asset ${name} not found` });
+            }
+            return;
+        }
         // `root`, as assets live under `.planroom/`, which a rootless `sendFile` refuses as a dotfile.
         res.sendFile(name, { root: planOf(res).store.assetsDir }, (error) => {
             if (error && !res.headersSent) res.status(404).json({ error: `asset ${name} not found` });

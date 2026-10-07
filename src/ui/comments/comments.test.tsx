@@ -458,7 +458,7 @@ describe('comments on a question card', () => {
         ];
         for (const value of changes) {
             act(() => store.apply([{ field: 'questions', id: 'Q-3', value }]));
-            const reply = within(screen.getByRole('article', { name: 'Question Q-3' })).getByLabelText('Reply');
+            const reply = within(screen.getByRole('dialog')).getByLabelText('Reply');
             expect(reply).toHaveValue('Half a thought');
             expect(reply).toHaveFocus();
         }

@@ -283,7 +283,7 @@ describe('invalid and unknown blocks degrade visibly', () => {
         });
         const sides = document.querySelectorAll('.compare-side');
         expect(defined(sides[0]).querySelector('svg.diagram')).not.toBeNull();
-        expect(sides[1]).toHaveTextContent('Block "missing-flow" is not in the write-up');
+        expect(sides[1]).toHaveTextContent('Block "missing-flow" is not on the page');
         expect(document.querySelector('.block-error')).toBeNull();
     });
 });
@@ -465,6 +465,12 @@ describe('block interactions', () => {
         } finally {
             spies.forEach((spy) => spy.mockRestore());
         }
+    });
+
+    it('zooms a full-screen compare', () => {
+        renderBlock({ id: 'c', type: 'compare', config: blockCatalog.compare.example });
+        fireEvent.click(screen.getByRole('button', { name: 'Full screen' }));
+        expect(within(screen.getByRole('dialog')).getByRole('toolbar', { name: 'Zoom' })).toBeInTheDocument();
     });
 
     it('keeps text blocks in the plain full screen, without zoom', () => {

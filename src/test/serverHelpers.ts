@@ -5,10 +5,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResultSchema, type Notification } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, vi } from 'vitest';
+import type { BitbucketAccess, BitbucketClient, InlineAnchor, PullRequestComment, PullRequestInfo } from '../server/bitbucket.js';
 import { RejectedError } from '../server/draft.js';
 import { createPlanroom } from '../server/mcp.js';
 import type { OpenSpecRunner } from '../server/openspec.js';
+import type { ReviewHost } from '../server/review.js';
 import { Session } from '../server/session.js';
+import { git } from '../server/worktree.js';
 import type { AgentEvent } from '../shared/events.js';
 import type { SectionItem, ValidationRecord } from '../shared/records.js';
 import type { PlanFormat, SessionKind } from '../shared/state.js';
@@ -78,6 +81,39 @@ export async function tempRepo(): Promise<string> {
     await mkdir(join(dir, 'openspec', 'changes'), { recursive: true });
     onCleanup(() => rm(dir, { recursive: true, force: true }));
     return dir;
+}
+
+/** A throwaway git repo for review tests: commit files on branches, and read them back. */
+export interface GitRepo {
+    dir: string;
+    run(args: string[]): Promise<string>;
+    /** Write `files` (a null content deletes one), commit them, and return the commit's hash. */
+    commit(files: Record<string, string | null>, message?: string): Promise<string>;
+}
+
+/** A git repo on `main` with one commit, removed after the test. */
+export async function gitRepo(): Promise<GitRepo> {
+    const dir = await tempRepo();
+    const run = (args: string[]) => git(dir, ['-c', 'user.email=dev@example.com', '-c', 'user.name=Dev', ...args]);
+    await run(['init', '--quiet', '-b', 'main']);
+    const repo: GitRepo = {
+        dir,
+        run,
+        async commit(files, message = 'change') {
+            for (const [path, content] of Object.entries(files)) {
+                if (content === null) await rm(join(dir, path));
+                else {
+                    await mkdir(join(dir, path, '..'), { recursive: true });
+                    await writeFile(join(dir, path), content);
+                }
+            }
+            await run(['add', '-A']);
+            await run(['commit', '--quiet', '--allow-empty', '-m', message]);
+            return (await run(['rev-parse', 'HEAD'])).trim();
+        }
+    };
+    await repo.commit({ 'README.md': 'hello\n' }, 'initial');
+    return repo;
 }
 
 export interface Harness {
@@ -164,11 +200,92 @@ export async function eventually(check: () => void | Promise<void>, timeoutMs = 
     }
 }
 
+/** A Bitbucket stand-in that records every call; `fail` makes the nth comment creation (from 1) throw. */
+export interface FakeBitbucket extends BitbucketClient {
+    pr: PullRequestInfo;
+    thread: PullRequestComment[];
+    created: { id: number; body: string; inline?: InlineAnchor; parent?: number; pending: boolean }[];
+    tasks: { id: number; comment: number; body: string; pending: boolean }[];
+    resolvedComments: number[];
+    resolvedTasks: number[];
+    calls: string[];
+    fail?: (attempt: number) => Error | undefined;
+}
+
+export function fakeBitbucket(pr: Partial<PullRequestInfo> = {}): FakeBitbucket {
+    let next = 100;
+    let attempts = 0;
+    const fake: FakeBitbucket = {
+        pr: {
+            title: 'Cap retries',
+            description: 'Caps the retry policy at two attempts.',
+            author: 'Ana',
+            link: 'https://bitbucket.org/acme/api/pull-requests/412',
+            source: { branch: 'feature/retry-policy', commit: '', repo: 'acme/api' },
+            destination: { branch: 'main', commit: '' },
+            ...pr
+        },
+        thread: [],
+        created: [],
+        tasks: [],
+        resolvedComments: [],
+        resolvedTasks: [],
+        calls: [],
+        async pullRequest(ref) {
+            fake.calls.push(`pullRequest ${ref.workspace}/${ref.repo}#${ref.number}`);
+            return fake.pr;
+        },
+        async comments() {
+            fake.calls.push('comments');
+            return fake.thread;
+        },
+        async createComment(_ref, comment) {
+            fake.calls.push('createComment');
+            attempts += 1;
+            const failure = fake.fail?.(attempts);
+            if (failure) throw failure;
+            next += 1;
+            fake.created.push({ id: next, ...comment });
+            return next;
+        },
+        async createTask(_ref, task) {
+            fake.calls.push('createTask');
+            next += 1;
+            fake.tasks.push({ id: next, ...task });
+            return next;
+        },
+        async resolveComment(_ref, id) {
+            fake.calls.push('resolveComment');
+            fake.resolvedComments.push(id);
+        },
+        async resolveTask(_ref, id) {
+            fake.calls.push('resolveTask');
+            fake.resolvedTasks.push(id);
+        }
+    };
+    return fake;
+}
+
+/** A review host over `client`, ready to post unless `problem` says what is missing. */
+export function reviewHostWith(client: BitbucketClient, preferencesFile: string, problem?: string): ReviewHost {
+    const access: BitbucketAccess = problem ? { client, ready: false, problem } : { client, ready: true };
+    return { access, preferencesFile };
+}
+
 /** A Planroom MCP server, by default the planning server, connected to an in-memory client. */
 export async function connect(
-    options: { kind?: SessionKind; opened?: boolean; cli?: (repo: string) => OpenSpecRunner; registryFile?: string } = {}
+    options: {
+        kind?: SessionKind;
+        opened?: boolean;
+        cli?: (repo: string) => OpenSpecRunner;
+        registryFile?: string;
+        /** The repo to serve, instead of a fresh one. */
+        repoRoot?: string;
+        reviewHost?: ReviewHost;
+    } = {}
 ) {
-    const repo = await tempRepo();
+    const repo = options.repoRoot ?? (await tempRepo());
+    const { reviewHost } = options;
     const uiDir = await tempRepo();
     await writeFile(join(uiDir, 'index.html'), '<!doctype html><title>Planroom</title>');
     const cli = options.cli?.(repo) ?? fakeCli(repo);
@@ -180,7 +297,8 @@ export async function connect(
         uiDir,
         cli,
         openBrowser,
-        ...(options.registryFile ? { registryFile: options.registryFile } : {})
+        ...(options.registryFile ? { registryFile: options.registryFile } : {}),
+        ...(reviewHost ? { reviewHost: async () => reviewHost } : {})
     });
     const client = new Client({ name: 'test', version: '0' });
     const notifications: Notification[] = [];

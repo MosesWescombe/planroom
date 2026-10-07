@@ -1,4 +1,5 @@
 import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { CloseIcon } from './icons';
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -9,6 +10,8 @@ const openDialogs: object[] = [];
 /**
  * A dialog over the page: Escape and the backdrop close it, Tab stays inside it, and
  * focus returns to where it was when it closes. Dialogs nest; keys go to the innermost.
+ * It renders into the body, so no stacking context it is opened from (a slide's view
+ * transition, say) can put the side panel over it.
  */
 export function Modal({
     label,
@@ -57,7 +60,7 @@ export function Modal({
             previous?.focus?.();
         };
     }, []);
-    return (
+    return createPortal(
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
             <div ref={dialog} className={`modal ${className}`} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}>
                 <button type="button" className="icon-button modal-close" aria-label="Close" onClick={onClose}>
@@ -65,6 +68,7 @@ export function Modal({
                 </button>
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PagePhase } from './derive.js';
+import type { ReviewPreferences } from './review.js';
 import type { RevisionMeta } from './revisions.js';
 import type { SpecDelta } from './specDelta.js';
 import type { PlanFormat, SessionState } from './state.js';
@@ -85,6 +86,12 @@ export interface View
         | 'validation'
         | 'phases'
         | 'revision'
+        | 'review'
+        | 'slides'
+        | 'items'
+        | 'reactions'
+        | 'takes'
+        | 'notes'
     > {
     agent: AgentStatus;
     activity: ActivityEntry[];
@@ -96,6 +103,10 @@ export interface View
     viewOnly?: true;
     /** Set on a plan from another repo than the page server's: that repo's absolute path. */
     elsewhere?: string;
+    /** A review's preferences, from this machine's `review.json`. */
+    preferences?: ReviewPreferences;
+    /** Whether a review can post to Bitbucket, and if not, what to set up. The credentials themselves never reach the page. */
+    postable?: { ready: boolean; problem?: string };
 }
 
 /** Where a plan stands: its page phase while it takes edits, or how the user ended it. */
@@ -128,7 +139,12 @@ export type MapField =
     | 'blocks'
     | 'threads'
     | 'checklistTicks'
-    | 'confirmedAssumptions';
+    | 'confirmedAssumptions'
+    | 'slides'
+    | 'items'
+    | 'reactions'
+    | 'takes'
+    | 'notes';
 
 /** View fields replaced whole. */
 export type ScalarField = Exclude<keyof View, MapField | 'changeId' | 'kind' | 'format' | 'createdAt' | 'viewOnly' | 'elsewhere'>;
@@ -145,7 +161,12 @@ export const MAP_FIELDS: readonly MapField[] = [
     'blocks',
     'threads',
     'checklistTicks',
-    'confirmedAssumptions'
+    'confirmedAssumptions',
+    'slides',
+    'items',
+    'reactions',
+    'takes',
+    'notes'
 ];
 
 /** Whether a patch replaces one record of a map field rather than a whole field. */

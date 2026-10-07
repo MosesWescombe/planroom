@@ -22,12 +22,13 @@ export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /**
- * The two Planrooms install sets up, each its skill from `skills/<name>` plus a user-scope MCP server of the same name
- * running `planroom <args>`, so a user can turn planning or asking off on its own in `/skills` and `/mcp`.
+ * The three Planrooms install sets up, each its skill from `skills/<name>` plus a user-scope MCP server of the same name
+ * running `planroom <args>`, so a user can turn planning, asking or reviewing off on its own in `/skills` and `/mcp`.
  */
 const PLANROOMS = [
     { name: SERVER_NAMES.plan, args: ['mcp'] },
-    { name: SERVER_NAMES.ask, args: ['mcp', '--ask'] }
+    { name: SERVER_NAMES.ask, args: ['mcp', '--ask'] },
+    { name: SERVER_NAMES.review, args: ['mcp', '--review'] }
 ];
 
 /** Every link install makes, as `[link, what it points at]`: each skill folder and each agent file. */
@@ -41,7 +42,7 @@ function links({ pkgRoot, configDir }: InstallTarget): Array<[string, string]> {
 
 /**
  * Link the skills and agents into the Claude config, replacing earlier copies or links, and register the user-scope
- * `planroom` and `planroom-ask` MCP servers. Links rather than copies, so upgrading the package upgrades the skills,
+ * `planroom`, `planroom-ask` and `planroom-review` MCP servers. Links rather than copies, so upgrading the package upgrades the skills,
  * the agents and the servers together.
  */
 export function install(target: InstallTarget, claude: ClaudeCli): void {

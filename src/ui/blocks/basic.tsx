@@ -7,6 +7,7 @@ import { commentOnWhole } from '../comments/composer';
 import { LinkedText, QuestionLink } from '../components/LinkedText';
 import { InlineMarkdown, Markdown } from '../components/Markdown';
 import { formatValue } from '../format';
+import { useReducedMotion } from '../hooks';
 import { useReadOnly } from '../readOnly';
 import { deepEqual, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
@@ -301,6 +302,8 @@ const PIN_SIZE = 28;
 
 /** An image from the change's assets with numbered pins; a missing file says so, and a new `src` tries again. */
 export function ImageBlock({ config }: BlockProps<'image'>) {
+    // Under reduced motion an animated SVG comes still.
+    const still = useReducedMotion();
     // Which src failed, so an image re-sent under another name loads afresh rather than keeping the old failure.
     const [failedSrc, setFailedSrc] = useState<string>();
     const failed = failedSrc === config.src;
@@ -335,7 +338,7 @@ export function ImageBlock({ config }: BlockProps<'image'>) {
                         {config.src.replace('asset:', '')} is not in the change&apos;s .planroom/assets/ folder.
                     </p>
                 ) : (
-                    <img src={assetUrl(config.src)} alt={config.alt} onError={() => setFailedSrc(config.src)} />
+                    <img src={assetUrl(config.src, still)} alt={config.alt} onError={() => setFailedSrc(config.src)} />
                 )}
                 {!failed &&
                     config.pins.map((pin, index) => (

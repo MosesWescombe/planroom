@@ -80,8 +80,8 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
     }, [scale]);
 
     // The content's unscaled size, re-measured as the viewport or the content changes, e.g. when an image loads. It
-    // lays out at the viewport's width first: a picture narrower than that gives the width, so zooming in never
-    // scrolls into empty space beside it.
+    // lays out at the viewport's width first: pictures spanning less than that give the width, so zooming in never
+    // scrolls into empty space beside them. The span covers every picture, so a compare keeps both sides.
     useLayoutEffect(() => {
         const view = viewport.current;
         const inner = content.current;
@@ -89,9 +89,13 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
         const measure = () => {
             const room = view.clientWidth;
             inner.style.width = `${room}px`;
-            const pictures = [...inner.querySelectorAll('svg, img')].filter((picture) => !picture.closest('button'));
-            const widest = Math.max(0, ...pictures.map((picture) => picture.getBoundingClientRect().width / current.current));
-            const width = widest > 0 && widest < room ? Math.ceil(widest) : room;
+            const boxes = [...inner.querySelectorAll('svg, img')]
+                .filter((picture) => !picture.closest('button'))
+                .map((picture) => picture.getBoundingClientRect());
+            const span = boxes.length
+                ? (Math.max(...boxes.map((box) => box.right)) - Math.min(...boxes.map((box) => box.left))) / current.current
+                : 0;
+            const width = span > 0 && span < room ? Math.ceil(span) : room;
             inner.style.width = `${width}px`;
             const height = inner.offsetHeight;
             setSize({ width, height });

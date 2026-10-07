@@ -233,8 +233,26 @@ describe('page data', () => {
         const asset = await raw(port, 'GET', `${path}api/assets/shot.svg`);
         expect(asset.status).toBe(200);
         expect(asset.headers['content-security-policy']).toContain('sandbox');
+        // A script in an SVG asset never runs: no script source is allowed, and the asset is its own sandbox.
+        expect(asset.headers['content-security-policy']).toMatch(/default-src 'none'/);
+        expect(asset.headers['content-security-policy']).not.toMatch(/script-src/);
         expect((await raw(port, 'GET', `${path}api/assets/..%2Fstate.json`)).status).toBe(400);
         expect((await raw(port, 'GET', `${path}api/assets/missing.png`)).status).toBe(404);
+    });
+
+    it('serves an SVG still, its CSS and SMIL animation taken out, for reduced motion', async () => {
+        const { session, port, path } = await served();
+        await mkdir(session.store.assetsDir, { recursive: true });
+        await writeFile(
+            join(session.store.assetsDir, 'spin.svg'),
+            '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"><animate attributeName="r" values="4;8" dur="1s"/></circle><set attributeName="x" to="1"></set></svg>'
+        );
+        const still = await raw(port, 'GET', `${path}api/assets/spin.svg?still=1`);
+        expect(still.status).toBe(200);
+        expect(still.headers['content-security-policy']).toContain('sandbox');
+        expect(still.body).toBe(
+            '<svg xmlns="http://www.w3.org/2000/svg"><style>*{animation:none!important;transition:none!important}</style><circle r="4"></circle></svg>'
+        );
     });
 
     it('pasted screenshot: saved as a new asset, and anything but a raster image is refused', async () => {

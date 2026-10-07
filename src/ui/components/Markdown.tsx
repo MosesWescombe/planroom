@@ -73,3 +73,90 @@ export function InlineMarkdown({ source }: { source: string }) {
         </ReactMarkdown>
     );
 }
+
+/** What a Bitbucket comment renders, as Bitbucket's Python-Markdown does: no raw HTML, task lists or suggestion blocks. */
+const BITBUCKET = [...DOCUMENT];
+
+/** A pipe table's separator row, `| --- | :-: |`. */
+const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/** A pipe table row's cells. */
+function cells(line: string): string[] {
+    return line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map((cell) => cell.trim());
+}
+
+/** The source cut into pipe tables and the Markdown between them, fenced code left whole. */
+function splitTables(source: string): ({ table: string[][] } | { text: string })[] {
+    const lines = source.split('\n');
+    const parts: ({ table: string[][] } | { text: string })[] = [];
+    let text: string[] = [];
+    let fenced = false;
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index] ?? '';
+        if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+        if (!fenced && line.includes('|') && TABLE_RULE.test(lines[index + 1] ?? '')) {
+            const table = [cells(line)];
+            index += 2;
+            while (index < lines.length && (lines[index] ?? '').includes('|') && (lines[index] ?? '').trim()) {
+                table.push(cells(lines[index] ?? ''));
+                index += 1;
+            }
+            index -= 1;
+            if (text.length) parts.push({ text: text.join('\n') });
+            text = [];
+            parts.push({ table });
+            continue;
+        }
+        text.push(line);
+    }
+    if (text.length) parts.push({ text: text.join('\n') });
+    return parts;
+}
+
+/**
+ * A comment as Bitbucket will show it: fenced code, tables, emphasis, lists, links and headings, with raw HTML shown as
+ * literal text and a task list or suggestion block left as the plain text and code Bitbucket makes of them.
+ */
+export function BitbucketMarkdown({ source }: { source: string }) {
+    return (
+        <>
+            {splitTables(source).map((part, index) =>
+                'table' in part ? (
+                    <div key={index} className="table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    {part.table[0]!.map((cell, column) => (
+                                        <th key={column}>
+                                            <InlineMarkdown source={cell} />
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {part.table.slice(1).map((row, rowIndex) => (
+                                    <tr key={rowIndex}>
+                                        {row.map((cell, column) => (
+                                            <td key={column}>
+                                                <InlineMarkdown source={cell} />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <ReactMarkdown key={index} allowedElements={BITBUCKET} unwrapDisallowed components={{ a: components.a }}>
+                        {part.text}
+                    </ReactMarkdown>
+                )
+            )}
+        </>
+    );
+}

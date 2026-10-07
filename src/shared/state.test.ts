@@ -12,6 +12,25 @@ describe('persisted state', () => {
         expect(parseStateFile(JSON.stringify(saved), 'state.json').format).toBe('openspec');
     });
 
+    it.each(['plan', 'ask'] as const)('reads a %s saved before reviews existed, with its records intact', (kind) => {
+        const {
+            review: _review,
+            slides: _slides,
+            items: _items,
+            reactions: _reactions,
+            takes: _takes,
+            notes: _notes,
+            ...state
+        } = {
+            ...emptyState('add-x', 'Add X', 'now'),
+            kind
+        };
+        const saved = { ...state, counters: { thread: 2, message: 1, suggestion: 0 } };
+        const loaded = parseStateFile(JSON.stringify(saved), 'state.json');
+        expect(loaded).toMatchObject({ ...saved, counters: { thread: 2, message: 1, suggestion: 0, note: 0 } });
+        expect(loaded).toMatchObject({ review: null, slides: {}, items: {}, reactions: {}, takes: {}, notes: {} });
+    });
+
     it('rejects an old schema version with a message that says what to do', () => {
         const old = { ...emptyState('add-x', 'Add X', 'now'), schemaVersion: 0 };
         expect(() => parseStateFile(JSON.stringify(old), 'state.json')).toThrow(StateFileError);

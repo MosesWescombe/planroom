@@ -62,6 +62,23 @@ export async function fetchExcerpt(file: string, lines: string): Promise<CodeExc
     return json(await fetch(`api/code?${new URLSearchParams({ file, lines }).toString()}`));
 }
 
+/** One review round's diff of `file`, cached per round and file: a round's commits never change. */
+const diffs = new Map<string, Promise<string>>();
+
+/** Fetch a review round's unified diff of one file. A failed fetch is forgotten, so the next asks again. */
+export function fetchDiff(round: number, file: string): Promise<string> {
+    const key = JSON.stringify([round, file]);
+    let patch = diffs.get(key);
+    if (!patch) {
+        patch = fetch(`api/review/diff?${new URLSearchParams({ round: String(round), file }).toString()}`)
+            .then((response) => json<{ patch: string }>(response))
+            .then((body) => body.patch);
+        patch.catch(() => diffs.delete(key));
+        diffs.set(key, patch);
+    }
+    return patch;
+}
+
 /** Save a pasted image in the change's assets. Resolves with its asset name. */
 export async function uploadAsset(image: Blob): Promise<string> {
     const response = await fetch('api/assets', { method: 'POST', headers: { 'content-type': image.type }, body: image });
@@ -86,9 +103,10 @@ export async function openPlan(changeId: string, repoRoot?: string): Promise<str
     return (await json<{ url: string }>(response)).url;
 }
 
-/** The URL an `asset:<name>` image is served at. */
-export function assetUrl(src: string): string {
-    return `api/assets/${encodeURIComponent(src.replace(/^asset:/, ''))}`;
+/** The URL an `asset:<name>` image is served at; `still` asks for an SVG with its animation taken out. */
+export function assetUrl(src: string, still = false): string {
+    const name = encodeURIComponent(src.replace(/^asset:/, ''));
+    return still && /\.svg$/i.test(name) ? `api/assets/${name}?still=1` : `api/assets/${name}`;
 }
 
 /**

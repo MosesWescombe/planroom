@@ -1,0 +1,4625 @@
+{
+  "schemaVersion": 1,
+  "changeId": "add-planroom-review",
+  "title": "Planroom Review: a visual, interactive walkthrough for reviewing other people's PRs",
+  "kind": "plan",
+  "format": "openspec",
+  "createdAt": "2026-10-07T03:01:05.406Z",
+  "questions": {
+    "Q-1": {
+      "id": "Q-1",
+      "group": "align/purpose",
+      "title": "What should a finished review session leave behind?",
+      "impact": "high",
+      "context": {
+        "why": "This sets what 'done' means and which part gets the most care. Pick every outcome that must be true at the end of a session."
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "understand",
+          "label": "The reviewer can explain the change in their own words",
+          "detail": "Purpose, mechanism and how it interacts with the rest of the code."
+        },
+        {
+          "id": "opinion",
+          "label": "The reviewer has formed their own view of the pros and cons",
+          "detail": "Recorded on the page, not just thought about."
+        },
+        {
+          "id": "triaged",
+          "label": "Every agent finding has been accepted, rejected or reworded"
+        },
+        {
+          "id": "posted",
+          "label": "The approved comments are posted to the PR"
+        },
+        {
+          "id": "verdict",
+          "label": "An approve / request-changes decision is posted too"
+        },
+        {
+          "id": "shareable",
+          "label": "A shareable copy of the walkthrough exists",
+          "detail": "For example an HTML or PDF export, like the write-up export, that the author or team can open."
+        }
+      ],
+      "allowOther": true,
+      "topic": "Session outcome",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "opinion",
+          "understand",
+          "triaged",
+          "posted",
+          "shareable"
+        ],
+        "version": 1,
+        "at": "2026-10-07T03:31:39.329Z"
+      },
+      "createdAt": "2026-10-07T03:02:42.721Z",
+      "updatedAt": "2026-10-07T03:31:39.329Z"
+    },
+    "Q-2": {
+      "id": "Q-2",
+      "group": "align/scope",
+      "title": "Which PR hosts must it read from and post to?",
+      "impact": "high",
+      "context": {
+        "why": "Posting comments is host-specific, and the preview has to show what the host will really render. Your work repos are on Bitbucket; Planroom itself is on GitHub.",
+        "findings": [
+          "GitHub has a review object: one atomic `POST /pulls/{n}/reviews` with a body, inline `comments[]` (path, line, side, start_line) and an event (COMMENT / REQUEST_CHANGES / APPROVE), or PENDING to submit later. `gh pr review` cannot add inline comments, so this goes through `gh api`.",
+          "Bitbucket Cloud has no review object: each inline comment is its own `POST .../pullrequests/{id}/comments` with `inline {path, from, to}` and an optional `pending` (draft) flag; approve, request-changes and tasks are separate endpoints.",
+          "Bitbucket auth is API tokens now (app passwords removed 2026-07-28), sent as basic auth with the Atlassian email, as the pr-description skill does with `$BITBUCKET_API_TOKEN`.",
+          "Suggested-change blocks are native on GitHub; on Bitbucket they are a single-line UI feature with no documented API syntax.",
+          "Neither host needs a local checkout to read the PR's metadata and diff."
+        ],
+        "refs": [
+          "~/.claude/skills/pr-description/SKILL.md"
+        ]
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "bitbucket",
+          "label": "Bitbucket Cloud"
+        },
+        {
+          "id": "github",
+          "label": "GitHub"
+        },
+        {
+          "id": "local",
+          "label": "A local branch with no PR (walkthrough and review only, nothing posted)"
+        }
+      ],
+      "allowOther": true,
+      "topic": "PR hosts",
+      "status": "answered",
+      "version": 4,
+      "contentVersion": 2,
+      "answer": {
+        "choices": [
+          "bitbucket",
+          "local"
+        ],
+        "version": 2,
+        "at": "2026-10-07T03:33:05.070Z"
+      },
+      "createdAt": "2026-10-07T03:02:42.721Z",
+      "updatedAt": "2026-10-07T03:33:05.070Z"
+    },
+    "Q-3": {
+      "id": "Q-3",
+      "group": "align/users",
+      "title": "Who is this for?",
+      "impact": "medium",
+      "context": {
+        "why": "Planroom is a public npm package. Decides whether it can lean on tools only your machine has (the TWG skills, your Bitbucket setup) or must work for anyone who installs it."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "package",
+          "label": "Anyone who installs the package",
+          "detail": "Works with plain git plus the host's CLI or API; nothing machine-specific.",
+          "tradeoff": "Fits how planroom and planroom-ask ship today.",
+          "recommended": true
+        },
+        {
+          "id": "me",
+          "label": "Mainly me and my team",
+          "detail": "Free to depend on this machine's skills and conventions."
+        }
+      ],
+      "topic": "Audience",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "package",
+        "version": 1,
+        "at": "2026-10-07T03:34:44.820Z"
+      },
+      "createdAt": "2026-10-07T03:02:42.721Z",
+      "updatedAt": "2026-10-07T03:34:44.820Z"
+    },
+    "Q-4": {
+      "id": "Q-4",
+      "group": "align/scope",
+      "title": "It ships in this package as a third tool: a planroom-review skill, its own MCP server and its own page, installed by `planroom install`, like planroom-ask.",
+      "context": {
+        "why": "That is how planroom-ask was added in 9f86c33 (about 25 to 30 source files, 1000 to 1400 lines of code). A review would be a third session kind on the same seams.",
+        "findings": [
+          "One binary, servers picked by a flag: `planroom mcp --ask` runs the ask server (src/cli.ts:45, :79-90).",
+          "`SessionKind = 'plan' | 'ask'` (src/shared/state.ts:36-38); tool lists, server names and instructions are keyed by it (src/server/mcp.ts:111, :114, :136).",
+          "`planroom install` registers one user-scope MCP server per entry in `PLANROOMS` and links each skill (src/server/install.ts:28-40).",
+          "An ask needs no openspec/ folder and lives at `.planroom/asks/<askId>/`, ignored by git (src/server/session.ts:218, src/server/store.ts:16-27). A review would sit beside it, e.g. `.planroom/reviews/<id>/`.",
+          "Shared for free: event log and `planroom_wait`, channel push, comment threads, blocks, theme, PDF/HTML export. The page branches on `view.kind` in Shell, Rail and TopBar."
+        ],
+        "refs": [
+          "src/server/mcp.ts",
+          "src/server/install.ts",
+          "src/shared/state.ts",
+          "src/server/session.ts",
+          "src/ui/components/Shell.tsx"
+        ]
+      },
+      "input": "assumption",
+      "topic": "Ships as a third tool",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choice": "holds",
+        "version": 2,
+        "at": "2026-10-07T03:33:24.470Z"
+      },
+      "createdAt": "2026-10-07T03:02:42.721Z",
+      "updatedAt": "2026-10-07T03:33:24.470Z"
+    },
+    "Q-5": {
+      "id": "Q-5",
+      "group": "align/scope",
+      "title": "The reviewer runs it from Claude Code inside a local checkout of the PR's repo, so the agent can read the surrounding code to explain how the change interacts with it.",
+      "context": {
+        "why": "Explaining interactions needs more than the diff: callers, the data model, neighbouring features. Both hosts serve the diff without a checkout, but tracing what the change touches beyond the diff needs the code on disk.",
+        "findings": [
+          "twg-code-review prefers provider reads and only makes an isolated worktree when it needs more than the diff (~/.claude/skills/twg-code-review/references/targets-and-providers.md)."
+        ]
+      },
+      "input": "assumption",
+      "topic": "Runs in a local checkout",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choice": "holds",
+        "version": 2,
+        "at": "2026-10-07T03:33:35.828Z"
+      },
+      "createdAt": "2026-10-07T03:02:42.721Z",
+      "updatedAt": "2026-10-07T03:33:35.828Z"
+    },
+    "Q-6": {
+      "id": "Q-6",
+      "group": "align/purpose",
+      "title": "Where should the agent code review come from?",
+      "impact": "high",
+      "context": {
+        "why": "The page needs findings to show, each anchored to a line and each something you can agree with or push back on. They can come from a review the tool runs itself, or from one you already use.",
+        "findings": [
+          "twg-code-review writes a schema-v1 JSON artifact: findings with severity (blocker/important/suggestion), title, anchor {path, line, side}, detail, impact, suggestion and confidence. It needs the machine-specific `twg` binary and only ever posts one top-level comment (~/.claude/skills/twg-code-review/references/review-artifact.md, posting.md).",
+          "The `code-review` plugin is a prompt with no output schema: 5 parallel agents, a 0-100 confidence filter at 80, then one summary comment via `gh pr comment`; no inline comments.",
+          "caveman-review emits paste-ready lines (`<file>:L<line>: <severity>: problem. fix.`); it never posts.",
+          "None of the three keeps per-finding state the reviewer could react to, so importing means mapping their output into the page's own shape anyway."
+        ],
+        "refs": [
+          "~/.claude/skills/twg-code-review/SKILL.md",
+          "~/.claude/skills/caveman-review/SKILL.md"
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "own",
+          "label": "The tool runs its own review as part of the session",
+          "detail": "Subagents review the diff while the walkthrough is being built; the findings arrive in a typed shape the page understands (anchor, severity, claim, evidence, suggested fix, the agent's confidence).",
+          "tradeoff": "One coherent flow and a finding shape designed for the page; another review recipe to maintain.",
+          "recommended": true
+        },
+        {
+          "id": "import",
+          "label": "Import findings from an existing review skill",
+          "detail": "For example twg-code-review's JSON, mapped into the page's shape.",
+          "tradeoff": "Reuses a recipe you trust, but couples the page to another skill's output format, and only twg-code-review has a schema."
+        },
+        {
+          "id": "both",
+          "label": "Its own by default, with import as an option"
+        }
+      ],
+      "topic": "Who reviews the code",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choice": "own",
+        "version": 2,
+        "at": "2026-10-07T03:32:27.125Z"
+      },
+      "createdAt": "2026-10-07T03:02:42.721Z",
+      "updatedAt": "2026-10-07T03:32:27.125Z"
+    },
+    "Q-7": {
+      "id": "Q-7",
+      "group": "align/scope",
+      "title": "What should \"image generation\" mean for the walkthrough?",
+      "impact": "high",
+      "context": {
+        "why": "Claude cannot output raster images, so 'generated images' is either drawn by the agent as vector art or bought from an image API. The second sends text about your code to a third party.",
+        "findings": [
+          "The page can already show an agent-made picture: the agent writes a file into the session's `assets/` folder and references it from an `image` block as `asset:<name>.svg` (png/jpg/gif/webp too), with up to 20 numbered pins for callouts (src/shared/blocks.ts:769-777).",
+          "Assets are served with `Content-Security-Policy: default-src 'none'; sandbox` and shown through `<img>`, so an agent-written SVG cannot run script (src/server/http.ts:312-319).",
+          "No native Claude image generation exists as of 2026; image MCP servers for Claude Code wrap OpenAI, Gemini or FLUX.",
+          "Approximate prices per ~1024px image: OpenAI gpt-image-2 $0.006 low / $0.053 medium / $0.211 high; Gemini 3.1 Flash Image $0.067; FLUX.2 from $0.014; Ideogram 3.0 $0.03 to $0.09 (third-party trackers, verify before relying).",
+          "Data: OpenAI API inputs are not trained on by default but may be kept up to 30 days for abuse monitoring; Gemini paid tier is not trained on, free tier is."
+        ],
+        "refs": [
+          "src/shared/blocks.ts",
+          "src/server/http.ts",
+          "src/ui/blocks/basic.tsx"
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "svg",
+          "label": "Agent-drawn illustrations (SVG), nothing leaves the machine",
+          "detail": "The agent draws analogy scenes, metaphors and annotated sketches as SVG and shows them with the existing `image` block and its pins. Animated SVG and CSS motion cover the 'moving picture' cases.",
+          "tradeoff": "Private, free, no key, works for anyone who installs the package. Looks illustrative (flat, iconic), never photographic, and quality depends on how well the agent draws.",
+          "recommended": true
+        },
+        {
+          "id": "external",
+          "label": "Raster images from an image API",
+          "detail": "The agent writes a prompt per picture; the server calls a provider (e.g. OpenAI or Gemini) with your API key and saves the result as an asset.",
+          "tradeoff": "Richer, more striking pictures, but text and diagrams inside generated images are unreliable, it costs per image, needs a key, and sends descriptions of proprietary code to a third party."
+        },
+        {
+          "id": "both",
+          "label": "SVG by default, an image API as an opt-in",
+          "detail": "Off unless a key is configured; the skill tells the agent when a raster picture is worth it.",
+          "tradeoff": "Best of both, at the cost of a provider integration, settings and a consent story to build and maintain."
+        }
+      ],
+      "allowOther": true,
+      "topic": "Image generation",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "svg",
+        "version": 1,
+        "at": "2026-10-07T03:34:31.812Z"
+      },
+      "createdAt": "2026-10-07T03:03:51.089Z",
+      "updatedAt": "2026-10-07T03:34:31.812Z"
+    },
+    "Q-8": {
+      "id": "Q-8",
+      "group": "explore/walkthrough",
+      "title": "How should the agent build the walkthrough slides?",
+      "impact": "high",
+      "context": {
+        "why": "The review findings and the comment preview are typed records in every direction. What differs is how the visual walkthrough itself is made: from the typed block catalog, as freeform agent-written HTML, or both. Pick the ones worth investigating.",
+        "findings": [
+          "24 typed block types exist today (diagrams, charts, `compare` before/after, `code` diffs, `image` with pins); there is no slide, step-through or paged navigation anywhere in the UI yet (src/shared/blocks.ts:795-810).",
+          "There is no motion beyond a few UI keyframes (src/ui/app.css:1189, :1198); CSS keyframes, SMIL inside SVG and the Web Animations API need no new dependency. SVG shown through `<img>` still plays its own SMIL/CSS animation but runs no script.",
+          "The HTML export clones the open tab's DOM and inlines images as data URLs, with no scripts (src/ui/exportHtml.ts:76-131), so anything that only works with React state will not survive export.",
+          "No HTML sanitiser is installed; assets are served with a `sandbox` CSP (src/server/http.ts:319)."
+        ],
+        "refs": [
+          "src/shared/blocks.ts",
+          "src/ui/exportHtml.ts",
+          "src/server/http.ts",
+          "src/ui/blocks/basic.tsx"
+        ],
+        "blocks": [
+          {
+            "type": "flow",
+            "config": {
+              "direction": "LR",
+              "nodes": [
+                {
+                  "id": "start",
+                  "label": "Reviewer: review <PR link or branch>"
+                },
+                {
+                  "id": "read",
+                  "label": "Agent reads the PR, diff and checkout"
+                },
+                {
+                  "id": "review",
+                  "label": "Review subagents find issues",
+                  "emphasis": "new"
+                },
+                {
+                  "id": "deck",
+                  "label": "Agent builds the walkthrough",
+                  "emphasis": "new"
+                },
+                {
+                  "id": "walk",
+                  "label": "Walkthrough: slides and your-take prompts",
+                  "emphasis": "new"
+                },
+                {
+                  "id": "findings",
+                  "label": "Review: agree, reject or reword each finding",
+                  "emphasis": "new"
+                },
+                {
+                  "id": "preview",
+                  "label": "Comments: exact Bitbucket preview plus your own",
+                  "emphasis": "new"
+                },
+                {
+                  "id": "post",
+                  "label": "Post to the PR"
+                },
+                {
+                  "id": "export",
+                  "label": "Export walkthrough (HTML / PDF)"
+                }
+              ],
+              "edges": [
+                {
+                  "from": "start",
+                  "to": "read"
+                },
+                {
+                  "from": "read",
+                  "to": "review"
+                },
+                {
+                  "from": "read",
+                  "to": "deck"
+                },
+                {
+                  "from": "deck",
+                  "to": "walk"
+                },
+                {
+                  "from": "walk",
+                  "to": "findings"
+                },
+                {
+                  "from": "review",
+                  "to": "findings"
+                },
+                {
+                  "from": "findings",
+                  "to": "preview"
+                },
+                {
+                  "from": "preview",
+                  "to": "post",
+                  "label": "you approve"
+                },
+                {
+                  "from": "walk",
+                  "to": "export",
+                  "style": "dashed",
+                  "label": "any time"
+                }
+              ]
+            },
+            "caption": "A review session, whichever direction builds the slides"
+          },
+          {
+            "type": "optionMatrix",
+            "config": {
+              "options": [
+                "Typed deck",
+                "Freeform HTML slides",
+                "Typed deck + HTML escape hatch"
+              ],
+              "rows": [
+                {
+                  "criterion": "Visual freedom",
+                  "cells": [
+                    {
+                      "text": "Catalog plus SVG illustrations",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "Anything a browser can draw",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Anything, when needed",
+                      "verdict": "good"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Consistent look, dark mode",
+                  "cells": [
+                    {
+                      "text": "From the page theme",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Agent styles every slide",
+                      "verdict": "bad"
+                    },
+                    {
+                      "text": "Mostly themed",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Schema checks, error cards",
+                  "cells": [
+                    {
+                      "text": "Every block validated",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "None",
+                      "verdict": "bad"
+                    },
+                    {
+                      "text": "All but the escape hatch",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Your-take prompts inside slides",
+                  "cells": [
+                    {
+                      "text": "Native blocks",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Outside the slide, or a postMessage bridge",
+                      "verdict": "bad"
+                    },
+                    {
+                      "text": "Native blocks",
+                      "verdict": "good"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "HTML / PDF export",
+                  "cells": [
+                    {
+                      "text": "One slide per PDF page",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Iframes must be inlined",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "Escape-hatch slides need inlining",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Security surface",
+                  "cells": [
+                    {
+                      "text": "No agent HTML or script",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Agent script in a sandboxed iframe",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "Same, but rarer",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Agent tokens per slide",
+                  "cells": [
+                    3,
+                    1,
+                    2
+                  ]
+                },
+                {
+                  "criterion": "Build effort (more dots = less)",
+                  "cells": [
+                    2,
+                    3,
+                    1
+                  ]
+                }
+              ],
+              "recommended": 0
+            },
+            "caption": "The three directions against what the goals need"
+          }
+        ]
+      },
+      "input": "directions",
+      "options": [
+        {
+          "id": "typed",
+          "label": "Typed deck: slides made of catalog blocks, plus a few review blocks",
+          "detail": "The agent sends the walkthrough as typed **slides**: each a titled set of blocks laid out like a write-up section, grouped into chapters (purpose, how it works, what it touches, trade-offs). It reuses all 24 block types, with the `image` block carrying agent-drawn SVG (analogy scenes, metaphors, annotated sketches; their SMIL/CSS animation plays inside `<img>`). It adds a few review blocks, for example:\n\n- **analogy**: \"this change is like X\", a mapping of real parts to the analogy beside an illustration;\n- **step-through**: a diagram that animates one step at a time (a request moving through the new code);\n- **your take**: asks you to predict, rate or list pros and cons before the agent's view is revealed, and sends your answer back to the agent.\n\nTouches: a `review` session kind, slide and finding events, Walkthrough / Review / Comments tabs, the new blocks, and a Bitbucket poster.",
+          "tradeoff": "Wins on consistency, validation, export and safety, and every visual the agent makes is cheap to send. Loses some freedom: a visual the catalog cannot express has to be drawn as an SVG illustration or not at all.",
+          "recommended": true,
+          "blocks": [
+            {
+              "type": "architecture",
+              "config": {
+                "groups": [
+                  {
+                    "label": "Agent",
+                    "nodes": [
+                      "skill",
+                      "subs"
+                    ]
+                  },
+                  {
+                    "label": "Planroom server",
+                    "nodes": [
+                      "log",
+                      "assets"
+                    ]
+                  },
+                  {
+                    "label": "Page",
+                    "nodes": [
+                      "walk",
+                      "rev",
+                      "com"
+                    ]
+                  }
+                ],
+                "nodes": [
+                  {
+                    "id": "skill",
+                    "label": "planroom-review skill"
+                  },
+                  {
+                    "id": "subs",
+                    "label": "Review subagents"
+                  },
+                  {
+                    "id": "log",
+                    "label": "Event log: slides, findings, reactions",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "assets",
+                    "label": "assets/: agent SVG"
+                  },
+                  {
+                    "id": "walk",
+                    "label": "Walkthrough: deck of block slides",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "rev",
+                    "label": "Review: findings",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "com",
+                    "label": "Comments: preview",
+                    "emphasis": "new"
+                  }
+                ],
+                "links": [
+                  {
+                    "from": "skill",
+                    "to": "log",
+                    "label": "slide.upsert, finding.upsert"
+                  },
+                  {
+                    "from": "subs",
+                    "to": "skill",
+                    "label": "findings"
+                  },
+                  {
+                    "from": "skill",
+                    "to": "assets",
+                    "label": "writes .svg"
+                  },
+                  {
+                    "from": "log",
+                    "to": "walk"
+                  },
+                  {
+                    "from": "log",
+                    "to": "rev"
+                  },
+                  {
+                    "from": "log",
+                    "to": "com"
+                  },
+                  {
+                    "from": "walk",
+                    "to": "log",
+                    "label": "your takes",
+                    "style": "dashed"
+                  },
+                  {
+                    "from": "rev",
+                    "to": "log",
+                    "label": "agree / reject / reword",
+                    "style": "dashed"
+                  }
+                ]
+              },
+              "caption": "Typed deck: everything on the page is a validated record"
+            }
+          ]
+        },
+        {
+          "id": "html",
+          "label": "Freeform HTML slides in a sandboxed iframe",
+          "detail": "The agent writes each slide as a self-contained HTML/SVG/CSS (and optionally JS) file into the session's assets, and the page shows it in a sandboxed iframe with next / previous. The findings and comment preview are typed, as in the other directions. Your-take prompts sit in a panel beside the slide, or talk to the page through `postMessage`.\n\nTouches: a `review` session kind, a slide-file event, the iframe host with a strict sandbox and CSP, finding events, the Review and Comments tabs, and a Bitbucket poster.",
+          "tradeoff": "Maximum freedom: any layout, any animation, real interactivity, and Claude is fluent in HTML. Loses theming and dark mode consistency, every slide is unchecked, it costs many more tokens per slide, export has to inline iframes, and agent-written script runs on the reviewer's machine (sandboxed, but a new surface).",
+          "blocks": [
+            {
+              "type": "architecture",
+              "config": {
+                "groups": [
+                  {
+                    "label": "Agent",
+                    "nodes": [
+                      "skill"
+                    ]
+                  },
+                  {
+                    "label": "Planroom server",
+                    "nodes": [
+                      "log",
+                      "files"
+                    ]
+                  },
+                  {
+                    "label": "Page",
+                    "nodes": [
+                      "frame",
+                      "side",
+                      "rev"
+                    ]
+                  }
+                ],
+                "nodes": [
+                  {
+                    "id": "skill",
+                    "label": "planroom-review skill"
+                  },
+                  {
+                    "id": "log",
+                    "label": "Event log: slide refs, findings"
+                  },
+                  {
+                    "id": "files",
+                    "label": "assets/: slide-N.html",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "frame",
+                    "label": "Sandboxed iframe",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "side",
+                    "label": "Your-take panel beside the slide"
+                  },
+                  {
+                    "id": "rev",
+                    "label": "Review and Comments tabs"
+                  }
+                ],
+                "links": [
+                  {
+                    "from": "skill",
+                    "to": "files",
+                    "label": "writes HTML"
+                  },
+                  {
+                    "from": "skill",
+                    "to": "log"
+                  },
+                  {
+                    "from": "files",
+                    "to": "frame"
+                  },
+                  {
+                    "from": "frame",
+                    "to": "side",
+                    "label": "postMessage",
+                    "style": "dashed"
+                  },
+                  {
+                    "from": "log",
+                    "to": "rev"
+                  }
+                ]
+              },
+              "caption": "Freeform: slides are opaque HTML files"
+            }
+          ]
+        },
+        {
+          "id": "hybrid",
+          "label": "Typed deck plus a sandboxed HTML escape hatch",
+          "detail": "The typed deck, plus one `html` slide or block for the rare visual the catalog and SVG cannot express, the way `mermaid` is the escape hatch for diagrams today. The skill tells the agent to reach for it only when no block fits.\n\nTouches: everything in the typed deck, plus the iframe host from the freeform direction.",
+          "tradeoff": "Keeps the typed deck's consistency for most slides and leaves room for the odd bespoke interactive visual. Costs both builds, and the escape hatch tends to get used more than intended."
+        }
+      ],
+      "topic": "How the walkthrough is built",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "typed",
+          "hybrid"
+        ],
+        "version": 1,
+        "at": "2026-10-07T03:40:41.618Z"
+      },
+      "createdAt": "2026-10-07T03:36:10.779Z",
+      "updatedAt": "2026-10-07T03:40:41.618Z"
+    },
+    "Q-9": {
+      "id": "Q-9",
+      "group": "deep-dive/thinking",
+      "title": "When does the reviewer get to see the agent's findings?",
+      "impact": "high",
+      "context": {
+        "why": "One goal is that you form your own view of the pros and cons. Seeing the agent's verdict first anchors you to it; holding it back until you have recorded your own take is the usual guard against anchoring bias."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "gate",
+          "label": "After the walkthrough and your own take",
+          "detail": "The Review tab unlocks once you finish the walkthrough or deliberately skip ahead (a visible 'skip to findings' that is logged). The review still runs in the background from the start, so nothing waits on it.",
+          "tradeoff": "Best for independent thinking; a reviewer in a hurry has one extra click.",
+          "recommended": true
+        },
+        {
+          "id": "nudge",
+          "label": "Any time, with a prompt to record your take first",
+          "tradeoff": "No friction, but the nudge is easy to ignore."
+        },
+        {
+          "id": "open",
+          "label": "Any time, no gate",
+          "tradeoff": "Fastest; most anchoring."
+        }
+      ],
+      "topic": "When findings appear",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "gate",
+        "version": 1,
+        "at": "2026-10-07T03:45:25.662Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:45:25.662Z"
+    },
+    "Q-10": {
+      "id": "Q-10",
+      "group": "deep-dive/thinking",
+      "title": "Which 'your take' prompts should the walkthrough use to make the reviewer think?",
+      "impact": "high",
+      "context": {
+        "why": "These are the interactive cards inside slides. Each records your answer on the page and, where it makes sense, reveals the agent's view beside it afterwards. My picks: **predict then reveal**, the **pros and cons board** and **rate the risk**; they cover understanding, judgement and risk without turning the walkthrough into a quiz."
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "predict",
+          "label": "Predict, then reveal",
+          "detail": "Before a slide explains something (what this change is for, what this function does on bad input), you write or pick your guess; then the slide reveals the answer."
+        },
+        {
+          "id": "proscons",
+          "label": "Pros and cons board",
+          "detail": "You list the pros and cons you see; then the agent's list appears beside yours with the overlap and the differences highlighted."
+        },
+        {
+          "id": "rate",
+          "label": "Rate the risk per area",
+          "detail": "You rate correctness, performance, security, maintainability (for example 1 to 5); the agent's ratings then show on the same chart."
+        },
+        {
+          "id": "alternative",
+          "label": "What would you have done instead?",
+          "detail": "A free-text prompt on the design choice, answered by the agent's view of the alternatives."
+        },
+        {
+          "id": "check",
+          "label": "Understanding check",
+          "detail": "A short multiple-choice question per chapter; no score is kept, a wrong answer points back to the slide that explains it."
+        }
+      ],
+      "allowOther": true,
+      "topic": "Your-take prompts",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "rate",
+          "check",
+          "proscons",
+          "predict"
+        ],
+        "note": "Part of the feature development should experiment with these. Possibly have settings that controls what the agent will use (user preferences)",
+        "version": 1,
+        "at": "2026-10-07T03:47:21.679Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:47:21.679Z"
+    },
+    "Q-11": {
+      "id": "Q-11",
+      "group": "deep-dive/findings",
+      "title": "What kinds of agent output should the reviewer be able to react to?",
+      "impact": "high",
+      "context": {
+        "why": "Your request mentions reacting to the agent's 'opinions and decisions', which is wider than bug findings. Each kind can become a PR comment once you react to it. My picks: **issues**, **design opinions** and **questions for the author**."
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "issues",
+          "label": "Issues",
+          "detail": "Bugs, risks, missing tests, with an anchor, evidence and a suggested fix."
+        },
+        {
+          "id": "opinions",
+          "label": "Design opinions",
+          "detail": "Judgement calls that could go either way ('polling here instead of a webhook: fine at this volume, but...'), stated with the agent's reasoning."
+        },
+        {
+          "id": "questions",
+          "label": "Questions for the author",
+          "detail": "Things the code does not explain, which the agent thinks only the author can answer."
+        },
+        {
+          "id": "strengths",
+          "label": "Strengths worth saying",
+          "detail": "Good decisions the agent would call out, so the review is not only criticism."
+        }
+      ],
+      "allowOther": true,
+      "topic": "What the agent offers",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "opinions",
+          "questions",
+          "issues"
+        ],
+        "version": 1,
+        "at": "2026-10-07T03:48:00.195Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:48:00.195Z"
+    },
+    "Q-12": {
+      "id": "Q-12",
+      "group": "deep-dive/findings",
+      "title": "Every agent item gets Agree, Reword or Reject, plus a thread to challenge the agent first. Agree queues the agent's drafted comment, Reword queues your text, and Reject posts nothing but keeps your reason on the page and tells the agent.",
+      "context": {
+        "why": "This is the mapping from your reactions to the auto-generated comments in the preview. Threads reuse the comment threads the planning page already has (ThreadRecord in src/shared/records.ts)."
+      },
+      "input": "assumption",
+      "topic": "Reacting to a finding",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:48:29.547Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:48:29.547Z"
+    },
+    "Q-13": {
+      "id": "Q-13",
+      "group": "deep-dive/findings",
+      "title": "How should the review results be shown visually?",
+      "impact": "medium",
+      "context": {
+        "why": "The Review tab should show the shape of the review at a glance before you go through items one by one. My picks: **pinned onto the walkthrough's diagrams**, **beside the lines in the diff**, and **severity and kind charts**.",
+        "findings": [
+          "Existing blocks cover most of these: `bar` (severity counts), `riskMatrix`, `fileTree`, `code` in diff mode, and node `emphasis` on diagrams (src/shared/blocks.ts:795-810)."
+        ]
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "map",
+          "label": "Pinned onto the walkthrough's diagrams",
+          "detail": "A badge on the node or step each item concerns, so you see where the problems sit in the design you just learned."
+        },
+        {
+          "id": "diff",
+          "label": "Beside the lines in the diff",
+          "detail": "The code block in diff mode, with each item next to its lines."
+        },
+        {
+          "id": "severity",
+          "label": "Severity and kind charts",
+          "detail": "Counts by severity and by kind (issue, opinion, question) at the top."
+        },
+        {
+          "id": "files",
+          "label": "File tree heat map",
+          "detail": "Where the items cluster across files."
+        },
+        {
+          "id": "risk",
+          "label": "Risk matrix",
+          "detail": "Likelihood against impact for the issues."
+        }
+      ],
+      "allowOther": true,
+      "topic": "Showing findings",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "map",
+          "diff",
+          "severity",
+          "files",
+          "risk"
+        ],
+        "note": "again, reviewer customisation is helpful",
+        "version": 1,
+        "at": "2026-10-07T03:49:20.402Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:49:20.402Z"
+    },
+    "Q-14": {
+      "id": "Q-14",
+      "group": "deep-dive/comments",
+      "title": "Should comments the agent drafted be marked as AI-written when posted from your account?",
+      "impact": "high",
+      "context": {
+        "why": "The comments post from the reviewer's own Bitbucket account. Your global instructions require anything posted from your accounts to be clearly marked as AI-written; other users of the package may feel differently."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "drafted",
+          "label": "Mark every comment that started as an agent draft",
+          "detail": "A short line such as '🤖 Drafted by Claude (Planroom Review), posted by <reviewer>' on agreed and reworded comments; nothing on comments you typed from scratch.",
+          "tradeoff": "Honest by default; a light reword still carries the marker.",
+          "recommended": true
+        },
+        {
+          "id": "summary",
+          "label": "Once, in the summary comment",
+          "tradeoff": "Less noise, but a reader of a single inline comment cannot tell."
+        },
+        {
+          "id": "none",
+          "label": "No marker",
+          "tradeoff": "Clean, but breaks your own rule for your account."
+        }
+      ],
+      "allowOther": true,
+      "topic": "AI marker on comments",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "text": "Signed \"- Claude\", removable when reviewer edits majority",
+        "version": 1,
+        "at": "2026-10-07T03:50:19.063Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:50:19.063Z"
+    },
+    "Q-15": {
+      "id": "Q-15",
+      "group": "deep-dive/comments",
+      "title": "Should the tool also post a top-level summary comment beside the inline ones?",
+      "impact": "medium",
+      "input": "single",
+      "options": [
+        {
+          "id": "drafted",
+          "label": "Yes, drafted from your takes and triage, edited in the preview",
+          "detail": "Your overall impression, the pros and cons you recorded and the number of items raised; you edit or delete it before posting.",
+          "recommended": true
+        },
+        {
+          "id": "inline",
+          "label": "No, inline comments only"
+        }
+      ],
+      "topic": "Summary comment",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "drafted",
+        "version": 1,
+        "at": "2026-10-07T03:51:25.432Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:51:25.432Z"
+    },
+    "Q-16": {
+      "id": "Q-16",
+      "group": "deep-dive/comments",
+      "title": "Who sends the comments to Bitbucket when you press Post?",
+      "impact": "high",
+      "context": {
+        "why": "The preview must match what lands on the PR. If the thing that renders the preview is not the thing that posts, they can drift.",
+        "findings": [
+          "An API token with `read:pullrequest:bitbucket` covers reading the PR and its diff and posting comments and tasks; `read:repository:bitbucket` may also be needed for the diff (unconfirmed). Auth is basic auth with the Atlassian email and the token (support.atlassian.com/bitbucket-cloud/docs/api-token-permissions/).",
+          "Limits are 1,000 to 10,000 authenticated requests per rolling hour with a 429 past them, so a burst of 20 to 50 comments is well inside (support.atlassian.com/bitbucket-cloud/docs/api-request-limits/)."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "server",
+          "label": "The Planroom server, from the same records the preview renders",
+          "detail": "The server reads `BITBUCKET_API_TOKEN` and `git config user.email` (the convention the pr-description skill uses) and posts each comment, recording its Bitbucket id. With no token, the Comments tab says what to set and Post stays disabled.",
+          "tradeoff": "Preview equals what is posted, testable with a fake HTTP client, and works even if the agent is busy. The server gains an outbound HTTP client and a credential read.",
+          "recommended": true
+        },
+        {
+          "id": "agent",
+          "label": "The agent, with curl, after a page event",
+          "tradeoff": "No credentials in the server, but the agent re-renders the text and must be online, so the preview and the post can differ."
+        }
+      ],
+      "topic": "Who posts",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choice": "server",
+        "version": 2,
+        "at": "2026-10-07T03:51:37.579Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:51:37.579Z"
+    },
+    "Q-17": {
+      "id": "Q-17",
+      "group": "impacts/failure",
+      "title": "What happens if the PR gets new commits while you review it?",
+      "impact": "medium",
+      "context": {
+        "why": "Inline comments anchor to line numbers of the commit you reviewed. If the author pushes in the meantime, some anchors may point at different code.",
+        "findings": [
+          "The PR's head is `source.commit.hash` on GET .../pullrequests/{id} (api.bitbucket.org/swagger.json).",
+          "An inline anchor is `{path, to}` for a new-file line or `{path, from}` for an old-file line, with `start_to` / `start_from` for a range; Bitbucket marks a comment outdated once its line's content is removed."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "warn",
+          "label": "Check at post time and let you re-anchor, drop or post anyway",
+          "detail": "Before posting, compare the PR's head commit with the one reviewed; if it moved, list the comments whose lines changed.",
+          "recommended": true
+        },
+        {
+          "id": "block",
+          "label": "Refuse to post until the review is refreshed"
+        },
+        {
+          "id": "ignore",
+          "label": "Post regardless"
+        }
+      ],
+      "topic": "New commits mid-review",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choice": "warn",
+        "version": 2,
+        "at": "2026-10-07T03:51:54.730Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:51:54.730Z"
+    },
+    "Q-18": {
+      "id": "Q-18",
+      "group": "impacts/failure",
+      "title": "Posting never double-posts: each comment records its Bitbucket id once created, a partial failure shows which comments failed, and Post retries only those.",
+      "context": {
+        "why": "A burst of 20 to 50 calls can fail part-way (network, rate limit, an expired token)."
+      },
+      "input": "assumption",
+      "topic": "Safe re-posting",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:52:09.557Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:52:09.557Z"
+    },
+    "Q-19": {
+      "id": "Q-19",
+      "group": "deep-dive/deck",
+      "title": "How should the reviewer move through the walkthrough?",
+      "impact": "medium",
+      "input": "single",
+      "options": [
+        {
+          "id": "deck",
+          "label": "One slide at a time, with an overview grid",
+          "detail": "Full-width slides, arrow keys and a chapter progress bar; step-throughs advance with the same keys; a grid view shows every slide for jumping around.",
+          "tradeoff": "Feels like a guided story and gives animation a stage; less skimmable than a scroll.",
+          "recommended": true
+        },
+        {
+          "id": "scroll",
+          "label": "A scrolling story",
+          "detail": "Slides as stacked sections with a sticky chapter rail; animations start as each one scrolls into view.",
+          "tradeoff": "Skimmable and closest to the write-up; weaker sense of being walked through."
+        }
+      ],
+      "topic": "Deck navigation",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "deck",
+        "version": 1,
+        "at": "2026-10-07T03:52:25.953Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:52:25.953Z"
+    },
+    "Q-20": {
+      "id": "Q-20",
+      "group": "deep-dive/deck",
+      "title": "Which new blocks should the deck get?",
+      "impact": "medium",
+      "context": {
+        "why": "Everything else comes from the 24 existing blocks plus agent-drawn SVG through the `image` block. My picks: **analogy**, **step-through** and **your take**.",
+        "findings": [
+          "`compare` is diagrams only today (src/shared/blocks.ts:457); `checklist` shows how an interactive block sends events (blocks.ts:86)."
+        ]
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "analogy",
+          "label": "Analogy",
+          "detail": "'This change is like X': each real part mapped to its counterpart in the analogy, beside an SVG illustration, with where the analogy breaks down."
+        },
+        {
+          "id": "steps",
+          "label": "Step-through",
+          "detail": "A flow or sequence diagram that animates one step at a time with a caption per step (a request travelling through the new code)."
+        },
+        {
+          "id": "take",
+          "label": "Your take",
+          "detail": "The interactive prompt card for the kinds picked in 'Your-take prompts'; answers go back to the agent."
+        },
+        {
+          "id": "compare",
+          "label": "Wider before/after",
+          "detail": "Let `compare` take code and images as well as diagrams."
+        }
+      ],
+      "allowOther": true,
+      "topic": "New review blocks",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "analogy",
+          "steps",
+          "take",
+          "compare"
+        ],
+        "version": 1,
+        "at": "2026-10-07T03:52:46.297Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:52:46.297Z"
+    },
+    "Q-21": {
+      "id": "Q-21",
+      "group": "deep-dive/deck",
+      "title": "Every deck follows the same chapter spine (Why, How it works, What it touches, Trade-offs), and the agent sizes it to the change, roughly 6 to 15 slides.",
+      "context": {
+        "why": "A fixed spine gives every review the same shape, so a reviewer knows where they are, and maps straight onto your three asks: purpose, mechanism, interactions, then pros and cons."
+      },
+      "input": "assumption",
+      "topic": "Chapter spine",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:53:13.611Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:53:13.611Z"
+    },
+    "Q-22": {
+      "id": "Q-22",
+      "group": "deep-dive/deck",
+      "title": "When should slides appear on the page?",
+      "impact": "medium",
+      "input": "single",
+      "options": [
+        {
+          "id": "stream",
+          "label": "One by one as the agent writes them",
+          "detail": "You start reading slide 1 while the rest are drawn; unfinished slides show as placeholders with their titles. The review runs in parallel.",
+          "tradeoff": "No long blank wait; slides later in the deck can arrive while you read.",
+          "recommended": true
+        },
+        {
+          "id": "batch",
+          "label": "All at once when the deck is finished",
+          "tradeoff": "Simpler, but a big PR could mean minutes of nothing."
+        }
+      ],
+      "topic": "When slides appear",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "batch",
+        "note": "The slides should be cohesive, so waiting for them all to be finished removes the risk of editing after reading",
+        "version": 1,
+        "at": "2026-10-07T03:53:57.810Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:53:57.810Z"
+    },
+    "Q-23": {
+      "id": "Q-23",
+      "group": "deep-dive/agents",
+      "title": "How should the built-in review run?",
+      "impact": "medium",
+      "input": "single",
+      "options": [
+        {
+          "id": "dimensions",
+          "label": "Parallel reviewers by dimension, then a verify pass",
+          "detail": "Subagents for correctness, security, performance, design fit and tests; a verify pass drops what it cannot confirm. Each item carries the agent's confidence, which the page shows.",
+          "tradeoff": "Fewer false alarms, which matters when items turn into comments under your name; costs more tokens.",
+          "recommended": true
+        },
+        {
+          "id": "single",
+          "label": "One reviewer subagent",
+          "tradeoff": "Cheaper and faster; noisier."
+        }
+      ],
+      "topic": "Review recipe",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "dimensions",
+        "version": 1,
+        "at": "2026-10-07T03:54:36.689Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:54:36.689Z"
+    },
+    "Q-24": {
+      "id": "Q-24",
+      "group": "deep-dive/agents",
+      "title": "The main agent writes the deck (one voice, one story), an illustrator subagent draws the SVG pictures in parallel from the main agent's briefs, and the review subagents run alongside.",
+      "context": {
+        "why": "Drawing good SVG is slow, self-contained work; the story and the your-take prompts need the whole session."
+      },
+      "input": "assumption",
+      "topic": "Who draws",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:54:56.264Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:54:56.264Z"
+    },
+    "Q-25": {
+      "id": "Q-25",
+      "group": "deep-dive/scope",
+      "title": "A review lives at .planroom/reviews/<id>/ (id from the PR number or the branch), reopens like an ask, and the reviewer can open a thread on any slide or item to ask the agent questions.",
+      "context": {
+        "why": "Same storage and thread machinery as planroom-ask.",
+        "refs": [
+          "src/server/store.ts",
+          "src/shared/records.ts"
+        ]
+      },
+      "input": "assumption",
+      "topic": "Session plumbing",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:55:19.027Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:55:19.027Z"
+    },
+    "Q-26": {
+      "id": "Q-26",
+      "group": "deep-dive/scope",
+      "title": "For a local branch, the change is the branch against its merge base with the default branch, and the Comments tab offers 'copy as Markdown' instead of Post.",
+      "context": {
+        "why": "You asked for a local mode with nothing posted."
+      },
+      "input": "assumption",
+      "topic": "Local branch mode",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:55:42.461Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:55:42.461Z"
+    },
+    "Q-27": {
+      "id": "Q-27",
+      "group": "deep-dive/scope",
+      "title": "The shareable copy reuses the existing per-tab export: the Walkthrough tab exports one slide per PDF page (or one HTML file), step-throughs in their final state, your takes as you answered them.",
+      "context": {
+        "why": "The export already clones the open tab and inlines images (src/ui/exportHtml.ts:98-131); SVG illustrations survive as data URLs."
+      },
+      "input": "assumption",
+      "topic": "Shareable export",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:56:05.415Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:56:05.415Z"
+    },
+    "Q-28": {
+      "id": "Q-28",
+      "group": "deep-dive/scope",
+      "title": "Should the first version support re-reviewing after the author pushes changes?",
+      "impact": "low",
+      "input": "single",
+      "options": [
+        {
+          "id": "later",
+          "label": "Not in v1: each review is a fresh session",
+          "tradeoff": "Smaller first version; a second round starts from scratch.",
+          "recommended": true
+        },
+        {
+          "id": "now",
+          "label": "Yes: show what changed since your last review and which of your comments it addresses"
+        }
+      ],
+      "topic": "Re-review",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "now",
+        "version": 1,
+        "at": "2026-10-07T03:56:13.783Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T03:56:13.783Z"
+    },
+    "Q-29": {
+      "id": "Q-29",
+      "group": "deep-dive/escape-hatch",
+      "title": "What may the HTML escape hatch run?",
+      "impact": "high",
+      "context": {
+        "why": "If it is only HTML and CSS, SVG illustrations already cover it, so the case for the hatch is interactivity. That means agent-written script on your machine, which needs a tight box.",
+        "findings": [
+          "Assets are already served with `default-src 'none'; sandbox` (src/server/http.ts:319), which blocks all script and network. The hatch would need its own policy."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "script",
+          "label": "Script, sandboxed with no network",
+          "detail": "An `<iframe sandbox=\"allow-scripts\">` (opaque origin, no access to the page or its cookies) served with a CSP that allows only inline script and style and data: images, so it cannot fetch anything or send anything out.",
+          "tradeoff": "Real interactive visuals (sliders, simulations); a new, if well-contained, execution surface.",
+          "recommended": true
+        },
+        {
+          "id": "static",
+          "label": "HTML and CSS only, no script",
+          "tradeoff": "Safe and exports cleanly, but adds little over SVG."
+        }
+      ],
+      "direction": "hybrid",
+      "topic": "Escape hatch powers",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "script",
+        "version": 1,
+        "at": "2026-10-07T04:01:55.687Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T04:01:55.687Z"
+    },
+    "Q-30": {
+      "id": "Q-30",
+      "group": "deep-dive/escape-hatch",
+      "title": "Is the escape hatch a block inside a slide, or a whole slide?",
+      "impact": "medium",
+      "input": "single",
+      "options": [
+        {
+          "id": "block",
+          "label": "A block",
+          "detail": "Sits beside typed blocks and your-take cards, so a slide can pair a bespoke visual with normal explanation.",
+          "tradeoff": "More layout cases to get right.",
+          "recommended": true
+        },
+        {
+          "id": "slide",
+          "label": "A whole slide",
+          "tradeoff": "Simple to host, but the bespoke visual cannot share a slide with typed blocks."
+        }
+      ],
+      "direction": "hybrid",
+      "topic": "Escape hatch unit",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "block",
+        "note": "can be either",
+        "version": 1,
+        "at": "2026-10-07T04:02:33.447Z"
+      },
+      "createdAt": "2026-10-07T03:43:39.040Z",
+      "updatedAt": "2026-10-07T04:02:33.447Z"
+    },
+    "Q-31": {
+      "id": "Q-31",
+      "group": "deep-dive/comments",
+      "title": "Should Post publish the comments straight away, or leave them as Bitbucket drafts for you to finish in Bitbucket?",
+      "impact": "high",
+      "context": {
+        "why": "Publishing 20 comments one by one may notify the author 20 times. Bitbucket's own 'Start review / Finish review' batches comments into one notification, but whether comments created through the API join that batch is not documented.",
+        "findings": [
+          "Comments and tasks take a `pending` boolean on create, but the API has no endpoint to publish a pending review; the docs describe publishing only through the UI's 'Finish review' (api.bitbucket.org/swagger.json; support.atlassian.com/bitbucket-cloud/docs/review-code-in-a-pull-request/).",
+          "Who can see pending comments, and whether API-made ones show in the UI's pending review, is unconfirmed."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "publish",
+          "label": "Publish straight away",
+          "detail": "Post creates live comments in one burst; the summary comment goes last.",
+          "tradeoff": "Documented and done from the page in one click; may send one notification per comment.",
+          "recommended": true
+        },
+        {
+          "id": "draft",
+          "label": "Post as drafts, then press 'Finish review' in Bitbucket",
+          "detail": "Needs a spike first to confirm API drafts appear in Bitbucket's pending review; falls back to publishing if not.",
+          "tradeoff": "One notification and a final look in Bitbucket itself, but the last step leaves the page and rests on undocumented behaviour."
+        },
+        {
+          "id": "choose",
+          "label": "Let the reviewer choose per review",
+          "tradeoff": "Both paths to build and test."
+        }
+      ],
+      "topic": "Publish or draft",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "draft",
+        "version": 1,
+        "at": "2026-10-07T03:56:53.251Z"
+      },
+      "createdAt": "2026-10-07T03:45:33.153Z",
+      "updatedAt": "2026-10-07T03:56:53.251Z"
+    },
+    "Q-32": {
+      "id": "Q-32",
+      "group": "deep-dive/comments",
+      "title": "Should a comment on a blocking issue also create a Bitbucket task?",
+      "impact": "low",
+      "context": {
+        "why": "Bitbucket tasks are tick-boxes the author must resolve, and many teams require them closed before merge.",
+        "findings": [
+          "POST .../pullrequests/{id}/tasks takes `{content, comment: {id}}` to attach a task to a comment, under the same `read:pullrequest` scope (api.bitbucket.org/swagger.json)."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "toggle",
+          "label": "A 'make it a task' toggle per comment, on by default for blockers",
+          "recommended": true
+        },
+        {
+          "id": "no",
+          "label": "No tasks, comments only"
+        }
+      ],
+      "topic": "Bitbucket tasks",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "toggle",
+        "version": 1,
+        "at": "2026-10-07T03:58:47.417Z"
+      },
+      "createdAt": "2026-10-07T03:45:33.153Z",
+      "updatedAt": "2026-10-07T03:58:47.417Z"
+    },
+    "Q-33": {
+      "id": "Q-33",
+      "group": "deep-dive/comments",
+      "title": "The agent drafts comments in the Markdown subset Bitbucket renders (no raw HTML, no task lists, no suggestion blocks), suggested fixes go in a fenced code block, and the preview renders that same subset in a Bitbucket-style comment card anchored to its diff lines.",
+      "context": {
+        "why": "There is no public Bitbucket render endpoint, so the preview has to render it itself; keeping drafts inside the supported subset is what makes the preview trustworthy.",
+        "findings": [
+          "Bitbucket comments are Python-Markdown with fenced_code, codehilite, tables, def_list, del, footnotes, sane_lists, abbr and others; arbitrary HTML is not supported; emoji are `:name:` (support.atlassian.com/bitbucket-cloud/docs/markup-comments/).",
+          "Code suggestions exist only in the UI (`/suggestcode`); the API documents no syntax for them.",
+          "The API returns `content.html` for each posted comment, which a test can compare with the preview after a real post."
+        ]
+      },
+      "input": "assumption",
+      "topic": "Preview fidelity",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T03:59:12.895Z"
+      },
+      "createdAt": "2026-10-07T03:45:33.153Z",
+      "updatedAt": "2026-10-07T03:59:12.895Z"
+    },
+    "Q-34": {
+      "id": "Q-34",
+      "group": "deep-dive/thinking",
+      "title": "Where should reviewer preferences live: which your-take prompts the agent uses and how often, and which review views show?",
+      "impact": "medium",
+      "context": {
+        "why": "You want to experiment with the four prompt kinds and the five review views, and let each reviewer customise them. The agent has to see the prompt preferences before it writes the deck, so they cannot live only in the browser.",
+        "findings": [
+          "Page settings (theme, width, send key) are kept in localStorage, which is per port, and every Planroom server gets a new port, so the page re-keys them itself and the server never sees them (src/ui/local.ts:6-13, src/ui/components/Settings.tsx).",
+          "Machine-wide Planroom state already lives under `$XDG_STATE_HOME/planroom/` (src/server/registry.ts:14-16)."
+        ],
+        "refs": [
+          "src/ui/local.ts",
+          "src/ui/components/Settings.tsx",
+          "src/server/registry.ts"
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "settings",
+          "label": "A Review section in the page's Settings, saved per machine and handed to the agent",
+          "detail": "Toggles per prompt kind (predict, pros and cons, risk rating, understanding check), a prompt density (light / normal / heavy), and toggles per review view (diagram pins, diff, charts, file heat map, risk matrix), saved to a file under `$XDG_CONFIG_HOME/planroom/`. The review's open call and `planroom_state` return them, so the agent writes the deck to match; prompt changes mid-review apply to slides not yet written, view changes apply at once.",
+          "tradeoff": "Discoverable and changeable while experimenting; a small server-side preferences file and endpoint.",
+          "recommended": true
+        },
+        {
+          "id": "skill",
+          "label": "Written in the user's own CLAUDE.md or passed when invoking the skill",
+          "tradeoff": "Nothing to build, but invisible on the page and easy to forget."
+        },
+        {
+          "id": "none",
+          "label": "Not in v1: everything on, tuned by editing the skill",
+          "tradeoff": "Smallest, but experimenting means editing the shipped skill."
+        }
+      ],
+      "links": {
+        "dependsOn": [
+          "Q-10",
+          "Q-13"
+        ]
+      },
+      "topic": "Reviewer preferences",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choice": "settings",
+        "version": 2,
+        "at": "2026-10-07T03:59:55.854Z"
+      },
+      "createdAt": "2026-10-07T03:47:42.323Z",
+      "updatedAt": "2026-10-07T03:59:55.854Z"
+    },
+    "Q-35": {
+      "id": "Q-35",
+      "group": "deep-dive/comments",
+      "title": "Agent-drafted comments end with \"- Claude\". The sign-off stays locked on until more than half the words of the agent's draft have changed (a word diff of your text against the draft); past that, a toggle in the preview lets you remove it. Comments you write from scratch never get it.",
+      "context": {
+        "why": "Your answer: signed '- Claude', removable once the reviewer has edited the majority. This pins down what 'majority' means so the preview can show it live (for example '62% yours').",
+        "findings": [
+          "The `diff` package (9.0.0) is already a dependency, so a word diff needs nothing new (package.json)."
+        ],
+        "refs": [
+          "package.json"
+        ]
+      },
+      "input": "assumption",
+      "links": {
+        "dependsOn": [
+          "Q-14"
+        ]
+      },
+      "topic": "Sign-off rule",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T04:00:34.295Z"
+      },
+      "createdAt": "2026-10-07T03:50:26.992Z",
+      "updatedAt": "2026-10-07T04:00:34.295Z"
+    },
+    "Q-36": {
+      "id": "Q-36",
+      "group": "deep-dive/deck",
+      "title": "The agent stages slides privately and publishes the whole deck in one event. Until then the Walkthrough tab shows progress: the chapter outline once planned, slides drafted and illustrations drawn so far, the review's progress, and the PR's title, description and diff stats to orient by.",
+      "context": {
+        "why": "You chose all-at-once so the deck is cohesive and never changes under you. The reviewer still needs something to look at for the minutes it takes, and a sign it is moving."
+      },
+      "input": "assumption",
+      "links": {
+        "dependsOn": [
+          "Q-22"
+        ]
+      },
+      "topic": "While the deck builds",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T04:00:52.731Z"
+      },
+      "createdAt": "2026-10-07T03:54:05.189Z",
+      "updatedAt": "2026-10-07T04:00:52.731Z"
+    },
+    "Q-37": {
+      "id": "Q-37",
+      "group": "deep-dive/rereview",
+      "title": "When the author pushes changes after your review, what does the second round look like?",
+      "impact": "high",
+      "context": {
+        "why": "You want re-review in v1. The open question is whether round two retells the whole change or only what moved since the commit you reviewed.",
+        "findings": [
+          "The review records the commit it reviewed, and the PR's current head is `source.commit.hash`, so the server can compute the diff between the two (`/pullrequests/{id}/commits`, `/diff`; api.bitbucket.org/swagger.json)."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "delta",
+          "label": "A new round in the same review: a short delta deck plus the status of your earlier comments",
+          "detail": "Reopening the review starts round 2 on top of round 1's deck, takes and comments. The agent writes a short deck about only what changed since the reviewed commit (same spine, compressed), reruns the review on the new diff, and the Comments tab adds a 'your earlier comments' section. Round 1 stays readable in a round switcher.",
+          "tradeoff": "Fast to read and keeps the history together; a reviewer who forgot the original change re-reads round 1.",
+          "recommended": true
+        },
+        {
+          "id": "full",
+          "label": "A fresh full deck with the changed parts highlighted",
+          "tradeoff": "Self-contained, but slower to make and to read, and most of it repeats round 1."
+        }
+      ],
+      "links": {
+        "dependsOn": [
+          "Q-28"
+        ]
+      },
+      "topic": "Re-review shape",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "delta",
+        "version": 1,
+        "at": "2026-10-07T04:01:13.279Z"
+      },
+      "createdAt": "2026-10-07T03:56:48.419Z",
+      "updatedAt": "2026-10-07T04:01:13.279Z"
+    },
+    "Q-38": {
+      "id": "Q-38",
+      "group": "deep-dive/rereview",
+      "title": "In a re-review, what should happen with the comments you posted last round?",
+      "impact": "medium",
+      "context": {
+        "why": "'Which of your comments it addresses' can stop at a label, or carry on into replying and resolving, which goes through the same preview and Post flow. My picks: all four, with resolving always behind your confirmation.",
+        "findings": [
+          "Bitbucket comments carry `parent` (replies form a thread) and a `resolution`; `POST .../comments/{comment_id}/resolve` resolves a thread; tasks update through `PUT .../tasks/{task_id}` (api.bitbucket.org/swagger.json)."
+        ]
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "status",
+          "label": "The agent labels each one addressed, partly, not addressed or outdated, with the code that shows it"
+        },
+        {
+          "id": "replies",
+          "label": "Show the author's replies from each Bitbucket thread"
+        },
+        {
+          "id": "draft",
+          "label": "The agent drafts follow-up replies for you to agree, reword or reject, like round-one items"
+        },
+        {
+          "id": "resolve",
+          "label": "Resolve addressed threads and tasks after you confirm, as part of Post"
+        }
+      ],
+      "allowOther": true,
+      "links": {
+        "dependsOn": [
+          "Q-28"
+        ]
+      },
+      "topic": "Earlier comments",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "status",
+          "replies",
+          "draft",
+          "resolve"
+        ],
+        "version": 1,
+        "at": "2026-10-07T04:01:40.217Z"
+      },
+      "createdAt": "2026-10-07T03:56:48.419Z",
+      "updatedAt": "2026-10-07T04:01:40.217Z"
+    },
+    "Q-39": {
+      "id": "Q-39",
+      "group": "deep-dive/scope",
+      "title": "How does the agent get the PR's version of the code to read around the change?",
+      "impact": "medium",
+      "context": {
+        "why": "You confirmed the review runs in a local checkout so the agent can read callers and neighbouring code. But your working copy is probably on your own branch, not the PR's, and round two needs a second commit too.",
+        "findings": [
+          "twg-code-review uses an isolated worktree when it needs more than the diff (~/.claude/skills/twg-code-review/references/targets-and-providers.md)."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "worktree",
+          "label": "A temporary git worktree at the PR's head commit",
+          "detail": "The server fetches the PR's source commit and adds a worktree under the review folder; the agent reads code there and your working copy is never touched. A new round moves it to the new head; ending the review removes it.",
+          "tradeoff": "Safe and repeatable; a fetch and some disk per review.",
+          "recommended": true
+        },
+        {
+          "id": "checkout",
+          "label": "Ask the reviewer to check out the PR branch first",
+          "tradeoff": "Nothing to build, but it disturbs your work in progress and is easy to forget."
+        },
+        {
+          "id": "current",
+          "label": "Read whatever is checked out, with the diff from the API",
+          "tradeoff": "No setup, but the surrounding code may not match the PR."
+        }
+      ],
+      "links": {
+        "dependsOn": [
+          "Q-5"
+        ]
+      },
+      "topic": "Code under review",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "worktree",
+        "version": 1,
+        "at": "2026-10-07T04:03:08.151Z"
+      },
+      "createdAt": "2026-10-07T04:01:54.102Z",
+      "updatedAt": "2026-10-07T04:03:08.151Z"
+    },
+    "Q-40": {
+      "id": "Q-40",
+      "group": "deep-dive/escape-hatch",
+      "title": "The html block fills a whole slide when it is the slide's only block. The skill allows it only for interactive visuals no block or SVG can show (sliders, simulations, playable state). Its own CSP travels inside it as a meta tag, so the HTML export keeps it live with no network access, and the PDF prints its current frame.",
+      "context": {
+        "why": "Your note on the unit: it can be either. This also covers the export, which the escape hatch would otherwise break."
+      },
+      "input": "assumption",
+      "links": {
+        "dependsOn": [
+          "Q-29",
+          "Q-30"
+        ]
+      },
+      "direction": "hybrid",
+      "topic": "Escape hatch rules",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-07T04:03:42.246Z"
+      },
+      "createdAt": "2026-10-07T04:02:47.746Z",
+      "updatedAt": "2026-10-07T04:03:42.246Z"
+    }
+  },
+  "suggestions": {},
+  "understanding": {
+    "text": "A third tool in the Planroom package, **Planroom Review**, for anyone who installs it: its own skill, MCP server and page. It reviews a **Bitbucket Cloud PR** (or a local branch, where nothing is posted), reading code from a temporary worktree at the PR's head.\n\n1. **Walkthrough.** The agent writes a cohesive deck (Why, How it works, What it touches, Trade-offs; about 6 to 15 slides) from typed blocks, agent-drawn SVG illustrations, and new **analogy**, **step-through**, **your take** and wider **before/after** blocks. It is published all at once and read one slide at a time, with an overview grid. Your-take cards (predict then reveal, pros and cons, risk rating, understanding checks) record the reviewer's own view, and per-machine preferences in Settings choose which kinds the agent uses.\n2. **Agent review.** Parallel reviewers by dimension plus a verify pass produce issues, design opinions and questions for the author. They stay hidden until the walkthrough and your takes are done, then show on the diagrams, beside the diff, and in charts, a file heat map and a risk matrix. Each is agreed, reworded or rejected.\n3. **Comments.** A Bitbucket-faithful preview of the inline comments plus a drafted summary. Agent drafts are signed \"- Claude\" until you have rewritten most of them, and blockers can become tasks. The Planroom server posts them as Bitbucket drafts that you finish in Bitbucket (a spike confirms this; otherwise it publishes). It checks for new commits first, and a retry never double-posts.\n\n**Re-review:** after the author pushes, a new round in the same review gets a short delta deck, labels your earlier comments addressed / partly / not / outdated, shows the author's replies, and drafts follow-ups and resolves threads with your confirmation.\n\nStill open between the two directions: whether to add a sandboxed, no-network **html** block as an escape hatch for interactive visuals.",
+    "version": 3,
+    "updatedAt": "2026-10-07T04:02:47.746Z"
+  },
+  "sections": {
+    "summary": {
+      "reviewed": true,
+      "id": "summary",
+      "title": "Summary",
+      "order": 1,
+      "blocks": [
+        "sum-text",
+        "sum-stats"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:33.556Z"
+    },
+    "how": {
+      "reviewed": true,
+      "id": "how",
+      "title": "How a review runs",
+      "order": 2,
+      "blocks": [
+        "run-text",
+        "run-seq",
+        "run-state"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:35.192Z"
+    },
+    "deck": {
+      "reviewed": true,
+      "id": "deck",
+      "title": "The walkthrough deck",
+      "order": 3,
+      "blocks": [
+        "deck-text",
+        "deck-spine",
+        "deck-blocks",
+        "deck-agents"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:38.697Z"
+    },
+    "takes": {
+      "reviewed": true,
+      "id": "takes",
+      "title": "Your takes and preferences",
+      "order": 4,
+      "blocks": [
+        "take-text",
+        "take-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:45.062Z"
+    },
+    "review": {
+      "reviewed": true,
+      "id": "review",
+      "title": "The agent review",
+      "order": 5,
+      "blocks": [
+        "rev-text",
+        "rev-flow",
+        "rev-views",
+        "rev-schema"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:48.742Z"
+    },
+    "comments": {
+      "reviewed": true,
+      "id": "comments",
+      "title": "Comments, preview and posting",
+      "order": 6,
+      "blocks": [
+        "com-text",
+        "com-map",
+        "com-signoff",
+        "com-seq",
+        "com-drafts"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:52.204Z"
+    },
+    "rounds": {
+      "reviewed": true,
+      "id": "rounds",
+      "title": "Re-review rounds",
+      "order": 7,
+      "blocks": [
+        "rr-text",
+        [
+          "rr-state",
+          "rr-api"
+        ]
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:55.865Z"
+    },
+    "html": {
+      "reviewed": true,
+      "id": "html",
+      "title": "The html escape hatch",
+      "order": 8,
+      "blocks": [
+        "html-text",
+        "html-arch"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:07:58.805Z"
+    },
+    "architecture": {
+      "reviewed": true,
+      "id": "architecture",
+      "title": "Architecture",
+      "order": 9,
+      "blocks": [
+        "arch-text",
+        "arch-diagram",
+        "arch-files"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:17.790Z"
+    },
+    "numbers": {
+      "reviewed": true,
+      "id": "numbers",
+      "title": "The numbers",
+      "order": 10,
+      "blocks": [
+        "num-stats",
+        "num-bar",
+        "num-text"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:20.640Z"
+    },
+    "rollout": {
+      "reviewed": true,
+      "id": "rollout",
+      "title": "Rollout",
+      "order": 11,
+      "blocks": [
+        "roll-timeline"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:22.780Z"
+    },
+    "impact": {
+      "reviewed": true,
+      "id": "impact",
+      "title": "Impact on Planroom",
+      "order": 12,
+      "blocks": [
+        "imp-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:24.879Z"
+    },
+    "risks": {
+      "reviewed": true,
+      "id": "risks",
+      "title": "Risks",
+      "order": 13,
+      "blocks": [
+        [
+          "risk-matrix",
+          "risk-table"
+        ]
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:26.892Z"
+    },
+    "acceptance-criteria": {
+      "reviewed": true,
+      "id": "acceptance-criteria",
+      "title": "Acceptance criteria",
+      "order": 14,
+      "blocks": [
+        "acceptance"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:30.483Z"
+    },
+    "assumptions": {
+      "reviewed": true,
+      "id": "assumptions",
+      "title": "Assumptions",
+      "order": 15,
+      "blocks": [
+        "as-names",
+        "as-blocks",
+        "as-models",
+        "as-scope",
+        "as-size",
+        "as-targets"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-07T04:11:49.701Z"
+    }
+  },
+  "blocks": {
+    "sum-text": {
+      "id": "sum-text",
+      "type": "text",
+      "config": {
+        "body": "**Planroom Review** is a third tool in the package, beside planning and asks: a `planroom-review` skill, its own MCP server (`planroom mcp --review`) and its own page. A reviewer runs it from Claude Code inside a checkout of the repo, on a **Bitbucket Cloud PR** or a **local branch** (which posts nothing).\n\n- **Walkthrough.** The agent builds a cohesive deck: why the change exists, how it works, what it touches, and its trade-offs. It uses the block catalog, agent-drawn SVG illustrations and five new blocks, plus, for the rare interactive visual, a sandboxed `html` block. Your-take cards make the reviewer commit to their own view first.\n- **Review.** Parallel reviewers by dimension, then a verify pass, produce issues, design opinions and questions for the author. They are revealed only after the walkthrough, and the reviewer agrees with, rewords or rejects each one.\n- **Comments.** A Bitbucket-faithful preview of the inline comments and a drafted summary. The Planroom server posts them as Bitbucket drafts, and the reviewer finishes the review in Bitbucket.\n- **Rounds.** When the author pushes, a new round covers only what changed and follows up on earlier comments.\n\nThe agent draws every picture itself, so no image service sees the code. The only things sent to Bitbucket are the comments and tasks the reviewer approves."
+      },
+      "refs": [
+        "Q-2",
+        "Q-3",
+        "Q-4",
+        "Q-6",
+        "Q-7",
+        "Q-8"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "sum-stats": {
+      "id": "sum-stats",
+      "type": "stats",
+      "config": {
+        "items": [
+          {
+            "label": "Page tabs: Walkthrough, Review, Comments",
+            "value": 3
+          },
+          {
+            "label": "New blocks",
+            "value": 5
+          },
+          {
+            "label": "New subagents: reviewer, illustrator",
+            "value": 2
+          },
+          {
+            "label": "Estimated code, tests included",
+            "value": "~6k lines",
+            "tone": "attention"
+          }
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "run-text": {
+      "id": "run-text",
+      "type": "text",
+      "config": {
+        "body": "1. The reviewer asks Claude to review a PR link, a PR number or a branch. The skill calls `planroom_review({ target })`.\n2. The server resolves the PR from the `origin` remote and fetches its metadata, diff and head commit. It adds a **temporary git worktree** at that commit under the review folder, returns the page URL, the PR summary, the worktree path and the reviewer's preferences, and opens the page.\n3. The agent reads the diff and the code around it in the worktree. It starts the reviewer subagents (one per dimension) and the illustrator subagent, then writes the deck. Slides are **staged**: the page shows progress (outline, slides drafted, pictures drawn, review progress) but no slide.\n4. `deck.publish` releases the whole deck at once. The reviewer reads it slide by slide and answers the your-take cards.\n5. When the walkthrough is finished (or skipped, which is logged), the **Review** tab unlocks with the verified items. The reviewer reacts to each one.\n6. The **Comments** tab previews every comment exactly as Bitbucket will show it. **Post** checks the PR head, creates the comments and tasks as drafts, and links to Bitbucket to finish the review."
+      },
+      "refs": [
+        "Q-9",
+        "Q-22",
+        "Q-36",
+        "Q-39"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "run-seq": {
+      "id": "run-seq",
+      "type": "sequence",
+      "config": {
+        "actors": [
+          "Reviewer",
+          "Agent",
+          "Subagents",
+          "Planroom server",
+          "Bitbucket"
+        ],
+        "messages": [
+          {
+            "from": 0,
+            "to": 1,
+            "text": "review <PR link or branch>"
+          },
+          {
+            "from": 1,
+            "to": 3,
+            "text": "planroom_review({ target })"
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "text": "GET PR, diff, head commit"
+          },
+          {
+            "from": 3,
+            "to": 1,
+            "text": "url, PR summary, worktree, preferences",
+            "reply": true
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "text": "review by dimension; draw SVG briefs"
+          },
+          {
+            "from": 1,
+            "to": 3,
+            "text": "slide.upsert (staged), one per slide"
+          },
+          {
+            "from": 2,
+            "to": 1,
+            "text": "verified items, SVG files",
+            "reply": true
+          },
+          {
+            "from": 1,
+            "to": 3,
+            "text": "deck.publish, item.upsert"
+          },
+          {
+            "from": 3,
+            "to": 0,
+            "text": "Walkthrough opens"
+          },
+          {
+            "from": 0,
+            "to": 3,
+            "text": "your takes; walkthrough finished"
+          },
+          {
+            "from": 3,
+            "to": 0,
+            "text": "Review tab unlocks",
+            "reply": true
+          },
+          {
+            "from": 0,
+            "to": 3,
+            "text": "agree / reword / reject; own comments"
+          },
+          {
+            "from": 0,
+            "to": 3,
+            "text": "Post"
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "text": "check head; draft comments and tasks"
+          },
+          {
+            "from": 0,
+            "to": 4,
+            "text": "Finish review"
+          }
+        ]
+      },
+      "caption": "One round of a review, end to end",
+      "refs": [
+        "Q-6",
+        "Q-16",
+        "Q-22",
+        "Q-24",
+        "Q-31",
+        "Q-39"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "run-state": {
+      "id": "run-state",
+      "type": "state",
+      "config": {
+        "initial": "building",
+        "states": [
+          "building",
+          "walkthrough",
+          "triage",
+          "preview",
+          "posted",
+          "next round"
+        ],
+        "transitions": [
+          {
+            "from": "building",
+            "to": "walkthrough",
+            "on": "deck.publish"
+          },
+          {
+            "from": "walkthrough",
+            "to": "triage",
+            "on": "finished or skipped (logged)"
+          },
+          {
+            "from": "triage",
+            "to": "preview",
+            "on": "open Comments"
+          },
+          {
+            "from": "preview",
+            "to": "triage",
+            "on": "change a reaction"
+          },
+          {
+            "from": "preview",
+            "to": "posted",
+            "on": "Post succeeds"
+          },
+          {
+            "from": "posted",
+            "to": "next round",
+            "on": "author pushed; review reopened"
+          },
+          {
+            "from": "next round",
+            "to": "building",
+            "on": "delta deck starts"
+          }
+        ]
+      },
+      "caption": "Where a review round stands; the tabs unlock along it",
+      "refs": [
+        "Q-9",
+        "Q-22",
+        "Q-37"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "deck-text": {
+      "id": "deck-text",
+      "type": "text",
+      "config": {
+        "body": "- **Spine.** Every deck has the same four chapters, sized to the change at about 6 to 15 slides.\n- **A slide** is a titled set of blocks in the same layout as a write-up section (rows of two or three side by side). It is sent as `slide.upsert { id, chapter, order, title, blocks }` after the blocks it lists. Slides stay staged until `deck.publish`, and after that the deck does not change in this round.\n- **Navigation.** One slide at a time at full width. Arrow keys and a chapter progress bar move between slides, and a step-through on the slide takes the same keys first. An overview grid shows every slide for jumping around.\n- **Pictures.** The main agent writes a brief per illustration (the analogy, what must be labelled, the size). The illustrator subagent draws it as SVG into the review's `assets/`, and an `image` block shows it with pins. SMIL and CSS animation inside the SVG plays, but no script runs, because assets are served with a `sandbox` CSP.\n- **Motion** uses CSS transitions, the View Transitions API between slides, and step-through state, with no animation library. All of it stops under `prefers-reduced-motion`, where a step-through shows every step at once.\n- **Threads.** The reviewer can open a thread on any slide to ask the agent something, using the existing comment threads."
+      },
+      "refs": [
+        "Q-19",
+        "Q-20",
+        "Q-21",
+        "Q-22",
+        "Q-24",
+        "Q-7"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "deck-spine": {
+      "id": "deck-spine",
+      "type": "timeline",
+      "config": {
+        "steps": [
+          {
+            "label": "Why",
+            "detail": "The problem, who has it, and what the PR promises. An analogy and a predict card ('what do you think this is for?')."
+          },
+          {
+            "label": "How it works",
+            "detail": "The mechanism: step-throughs of the main path, before/after of the design, the key code excerpts."
+          },
+          {
+            "label": "What it touches",
+            "detail": "Callers, data, neighbouring features and their owners, from the worktree: architecture and flow diagrams with the changed parts emphasised."
+          },
+          {
+            "label": "Trade-offs",
+            "detail": "The pros and cons board, the risk rating, the understanding check, and the alternatives the author did not take."
+          }
+        ]
+      },
+      "caption": "The chapter spine every deck follows",
+      "refs": [
+        "Q-21"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "deck-blocks": {
+      "id": "deck-blocks",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Block",
+          "What it shows",
+          "Interactive",
+          "Available in"
+        ],
+        "rows": [
+          [
+            "`analogy`",
+            "'This change is like X': each real part mapped to its counterpart, an optional `asset:` illustration, and where the analogy breaks down",
+            "No",
+            "Every skill"
+          ],
+          [
+            "`stepThrough`",
+            "A flow or sequence diagram plus ordered steps, each lighting up nodes or messages with a caption; arrow keys or buttons advance it",
+            "Steps only",
+            "Every skill"
+          ],
+          [
+            "`yourTake`",
+            "A prompt card: predict, pros and cons, risk rating or understanding check. The answer is logged, then the agent's view is revealed beside it",
+            "Yes",
+            "Review only"
+          ],
+          [
+            "`compare` (wider)",
+            "Before/after that now also takes `code` or `image` sides, not only diagrams",
+            "No",
+            "Every skill"
+          ],
+          [
+            "`html`",
+            "A sandboxed, no-network interactive visual; fills the slide when it is the only block",
+            "Yes, inside its sandbox",
+            "Review only"
+          ]
+        ]
+      },
+      "caption": "The new blocks",
+      "refs": [
+        "Q-20",
+        "Q-10",
+        "Q-29",
+        "Q-30"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "deck-agents": {
+      "id": "deck-agents",
+      "type": "architecture",
+      "config": {
+        "groups": [
+          {
+            "label": "Claude Code session",
+            "nodes": [
+              "main",
+              "ill",
+              "revs"
+            ]
+          },
+          {
+            "label": "Planroom server",
+            "nodes": [
+              "stage",
+              "assets",
+              "wt"
+            ]
+          },
+          {
+            "label": "Page",
+            "nodes": [
+              "deck"
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "main",
+            "label": "Main agent: story, slides, your-take cards"
+          },
+          {
+            "id": "ill",
+            "label": "planroom-illustrator: SVG from briefs",
+            "emphasis": "new"
+          },
+          {
+            "id": "revs",
+            "label": "planroom-reviewer x 5 dimensions + verify",
+            "emphasis": "new"
+          },
+          {
+            "id": "stage",
+            "label": "Staged slides",
+            "emphasis": "new"
+          },
+          {
+            "id": "assets",
+            "label": "assets/*.svg"
+          },
+          {
+            "id": "wt",
+            "label": "Worktree at PR head",
+            "emphasis": "new"
+          },
+          {
+            "id": "deck",
+            "label": "Walkthrough deck",
+            "emphasis": "new"
+          }
+        ],
+        "links": [
+          {
+            "from": "main",
+            "to": "ill",
+            "label": "briefs"
+          },
+          {
+            "from": "main",
+            "to": "revs",
+            "label": "dimensions"
+          },
+          {
+            "from": "ill",
+            "to": "assets",
+            "label": "writes"
+          },
+          {
+            "from": "revs",
+            "to": "wt",
+            "label": "read code"
+          },
+          {
+            "from": "main",
+            "to": "wt",
+            "label": "read code"
+          },
+          {
+            "from": "main",
+            "to": "stage",
+            "label": "slide.upsert"
+          },
+          {
+            "from": "stage",
+            "to": "deck",
+            "label": "deck.publish"
+          },
+          {
+            "from": "assets",
+            "to": "deck"
+          }
+        ]
+      },
+      "caption": "Who makes the deck",
+      "refs": [
+        "Q-23",
+        "Q-24"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "take-text": {
+      "id": "take-text",
+      "type": "text",
+      "config": {
+        "body": "Your-take cards are how the walkthrough makes the reviewer think instead of nod along. Each card logs the answer as a page event and the agent receives it. The card then reveals the agent's own view beside the answer, which the agent wrote when it made the slide and which stays hidden until then.\n\nThe agent's findings stay behind the same rule at the scale of the whole review: the **Review** tab is locked until the reviewer finishes the walkthrough or presses a visible 'skip to findings', which is logged.\n\n**Preferences.** A Review section in Settings holds toggles for each prompt kind, a prompt density (light, normal or heavy) and toggles for each review view. They are saved per machine in `$XDG_CONFIG_HOME/planroom/review.json`, not in localStorage, which is per port. `planroom_review` and `planroom_state` hand them to the agent. A prompt change applies to slides not yet written, and a view change applies at once. The defaults are deliberately easy to change, because the rollout includes trying the prompt kinds on real PRs."
+      },
+      "refs": [
+        "Q-9",
+        "Q-10",
+        "Q-34"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "take-table": {
+      "id": "take-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Kind",
+          "The reviewer",
+          "Then revealed",
+          "Feeds"
+        ],
+        "rows": [
+          [
+            "Predict",
+            "Writes or picks a guess before the slide explains it",
+            "The answer, with the slide's explanation",
+            "Agent's sense of what was unclear"
+          ],
+          [
+            "Pros and cons",
+            "Lists the pros and cons they see",
+            "The agent's list beside theirs, overlap and differences highlighted",
+            "The summary comment draft"
+          ],
+          [
+            "Risk rating",
+            "Rates correctness, performance, security and maintainability from 1 to 5",
+            "The agent's ratings on the same chart",
+            "The summary comment draft"
+          ],
+          [
+            "Understanding check",
+            "Answers a multiple-choice question per chapter, with no score kept",
+            "Right or wrong, and a link back to the slide that explains it",
+            "Nothing posted"
+          ]
+        ]
+      },
+      "caption": "The four your-take kinds",
+      "refs": [
+        "Q-10"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:05:57.191Z"
+    },
+    "rev-text": {
+      "id": "rev-text",
+      "type": "text",
+      "config": {
+        "body": "Five `planroom-reviewer` subagents each review the diff for one dimension (correctness, security, performance, design fit, tests), reading the worktree for context. A **verify pass**, the same agent told to refute rather than find, drops every item it cannot confirm from the code. The page shows each surviving item's confidence.\n\nAn item is one of three kinds:\n\n- **Issue**: a bug, risk or missing test, with a severity (blocker, important, minor), evidence, a suggested fix, and a likelihood and impact for the risk matrix.\n- **Design opinion**: a judgement call, with the agent's reasoning and the alternative it weighed.\n- **Question for the author**: something the code does not explain.\n\nEvery item has an anchor (file plus a new-file or old-file line range), an optional link to a node in the deck's diagrams, and a drafted comment in Bitbucket's Markdown subset. The reviewer can **Agree**, **Reword** or **Reject** it, or open a thread to argue with the agent first. A rejection and its reason go back to the agent, which may withdraw or soften related items before the reviewer reaches them."
+      },
+      "refs": [
+        "Q-11",
+        "Q-12",
+        "Q-13",
+        "Q-23"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "rev-flow": {
+      "id": "rev-flow",
+      "type": "flow",
+      "config": {
+        "direction": "LR",
+        "nodes": [
+          {
+            "id": "in",
+            "label": "Diff + worktree"
+          },
+          {
+            "id": "c",
+            "label": "Correctness"
+          },
+          {
+            "id": "s",
+            "label": "Security"
+          },
+          {
+            "id": "p",
+            "label": "Performance"
+          },
+          {
+            "id": "d",
+            "label": "Design fit"
+          },
+          {
+            "id": "t",
+            "label": "Tests"
+          },
+          {
+            "id": "v",
+            "label": "Verify pass: try to refute each",
+            "emphasis": "new"
+          },
+          {
+            "id": "items",
+            "label": "Items: issue / opinion / question",
+            "emphasis": "new"
+          },
+          {
+            "id": "drop",
+            "label": "Dropped"
+          }
+        ],
+        "edges": [
+          {
+            "from": "in",
+            "to": "c"
+          },
+          {
+            "from": "in",
+            "to": "s"
+          },
+          {
+            "from": "in",
+            "to": "p"
+          },
+          {
+            "from": "in",
+            "to": "d"
+          },
+          {
+            "from": "in",
+            "to": "t"
+          },
+          {
+            "from": "c",
+            "to": "v"
+          },
+          {
+            "from": "s",
+            "to": "v"
+          },
+          {
+            "from": "p",
+            "to": "v"
+          },
+          {
+            "from": "d",
+            "to": "v"
+          },
+          {
+            "from": "t",
+            "to": "v"
+          },
+          {
+            "from": "v",
+            "to": "items",
+            "label": "confirmed"
+          },
+          {
+            "from": "v",
+            "to": "drop",
+            "label": "cannot confirm",
+            "style": "dashed"
+          }
+        ]
+      },
+      "caption": "The built-in review recipe",
+      "refs": [
+        "Q-23",
+        "Q-11"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "rev-schema": {
+      "id": "rev-schema",
+      "type": "schema",
+      "config": {
+        "tables": [
+          {
+            "id": "rounds",
+            "change": "added",
+            "columns": [
+              {
+                "name": "n",
+                "type": "int",
+                "keys": [
+                  "pk"
+                ]
+              },
+              {
+                "name": "base_sha",
+                "type": "text"
+              },
+              {
+                "name": "head_sha",
+                "type": "text"
+              },
+              {
+                "name": "published_at",
+                "type": "time"
+              },
+              {
+                "name": "posted_at",
+                "type": "time"
+              }
+            ]
+          },
+          {
+            "id": "items",
+            "change": "added",
+            "columns": [
+              {
+                "name": "id",
+                "type": "text",
+                "keys": [
+                  "pk"
+                ]
+              },
+              {
+                "name": "round",
+                "type": "int",
+                "keys": [
+                  "fk"
+                ]
+              },
+              {
+                "name": "kind",
+                "type": "issue | opinion | question"
+              },
+              {
+                "name": "severity",
+                "type": "blocker | important | minor"
+              },
+              {
+                "name": "anchor",
+                "type": "path + from/to range"
+              },
+              {
+                "name": "claim",
+                "type": "text"
+              },
+              {
+                "name": "evidence",
+                "type": "text"
+              },
+              {
+                "name": "suggestion",
+                "type": "text"
+              },
+              {
+                "name": "draft",
+                "type": "markdown"
+              },
+              {
+                "name": "confidence",
+                "type": "0..1"
+              },
+              {
+                "name": "risk",
+                "type": "likelihood, impact"
+              },
+              {
+                "name": "diagram_ref",
+                "type": "block + node"
+              }
+            ]
+          },
+          {
+            "id": "reactions",
+            "change": "added",
+            "columns": [
+              {
+                "name": "item_id",
+                "type": "text",
+                "keys": [
+                  "pk",
+                  "fk"
+                ]
+              },
+              {
+                "name": "verdict",
+                "type": "agree | reword | reject"
+              },
+              {
+                "name": "text",
+                "type": "markdown"
+              },
+              {
+                "name": "reason",
+                "type": "text"
+              }
+            ]
+          },
+          {
+            "id": "comments",
+            "change": "added",
+            "columns": [
+              {
+                "name": "id",
+                "type": "text",
+                "keys": [
+                  "pk"
+                ]
+              },
+              {
+                "name": "round",
+                "type": "int",
+                "keys": [
+                  "fk"
+                ]
+              },
+              {
+                "name": "item_id",
+                "type": "text",
+                "keys": [
+                  "fk"
+                ]
+              },
+              {
+                "name": "kind",
+                "type": "inline | summary | reply"
+              },
+              {
+                "name": "body",
+                "type": "markdown"
+              },
+              {
+                "name": "signed",
+                "type": "bool"
+              },
+              {
+                "name": "task",
+                "type": "bool"
+              },
+              {
+                "name": "bitbucket_id",
+                "type": "int"
+              },
+              {
+                "name": "status",
+                "type": "queued | posted | failed"
+              }
+            ]
+          }
+        ],
+        "relations": [
+          {
+            "from": "items",
+            "fromColumn": "round",
+            "to": "rounds",
+            "toColumn": "n"
+          },
+          {
+            "from": "reactions",
+            "fromColumn": "item_id",
+            "to": "items",
+            "toColumn": "id",
+            "cardinality": "one-to-one"
+          },
+          {
+            "from": "comments",
+            "fromColumn": "item_id",
+            "to": "items",
+            "toColumn": "id"
+          },
+          {
+            "from": "comments",
+            "fromColumn": "round",
+            "to": "rounds",
+            "toColumn": "n"
+          }
+        ]
+      },
+      "caption": "What a review keeps in its state.json (records, not a database)",
+      "refs": [
+        "Q-11",
+        "Q-12",
+        "Q-18",
+        "Q-32",
+        "Q-37"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "rev-views": {
+      "id": "rev-views",
+      "type": "table",
+      "config": {
+        "columns": [
+          "View",
+          "Built from",
+          "New work"
+        ],
+        "rows": [
+          [
+            "Diagram pins",
+            "Each item's `diagram_ref`, shown on the deck's flow, sequence and architecture diagrams",
+            "A badge overlay on those diagram renderers"
+          ],
+          [
+            "Beside the diff",
+            "`code` in diff mode per changed file",
+            "Item cards anchored beside their lines in the code viewer"
+          ],
+          [
+            "Severity and kind charts",
+            "`bar` from item counts",
+            "None"
+          ],
+          [
+            "File heat map",
+            "`fileTree` of changed files",
+            "A per-file item count on each row"
+          ],
+          [
+            "Risk matrix",
+            "`riskMatrix` from each issue's likelihood and impact",
+            "None"
+          ]
+        ]
+      },
+      "caption": "The Review tab's views, each one toggled in Settings",
+      "refs": [
+        "Q-13",
+        "Q-34"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "com-text": {
+      "id": "com-text",
+      "type": "text",
+      "config": {
+        "body": "Nothing on the Comments tab is typed twice. Every comment comes from one of three places: a reaction to an item, a comment the reviewer writes on a line or file, or the summary.\n\n- **Preview.** Each comment is drawn as a Bitbucket-style card anchored to its diff lines. It renders only the Markdown subset Bitbucket supports: Python-Markdown with fenced code, tables, emphasis, lists and links, and no raw HTML, task lists or suggestion blocks. The agent drafts inside that subset, and suggested fixes go in fenced code blocks.\n- **Summary.** The agent drafts it from the reviewer's pros and cons, risk ratings and triage counts. The reviewer edits or deletes it, and it posts last.\n- **Tasks.** Each comment has a 'make it a task' toggle, on by default for blocker issues. A task is attached to its comment.\n- **Local branches** get 'Copy as Markdown' in place of Post.\n- **Credentials.** The server reads `BITBUCKET_API_TOKEN` (scope `read:pullrequest:bitbucket`, which covers reading, commenting and tasks) and `git config user.email`. It never sends either to the page or the agent, never writes them to disk, and keeps Post disabled with instructions when either is missing.\n- **Who posts.** The server posts from the same records the preview renders, so what is posted is what was previewed."
+      },
+      "refs": [
+        "Q-14",
+        "Q-15",
+        "Q-16",
+        "Q-26",
+        "Q-32",
+        "Q-33"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "com-map": {
+      "id": "com-map",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Source",
+          "In the preview",
+          "\"- Claude\" sign-off"
+        ],
+        "rows": [
+          [
+            "Agree",
+            "The agent's draft as written",
+            {
+              "text": "Locked on",
+              "tone": "accent"
+            }
+          ],
+          [
+            "Reword",
+            "The reviewer's text",
+            {
+              "text": "Removable once over 50% yours",
+              "tone": "attention"
+            }
+          ],
+          [
+            "Reject",
+            "Nothing; the reason stays on the page and goes to the agent",
+            "n/a"
+          ],
+          [
+            "Own comment",
+            "The reviewer's text on a line or a file",
+            "Never"
+          ],
+          [
+            "Summary",
+            "The agent's draft from your takes and triage, edited",
+            {
+              "text": "Removable once over 50% yours",
+              "tone": "attention"
+            }
+          ],
+          [
+            "Follow-up (round 2+)",
+            "An agent-drafted reply in the earlier comment's thread",
+            {
+              "text": "Same rules as above",
+              "tone": "neutral"
+            }
+          ]
+        ]
+      },
+      "caption": "From reaction to comment",
+      "refs": [
+        "Q-12",
+        "Q-14",
+        "Q-15",
+        "Q-35",
+        "Q-38"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "com-signoff": {
+      "id": "com-signoff",
+      "type": "callout",
+      "config": {
+        "tone": "decision",
+        "title": "The sign-off rule",
+        "body": "Agent-drafted text ends with \"- Claude\". The preview shows how much of each comment is the reviewer's own, for example '62% yours', from a word diff against the draft using the installed `diff` package. At 50% or below the sign-off is locked on; above it, a toggle removes it. A comment typed from scratch never has it."
+      },
+      "refs": [
+        "Q-14",
+        "Q-35"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "com-seq": {
+      "id": "com-seq",
+      "type": "sequence",
+      "config": {
+        "actors": [
+          "Reviewer",
+          "Page",
+          "Planroom server",
+          "Bitbucket"
+        ],
+        "messages": [
+          {
+            "from": 0,
+            "to": 1,
+            "text": "Post"
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "text": "comments.post"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "text": "GET PR (source.commit.hash)"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "text": "current head",
+            "reply": true
+          },
+          {
+            "from": 2,
+            "to": 1,
+            "text": "if it moved: comments on changed lines",
+            "reply": true
+          },
+          {
+            "from": 0,
+            "to": 1,
+            "text": "re-anchor / drop / post anyway"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "text": "POST comment, pending: true (each; summary last)"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "text": "comment id, recorded at once",
+            "reply": true
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "text": "POST task { comment id } where toggled"
+          },
+          {
+            "from": 2,
+            "to": 1,
+            "text": "posted n of n; failures listed for retry",
+            "reply": true
+          },
+          {
+            "from": 0,
+            "to": 3,
+            "text": "Finish review (one notification)"
+          }
+        ]
+      },
+      "caption": "What Post does",
+      "refs": [
+        "Q-16",
+        "Q-17",
+        "Q-18",
+        "Q-31",
+        "Q-32"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "com-drafts": {
+      "id": "com-drafts",
+      "type": "callout",
+      "config": {
+        "tone": "risk",
+        "title": "API drafts are undocumented",
+        "body": "Bitbucket's API accepts `pending: true` on comments and tasks but documents no way to publish them, and does not say whether API-made drafts join the UI's 'Finish review'. The posting slice starts with a spike against a scratch PR. If the drafts do not appear there, Post publishes directly (summary last) and the page says so."
+      },
+      "refs": [
+        "Q-31"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "rr-text": {
+      "id": "rr-text",
+      "type": "text",
+      "config": {
+        "body": "Reopening a posted review after the PR head has moved starts **round n+1** in the same review folder.\n\n- The server moves the worktree to the new head and computes the diff from the reviewed commit to it.\n- The agent writes a short **delta deck**: the same spine, compressed to what changed. The review reruns on the delta.\n- The Comments tab gains **Your earlier comments**. Each one shows its status with the code that shows it, the author's replies fetched from its Bitbucket thread, and an agent-drafted follow-up the reviewer agrees with, rewords or rejects.\n- Addressed threads and tasks are resolved on Post, each only after the reviewer confirms it.\n- A round switcher keeps earlier rounds' decks, takes and comments readable."
+      },
+      "refs": [
+        "Q-28",
+        "Q-37",
+        "Q-38"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "rr-state": {
+      "id": "rr-state",
+      "type": "state",
+      "config": {
+        "initial": "posted",
+        "states": [
+          "posted",
+          "addressed",
+          "partly",
+          "not addressed",
+          "outdated",
+          "resolved"
+        ],
+        "transitions": [
+          {
+            "from": "posted",
+            "to": "addressed",
+            "on": "fix found in the delta"
+          },
+          {
+            "from": "posted",
+            "to": "partly",
+            "on": "some of it fixed"
+          },
+          {
+            "from": "posted",
+            "to": "not addressed",
+            "on": "no relevant change"
+          },
+          {
+            "from": "posted",
+            "to": "outdated",
+            "on": "its lines were removed"
+          },
+          {
+            "from": "addressed",
+            "to": "resolved",
+            "on": "you confirm; Post resolves thread and task"
+          },
+          {
+            "from": "partly",
+            "to": "posted",
+            "on": "follow-up reply posted"
+          },
+          {
+            "from": "not addressed",
+            "to": "posted",
+            "on": "follow-up reply posted"
+          }
+        ],
+        "emphasis": [
+          "not addressed",
+          "outdated"
+        ]
+      },
+      "caption": "An earlier comment in the next round",
+      "refs": [
+        "Q-38"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "rr-api": {
+      "id": "rr-api",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Need",
+          "Call"
+        ],
+        "rows": [
+          [
+            "The author's replies",
+            "`GET .../pullrequests/{id}/comments`, threaded by `parent`"
+          ],
+          [
+            "A follow-up reply",
+            "`POST .../comments` with `parent: { id }`"
+          ],
+          [
+            "Resolve a thread",
+            "`POST .../comments/{comment_id}/resolve`"
+          ],
+          [
+            "Resolve a task",
+            "`PUT .../tasks/{task_id}`"
+          ],
+          [
+            "What changed",
+            "`GET .../pullrequests/{id}` head, then `git diff` in the worktree"
+          ]
+        ]
+      },
+      "caption": "The extra Bitbucket calls a round needs",
+      "refs": [
+        "Q-38"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "html-text": {
+      "id": "html-text",
+      "type": "text",
+      "config": {
+        "body": "The `html` block is the escape hatch for interactive visuals that no block or SVG can show: a slider over a retry policy, a state machine you can play, a small simulation. The skill allows it only then, and the page labels each one 'interactive, sandboxed'.\n\n- **Config:** a title, an alt description, a height, and the HTML as a string with its CSS and script inline. It is treated as the body of a document the page builds.\n- **Frame:** `<iframe sandbox=\"allow-scripts\" srcdoc>`. That gives an opaque origin with no access to the page, its storage or its cookies, and no top navigation, popups or forms.\n- **No network:** the page writes a CSP meta tag into the document's head ahead of the agent's HTML: `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:`. With no `connect-src`, nothing can be fetched or sent. The tag is part of the srcdoc, so it travels into the HTML export.\n- **Self-navigation:** CSP cannot stop the frame from navigating itself (a link or `location =`). The page reloads the srcdoc if the frame ever loads anything else, and the skill forbids links.\n- **Export:** the HTML export keeps it live under the same sandbox, and the PDF prints its current frame.\n- **Layout:** as a slide's only block, it fills the slide."
+      },
+      "refs": [
+        "Q-29",
+        "Q-30",
+        "Q-40"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "html-arch": {
+      "id": "html-arch",
+      "type": "architecture",
+      "config": {
+        "groups": [
+          {
+            "label": "Page (127.0.0.1 origin)",
+            "nodes": [
+              "slide",
+              "dom"
+            ]
+          },
+          {
+            "label": "Sandbox (opaque origin)",
+            "nodes": [
+              "frame",
+              "code"
+            ]
+          },
+          {
+            "label": "Outside",
+            "nodes": [
+              "net"
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "slide",
+            "label": "Deck slide"
+          },
+          {
+            "id": "dom",
+            "label": "Page DOM, storage, cookies"
+          },
+          {
+            "id": "frame",
+            "label": "iframe sandbox=allow-scripts + CSP meta",
+            "emphasis": "new"
+          },
+          {
+            "id": "code",
+            "label": "Agent HTML, inline CSS and script",
+            "emphasis": "new"
+          },
+          {
+            "id": "net",
+            "label": "Network"
+          }
+        ],
+        "links": [
+          {
+            "from": "slide",
+            "to": "frame",
+            "label": "srcdoc"
+          },
+          {
+            "from": "frame",
+            "to": "code",
+            "label": "runs"
+          },
+          {
+            "from": "code",
+            "to": "dom",
+            "label": "blocked: opaque origin",
+            "style": "dashed"
+          },
+          {
+            "from": "code",
+            "to": "net",
+            "label": "blocked: no connect-src",
+            "style": "dashed"
+          }
+        ]
+      },
+      "caption": "What the sandboxed html block can and cannot reach",
+      "refs": [
+        "Q-29"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:07:22.582Z"
+    },
+    "arch-text": {
+      "id": "arch-text",
+      "type": "text",
+      "config": {
+        "body": "Review becomes the third `SessionKind` (`plan | ask | review`) on the seams planroom-ask added. Each of these is extended where it is keyed by kind today, with no new plugin layer:\n\n- the `TOOLS`, `SERVER_NAMES` and `INSTRUCTIONS` maps in `src/server/mcp.ts`\n- `PLANROOMS` in `src/server/install.ts`\n- the `--review` flag in `src/cli.ts`\n- a `Session.openReview` beside `openAsk`\n- a `reviewDir` beside `askDir`\n- a `REVIEW_AGENT_EVENTS` and `REVIEW_PAGE_REQUESTS` gate beside the ask ones\n- the `view.kind` branches in Shell, Rail, TopBar and PhaseTabs\n\nThe server gains three small modules: a **Bitbucket client** (fetch with basic auth, typed responses, retry on 429), a **worktree manager** (add, move and remove a worktree under the review folder), and a **preferences store** for `review.json`. Shared, pure code in `src/shared/review.ts` derives comments from reactions and applies the sign-off rule, so the page preview and the server poster run the same function.\n\nA review lives at `.planroom/reviews/<id>/`, which git already ignores. The id is `pr-<number>` or `branch-<name>`. The folder holds the usual `state.json`, `events.jsonl` and `assets/`, plus `worktree/`."
+      },
+      "refs": [
+        "Q-4",
+        "Q-25",
+        "Q-34",
+        "Q-39"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "arch-diagram": {
+      "id": "arch-diagram",
+      "type": "architecture",
+      "config": {
+        "groups": [
+          {
+            "label": "Claude Code session",
+            "nodes": [
+              "skill",
+              "subs"
+            ]
+          },
+          {
+            "label": "planroom-review MCP server",
+            "nodes": [
+              "mcp",
+              "sess",
+              "bb",
+              "wt",
+              "prefs"
+            ]
+          },
+          {
+            "label": "Disk",
+            "nodes": [
+              "folder",
+              "conf"
+            ]
+          },
+          {
+            "label": "Page",
+            "nodes": [
+              "tabs",
+              "settings"
+            ]
+          },
+          {
+            "label": "Bitbucket Cloud",
+            "nodes": [
+              "api"
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "skill",
+            "label": "planroom-review skill",
+            "emphasis": "new"
+          },
+          {
+            "id": "subs",
+            "label": "reviewer + illustrator subagents",
+            "emphasis": "new"
+          },
+          {
+            "id": "mcp",
+            "label": "planroom_review, emit, wait, state",
+            "emphasis": "changed"
+          },
+          {
+            "id": "sess",
+            "label": "Session kind: review",
+            "emphasis": "changed"
+          },
+          {
+            "id": "bb",
+            "label": "Bitbucket client",
+            "emphasis": "new"
+          },
+          {
+            "id": "wt",
+            "label": "Worktree manager",
+            "emphasis": "new"
+          },
+          {
+            "id": "prefs",
+            "label": "Preferences store",
+            "emphasis": "new"
+          },
+          {
+            "id": "folder",
+            "label": ".planroom/reviews/<id>/ (state, events, assets, worktree)"
+          },
+          {
+            "id": "conf",
+            "label": "$XDG_CONFIG_HOME/planroom/review.json"
+          },
+          {
+            "id": "tabs",
+            "label": "Walkthrough / Review / Comments",
+            "emphasis": "new"
+          },
+          {
+            "id": "settings",
+            "label": "Settings: Review section",
+            "emphasis": "changed"
+          },
+          {
+            "id": "api",
+            "label": "PR, diff, comments, tasks"
+          }
+        ],
+        "links": [
+          {
+            "from": "skill",
+            "to": "mcp"
+          },
+          {
+            "from": "subs",
+            "to": "skill",
+            "label": "items, SVGs"
+          },
+          {
+            "from": "mcp",
+            "to": "sess"
+          },
+          {
+            "from": "sess",
+            "to": "folder"
+          },
+          {
+            "from": "sess",
+            "to": "bb"
+          },
+          {
+            "from": "sess",
+            "to": "wt"
+          },
+          {
+            "from": "wt",
+            "to": "folder"
+          },
+          {
+            "from": "prefs",
+            "to": "conf"
+          },
+          {
+            "from": "bb",
+            "to": "api",
+            "label": "token + email"
+          },
+          {
+            "from": "sess",
+            "to": "tabs",
+            "label": "SSE"
+          },
+          {
+            "from": "settings",
+            "to": "prefs",
+            "label": "PUT"
+          }
+        ]
+      },
+      "caption": "The pieces of Planroom Review",
+      "refs": [
+        "Q-4",
+        "Q-16",
+        "Q-34",
+        "Q-39"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "arch-files": {
+      "id": "arch-files",
+      "type": "fileTree",
+      "config": {
+        "root": "planroom/",
+        "files": [
+          {
+            "path": "src/cli.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/mcp.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/install.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/session.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/store.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/agentApply.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/pageApply.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/http.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/server/bitbucket.ts",
+            "change": "added"
+          },
+          {
+            "path": "src/server/worktree.ts",
+            "change": "added"
+          },
+          {
+            "path": "src/server/posting.ts",
+            "change": "added"
+          },
+          {
+            "path": "src/server/preferences.ts",
+            "change": "added"
+          },
+          {
+            "path": "src/shared/state.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/events.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/view.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/tools.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/blocks.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/blockCatalog.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/blocksDoc.ts",
+            "change": "modified"
+          },
+          {
+            "path": "src/shared/review.ts",
+            "change": "added"
+          },
+          {
+            "path": "src/ui/review/Deck.tsx",
+            "change": "added"
+          },
+          {
+            "path": "src/ui/review/Overview.tsx",
+            "change": "added"
+          },
+          {
+            "path": "src/ui/review/ReviewTab.tsx",
+            "change": "added"
+          },
+          {
+            "path": "src/ui/review/CommentsTab.tsx",
+            "change": "added"
+          },
+          {
+            "path": "src/ui/blocks/review.tsx",
+            "change": "added"
+          },
+          {
+            "path": "src/ui/blocks/diagrams.tsx",
+            "change": "modified"
+          },
+          {
+            "path": "src/ui/code/CodeViewer.tsx",
+            "change": "modified"
+          },
+          {
+            "path": "src/ui/components/Shell.tsx",
+            "change": "modified"
+          },
+          {
+            "path": "src/ui/components/PhaseTabs.tsx",
+            "change": "modified"
+          },
+          {
+            "path": "src/ui/components/Settings.tsx",
+            "change": "modified"
+          },
+          {
+            "path": "src/ui/exportHtml.ts",
+            "change": "modified"
+          },
+          {
+            "path": "skills/planroom-review/SKILL.md",
+            "change": "added"
+          },
+          {
+            "path": "skills/planroom-review/references/blocks.md",
+            "change": "added"
+          },
+          {
+            "path": "agents/planroom-reviewer.md",
+            "change": "added"
+          },
+          {
+            "path": "agents/planroom-illustrator.md",
+            "change": "added"
+          },
+          {
+            "path": "README.md",
+            "change": "modified"
+          }
+        ]
+      },
+      "caption": "Files the change adds or touches (indicative)",
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "num-stats": {
+      "id": "num-stats",
+      "type": "stats",
+      "config": {
+        "items": [
+          {
+            "label": "Slides per deck",
+            "value": "6-15"
+          },
+          {
+            "label": "Review dimensions + verify",
+            "value": "5 + 1"
+          },
+          {
+            "label": "Bitbucket calls per Post (typical)",
+            "value": "20-50"
+          },
+          {
+            "label": "Bitbucket limit per rolling hour",
+            "value": "1,000+"
+          }
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "num-bar": {
+      "id": "num-bar",
+      "type": "bar",
+      "config": {
+        "orientation": "horizontal",
+        "unit": "lines",
+        "series": [
+          "Estimate"
+        ],
+        "data": [
+          [
+            "Server",
+            1500
+          ],
+          [
+            "Shared",
+            700
+          ],
+          [
+            "Page",
+            2200
+          ],
+          [
+            "Skill and agents",
+            450
+          ],
+          [
+            "Tests",
+            1500
+          ],
+          [
+            "planroom-ask, for scale",
+            1200
+          ]
+        ]
+      },
+      "caption": "Estimated lines of code by area, against the whole planroom-ask commit (about 1,200 lines of code without docs). An estimate, not a measurement.",
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "num-text": {
+      "id": "num-text",
+      "type": "text",
+      "config": {
+        "body": "The page is the biggest part: the deck viewer, the overview grid, four new block renderers, the five review views and the comment preview. Tests stay colocated and use injected fakes: a fake Bitbucket client and a temporary git repository for the worktree manager."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "roll-timeline": {
+      "id": "roll-timeline",
+      "type": "timeline",
+      "config": {
+        "steps": [
+          {
+            "label": "1. Review session and deck",
+            "detail": "Session kind `review`, `planroom_review`, worktree, staged slides and `deck.publish`, deck viewer and overview grid, `analogy`, `stepThrough`, wider `compare`, illustrator subagent, export one slide per PDF page. Local branches only.",
+            "exit": "A local branch gets a cohesive deck with SVG illustrations, readable and exportable"
+          },
+          {
+            "label": "2. Your takes and preferences",
+            "detail": "`yourTake` with the four kinds, reveal-after-answer, Settings Review section and `review.json` handed to the agent.",
+            "exit": "Prompts follow the preferences"
+          },
+          {
+            "label": "3. Experiment",
+            "detail": "Run on three or more real PRs with different prompt mixes and densities; tune the skill's defaults and the reveal copy.",
+            "exit": "Defaults chosen from real use"
+          },
+          {
+            "label": "4. Agent review",
+            "detail": "Reviewer subagent, verify pass, items, the Review gate, five views, reactions and threads.",
+            "exit": "Items triaged on a local branch"
+          },
+          {
+            "label": "5. Bitbucket and comments",
+            "detail": "Spike on API drafts first. Bitbucket client and PR targets, comment preview, sign-off rule, summary, tasks, Post with the head check and retry.",
+            "exit": "A real PR gets its comments as drafts (or published, per the spike)"
+          },
+          {
+            "label": "6. Re-review rounds",
+            "detail": "Rounds, delta deck, earlier-comment status, author replies, follow-ups, resolving.",
+            "exit": "Round 2 on a real PR"
+          },
+          {
+            "label": "7. html escape hatch",
+            "detail": "`html` block, sandbox and CSP, self-navigation guard, export behaviour, skill rules.",
+            "exit": "An interactive visual runs with no network"
+          }
+        ]
+      },
+      "caption": "Build order: each slice is usable on its own",
+      "refs": [
+        "Q-10",
+        "Q-31",
+        "Q-34"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "imp-table": {
+      "id": "imp-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Area",
+          "Effect"
+        ],
+        "rows": [
+          [
+            "`planroom install`",
+            "Registers a third user-scope MCP server, `planroom-review`, and links the new skill and two agents; uninstall removes them"
+          ],
+          [
+            "Block catalog",
+            "`analogy`, `stepThrough` and the wider `compare` appear in the planroom and planroom-ask catalogs too; `yourTake` and `html` are refused outside a review"
+          ],
+          [
+            "Generated blocks docs",
+            "Regenerated for all three skills by `pnpm generate:blocks-doc`"
+          ],
+          [
+            "Session state",
+            "`kind` gains `review`; plan and ask state files are unchanged and still load"
+          ],
+          [
+            "Settings",
+            "A Review section, shown only on a review page"
+          ],
+          [
+            "Export",
+            "The Walkthrough tab exports one slide per PDF page; the plan and ask exports are unchanged"
+          ],
+          [
+            "README",
+            "A Planroom Review section with screenshots"
+          ]
+        ]
+      },
+      "caption": "What changes for planning and asks",
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "risk-matrix": {
+      "id": "risk-matrix",
+      "type": "riskMatrix",
+      "config": {
+        "items": [
+          {
+            "label": "API drafts not in Finish review",
+            "likelihood": 2,
+            "impact": 2
+          },
+          {
+            "label": "Weak SVG illustrations",
+            "likelihood": 2,
+            "impact": 2
+          },
+          {
+            "label": "False positives under your name",
+            "likelihood": 2,
+            "impact": 3
+          },
+          {
+            "label": "Preview differs from Bitbucket",
+            "likelihood": 2,
+            "impact": 1
+          },
+          {
+            "label": "Slow, costly deck build",
+            "likelihood": 3,
+            "impact": 1
+          },
+          {
+            "label": "Escape hatch misused",
+            "likelihood": 1,
+            "impact": 2
+          },
+          {
+            "label": "Token leaks",
+            "likelihood": 1,
+            "impact": 3
+          }
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "risk-table": {
+      "id": "risk-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Risk",
+          "Mitigation"
+        ],
+        "rows": [
+          [
+            "API drafts are not part of Bitbucket's 'Finish review'",
+            "Spike first in slice 5; fall back to publishing, summary last"
+          ],
+          [
+            "Agent-drawn SVG looks weak or cluttered",
+            "A dedicated illustrator subagent with a style brief; pins carry the labels; slice 3 judges quality on real PRs"
+          ],
+          [
+            "A false positive is posted under the reviewer's name",
+            "Verify pass, confidence shown, every item needs an explicit reaction, sign-off marks agent text"
+          ],
+          [
+            "The preview renders differently from Bitbucket",
+            "Draft only in the supported subset; a test posts to a scratch PR and compares `content.html`"
+          ],
+          [
+            "A big PR makes the deck slow and expensive",
+            "Fixed 6 to 15 slide spine; illustrations in parallel; progress view while it builds"
+          ],
+          [
+            "The html block becomes the default",
+            "Skill allows it only for interactive visuals; sandbox, CSP and navigation guard contain it"
+          ],
+          [
+            "The Bitbucket token leaks",
+            "Read from the environment by the server only; never logged, stored, or sent to the page or agent"
+          ],
+          [
+            "A PR head moves during review",
+            "Head check at Post with re-anchor, drop or post anyway"
+          ]
+        ]
+      },
+      "caption": "Mitigations",
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "acceptance": {
+      "id": "acceptance",
+      "type": "checklist",
+      "config": {
+        "interactive": true,
+        "items": [
+          {
+            "id": "a-install",
+            "text": "`planroom install` registers planroom-review beside planroom and planroom-ask, and the skill opens a review page for a PR link, a PR number or a local branch"
+          },
+          {
+            "id": "a-worktree",
+            "text": "The agent reads code from a worktree at the PR head; the reviewer's working copy is never touched, and ending the review removes the worktree"
+          },
+          {
+            "id": "a-deck",
+            "text": "The deck follows Why / How it works / What it touches / Trade-offs, appears only on `deck.publish`, and is navigable by keys, the progress bar and the overview grid"
+          },
+          {
+            "id": "a-progress",
+            "text": "While the deck builds, the Walkthrough tab shows the outline, slides drafted, pictures drawn and review progress"
+          },
+          {
+            "id": "a-blocks",
+            "text": "`analogy`, `stepThrough`, `yourTake`, the wider `compare` and `html` validate with zod, render, and appear in the generated blocks docs"
+          },
+          {
+            "id": "a-svg",
+            "text": "Illustrations are agent-written SVG shown through the `image` block; no image service is called"
+          },
+          {
+            "id": "a-motion",
+            "text": "Step-throughs and SVG animation stop under prefers-reduced-motion; every illustration has alt text"
+          },
+          {
+            "id": "a-takes",
+            "text": "Each your-take kind logs the answer before revealing the agent's view, and only the kinds enabled in preferences appear"
+          },
+          {
+            "id": "a-prefs",
+            "text": "Review preferences persist in `$XDG_CONFIG_HOME/planroom/review.json` across sessions and reach the agent through `planroom_review` and `planroom_state`"
+          },
+          {
+            "id": "a-gate",
+            "text": "The Review tab stays locked until the walkthrough is finished or skipped, and a skip is logged"
+          },
+          {
+            "id": "a-items",
+            "text": "Items are issues, design opinions or questions; each survived the verify pass, shows its confidence, and takes Agree, Reword, Reject or a thread"
+          },
+          {
+            "id": "a-views",
+            "text": "Diagram pins, the diff view, the charts, the file heat map and the risk matrix render, and each can be turned off"
+          },
+          {
+            "id": "a-preview",
+            "text": "The Comments preview and the poster use the same derivation; posted bodies equal previewed bodies byte for byte"
+          },
+          {
+            "id": "a-signoff",
+            "text": "Agent-drafted comments carry \"- Claude\", which can be removed only when more than 50% of the words are the reviewer's"
+          },
+          {
+            "id": "a-post",
+            "text": "Post checks the head commit, creates draft comments (or published ones, per the spike) and tasks where toggled, records each Bitbucket id, and a retry never double-posts"
+          },
+          {
+            "id": "a-creds",
+            "text": "Without `BITBUCKET_API_TOKEN` or a git email, Post is disabled with instructions; the token never reaches the page, the agent, logs or disk"
+          },
+          {
+            "id": "a-local",
+            "text": "A local branch review offers Copy as Markdown and makes no network call"
+          },
+          {
+            "id": "a-round",
+            "text": "A second round produces a delta deck, labels earlier comments, shows the author's replies, drafts follow-ups, and resolves threads and tasks only after confirmation"
+          },
+          {
+            "id": "a-html",
+            "text": "An `html` block runs script but cannot reach the network or the page, and is reloaded if it navigates away"
+          },
+          {
+            "id": "a-export",
+            "text": "The Walkthrough exports as one slide per PDF page and as a single HTML file with illustrations inlined"
+          },
+          {
+            "id": "a-compat",
+            "text": "Existing plan and ask sessions load and behave as before; `pnpm lint`, `pnpm typecheck` and `pnpm test` pass"
+          }
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "as-names": {
+      "id": "as-names",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Names",
+        "body": "The skill and MCP server are `planroom-review`, the CLI flag is `planroom mcp --review`, the open tool is `planroom_review({ target, title? })` beside the shared emit, wait and state tools, and the subagents are `planroom-reviewer` and `planroom-illustrator`."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "as-blocks": {
+      "id": "as-blocks",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Which new blocks other skills get",
+        "body": "`analogy`, `stepThrough` and the wider `compare` join the shared catalog, so planning and asks can use them too. `yourTake` and `html` are review-only and refused elsewhere, the way plan-only events are refused in an ask."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "as-models": {
+      "id": "as-models",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Subagent models",
+        "body": "Both new subagents run on the `sonnet` alias, never lower, like the existing two: the reviewer at high effort, the illustrator at medium. The main agent runs on the session's model."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "as-scope": {
+      "id": "as-scope",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Token scope",
+        "body": "`read:pullrequest:bitbucket` is enough to read the PR and its diff and to post comments and tasks. If the diff turns out to need `read:repository:bitbucket` as well, the missing-credentials message names both."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "as-size": {
+      "id": "as-size",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Large PRs",
+        "body": "No hard size limit in v1. For a large diff the skill tells the agent to keep the 6 to 15 slide spine and group by area, and the review subagents split the files between them."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    },
+    "as-targets": {
+      "id": "as-targets",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Resolving a target",
+        "body": "A PR link names its workspace, repo and number. A bare number uses the `origin` remote's workspace and repo. Anything else is a local branch, compared against its merge base with the default branch."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-07T04:08:24.065Z"
+    }
+  },
+  "threads": {},
+  "checklistTicks": {
+    "acceptance": {
+      "a-install": true,
+      "a-worktree": true,
+      "a-deck": true,
+      "a-progress": true,
+      "a-blocks": true,
+      "a-svg": true,
+      "a-motion": true,
+      "a-takes": true,
+      "a-prefs": true,
+      "a-gate": true,
+      "a-items": true,
+      "a-views": true,
+      "a-preview": true,
+      "a-signoff": true,
+      "a-post": true,
+      "a-creds": true,
+      "a-local": true,
+      "a-round": true,
+      "a-html": true,
+      "a-export": true,
+      "a-compat": true
+    }
+  },
+  "confirmedAssumptions": {
+    "as-names": 1,
+    "as-blocks": 1,
+    "as-models": 1,
+    "as-scope": 1,
+    "as-size": 1,
+    "as-targets": 1
+  },
+  "traces": [
+    {
+      "requirement": "A review opens on a PR or a local branch",
+      "questions": [
+        "Q-2",
+        "Q-5",
+        "Q-26"
+      ],
+      "spec": "review-sessions"
+    },
+    {
+      "requirement": "Code is read from a temporary worktree at the PR head",
+      "questions": [
+        "Q-5",
+        "Q-39"
+      ],
+      "spec": "review-sessions"
+    },
+    {
+      "requirement": "A review lives in its own folder and reopens",
+      "questions": [
+        "Q-4",
+        "Q-25"
+      ],
+      "spec": "review-sessions"
+    },
+    {
+      "requirement": "A review moves through ordered stages",
+      "questions": [
+        "Q-9",
+        "Q-22",
+        "Q-37"
+      ],
+      "spec": "review-sessions"
+    },
+    {
+      "requirement": "Slides are staged and published all at once",
+      "questions": [
+        "Q-22",
+        "Q-36"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "Progress is shown while the deck builds",
+      "questions": [
+        "Q-36"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "Every deck follows the same four chapters",
+      "questions": [
+        "Q-21"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "A slide is a titled set of blocks",
+      "questions": [
+        "Q-8",
+        "Q-19",
+        "Q-20"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "One slide at a time with an overview",
+      "questions": [
+        "Q-19",
+        "Q-20"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "Illustrations are agent-drawn SVG",
+      "questions": [
+        "Q-7",
+        "Q-24"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "Motion respects reduced motion",
+      "questions": [
+        "Q-19",
+        "Q-20"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "The walkthrough can be shared as an export",
+      "questions": [
+        "Q-1",
+        "Q-27"
+      ],
+      "spec": "review-walkthrough"
+    },
+    {
+      "requirement": "Your-take cards come in four kinds",
+      "questions": [
+        "Q-10",
+        "Q-20"
+      ],
+      "spec": "review-takes"
+    },
+    {
+      "requirement": "The answer is logged before the agent's view is revealed",
+      "questions": [
+        "Q-9",
+        "Q-10"
+      ],
+      "spec": "review-takes"
+    },
+    {
+      "requirement": "Your-take is refused outside a review",
+      "questions": [
+        "Q-8",
+        "Q-20"
+      ],
+      "spec": "review-takes"
+    },
+    {
+      "requirement": "Preferences are saved per machine and handed to the agent",
+      "questions": [
+        "Q-10",
+        "Q-13",
+        "Q-34"
+      ],
+      "spec": "review-takes"
+    },
+    {
+      "requirement": "Preference changes apply when they can",
+      "questions": [
+        "Q-10",
+        "Q-34"
+      ],
+      "spec": "review-takes"
+    },
+    {
+      "requirement": "Review runs in parallel by dimension and is then verified",
+      "questions": [
+        "Q-6",
+        "Q-23"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "A finding is an issue, a design opinion or a question",
+      "questions": [
+        "Q-11",
+        "Q-13"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Findings stay hidden until the walkthrough is done",
+      "questions": [
+        "Q-9"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Each finding is agreed, reworded or rejected",
+      "questions": [
+        "Q-1",
+        "Q-12"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Findings show in five views, each can be turned off",
+      "questions": [
+        "Q-13",
+        "Q-34"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Every comment has one of three sources",
+      "questions": [
+        "Q-12",
+        "Q-14",
+        "Q-15"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "The preview shows what Bitbucket will render",
+      "questions": [
+        "Q-33"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Agent-drafted text carries a sign-off until mostly rewritten",
+      "questions": [
+        "Q-14",
+        "Q-35"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "A drafted summary is edited and posted last",
+      "questions": [
+        "Q-15"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "A comment can become a task",
+      "questions": [
+        "Q-32"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "The server posts what was previewed",
+      "questions": [
+        "Q-16",
+        "Q-31"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Post checks that the PR head has not moved",
+      "questions": [
+        "Q-17"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Posting never double-posts",
+      "questions": [
+        "Q-18"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Credentials stay on the server",
+      "questions": [
+        "Q-3",
+        "Q-16"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "A local branch copies instead of posting",
+      "questions": [
+        "Q-2",
+        "Q-26"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Only approved comments and tasks go to Bitbucket",
+      "questions": [
+        "Q-1",
+        "Q-16"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "A moved head starts a new round",
+      "questions": [
+        "Q-28",
+        "Q-37"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "A delta deck covers only what changed",
+      "questions": [
+        "Q-37"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "Earlier comments are labelled with the code that shows it",
+      "questions": [
+        "Q-38"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "The author's replies are shown",
+      "questions": [
+        "Q-38"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "Follow-ups are drafted for the reviewer to react to",
+      "questions": [
+        "Q-38",
+        "Q-35"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "Threads and tasks resolve only on confirmation",
+      "questions": [
+        "Q-38"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "Earlier rounds stay readable",
+      "questions": [
+        "Q-37"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "The html block is sandboxed",
+      "questions": [
+        "Q-8",
+        "Q-29"
+      ],
+      "spec": "review-html-block"
+    },
+    {
+      "requirement": "The html block cannot use the network",
+      "questions": [
+        "Q-29"
+      ],
+      "spec": "review-html-block"
+    },
+    {
+      "requirement": "A frame that navigates away is reloaded",
+      "questions": [
+        "Q-29"
+      ],
+      "spec": "review-html-block"
+    },
+    {
+      "requirement": "The html block is for interactive visuals only",
+      "questions": [
+        "Q-29",
+        "Q-30",
+        "Q-40"
+      ],
+      "spec": "review-html-block"
+    },
+    {
+      "requirement": "Exports keep the html block live under the same sandbox",
+      "questions": [
+        "Q-40"
+      ],
+      "spec": "review-html-block"
+    },
+    {
+      "requirement": "Install registers one MCP server per tool",
+      "questions": [
+        "Q-4"
+      ],
+      "spec": "tool-installation"
+    },
+    {
+      "requirement": "Install links each tool's skill and agents",
+      "questions": [
+        "Q-4",
+        "Q-24"
+      ],
+      "spec": "tool-installation"
+    },
+    {
+      "requirement": "Uninstall removes what install added",
+      "questions": [
+        "Q-4"
+      ],
+      "spec": "tool-installation"
+    },
+    {
+      "requirement": "Blocks render from typed configs only",
+      "questions": [
+        "Q-20",
+        "Q-29",
+        "Q-30"
+      ],
+      "spec": "plan-writeup"
+    },
+    {
+      "requirement": "A session has a kind and review is a third kind",
+      "questions": [
+        "Q-4"
+      ],
+      "spec": "planning-sessions"
+    }
+  ],
+  "validation": {
+    "passed": true,
+    "issues": [],
+    "trigger": "proposal.ready",
+    "at": "2026-10-07T04:18:17.618Z"
+  },
+  "phases": {
+    "phase1": {
+      "completed": true,
+      "aligned": {
+        "by": "agent",
+        "at": "2026-10-07T03:36:10.779Z"
+      },
+      "path": "finished",
+      "at": "2026-10-07T04:03:49.149Z",
+      "direction": "hybrid"
+    },
+    "submission": {
+      "revision": 3,
+      "validate": true,
+      "outstanding": [],
+      "at": "2026-10-07T04:12:19.217Z"
+    },
+    "proposalReadyAt": "2026-10-07T04:18:17.078Z",
+    "proposalUnlocked": true,
+    "acceptedAt": "2026-10-07T04:19:17.390Z"
+  },
+  "revision": 3,
+  "counters": {
+    "thread": 0,
+    "message": 0,
+    "suggestion": 0
+  },
+  "agentCursor": 72,
+  "lastEvent": {
+    "type": "proposal.accept",
+    "changeId": "add-planroom-review",
+    "seq": 72,
+    "at": "2026-10-07T04:19:17.390Z"
+  }
+}

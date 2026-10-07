@@ -41,6 +41,8 @@ Send a block before, or in the same batch as, the section that lists it. A block
 - [`code`](#code): Code / diff
 - [`image`](#image): Annotated image
 - [`mermaid`](#mermaid): Mermaid fallback
+- [`analogy`](#analogy): Analogy
+- [`stepThrough`](#stepthrough): Step-through
 
 ## text
 
@@ -669,10 +671,10 @@ Config schema:
 
 ## compare
 
-**Before / after.** Two diagrams side by side, with the difference painted.
+**Before / after.** Two diagrams, code excerpts or images side by side, with the difference between two diagrams painted.
 
-- Each side is the id of a flow, sequence, architecture or state block in the write-up, or an inline `{ type, config }` for one of those types. Its `label` is optional.
-- highlight: added | removed | both | none. Nodes are matched by id.
+- Each side is the id of a flow, sequence, architecture, state, code or image block, or an inline `{ type, config }` for one of those types. Its `label` is optional.
+- highlight: added | removed | both | none. Nodes are matched by id, so it paints only when both sides are diagrams.
 
 Example config:
 
@@ -713,7 +715,7 @@ Example config:
 Config schema:
 
 ```json
-{"type":"object","properties":{"left":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"block":{"anyOf":[{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},{"oneOf":[{"type":"object","properties":{"type":{"type":"string","const":"flow"},"config":{"type":"object","properties":{"direction":{"default":"LR","type":"string","enum":["LR","RL","TB","BT"]},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]},"shape":{"default":"box","type":"string","enum":["box","decision"]}},"required":["id","label"]}},"edges":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","edges"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"sequence"},"config":{"type":"object","properties":{"actors":{"minItems":2,"maxItems":8,"type":"array","items":{"type":"string","minLength":1,"maxLength":400}},"messages":{"maxItems":60,"type":"array","items":{"type":"object","properties":{"from":{"type":"integer","minimum":0,"maximum":9007199254740991},"to":{"type":"integer","minimum":0,"maximum":9007199254740991},"text":{"type":"string","minLength":1,"maxLength":400},"reply":{"type":"boolean"}},"required":["from","to","text"]}}},"required":["actors","messages"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"architecture"},"config":{"type":"object","properties":{"groups":{"default":[],"maxItems":12,"type":"array","items":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"nodes":{"minItems":1,"type":"array","items":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"}}},"required":["label","nodes"]}},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]}},"required":["id","label"]}},"links":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","links"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"state"},"config":{"type":"object","properties":{"initial":{"type":"string","minLength":1},"states":{"minItems":1,"maxItems":40,"type":"array","items":{"type":"string","minLength":1,"maxLength":80}},"transitions":{"maxItems":80,"type":"array","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"on":{"type":"string","minLength":1,"maxLength":400}},"required":["from","to"]}},"emphasis":{"default":[],"type":"array","items":{"type":"string"}}},"required":["states","transitions"]}},"required":["type","config"]}]}]}},"required":["block"]},"right":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"block":{"anyOf":[{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},{"oneOf":[{"type":"object","properties":{"type":{"type":"string","const":"flow"},"config":{"type":"object","properties":{"direction":{"default":"LR","type":"string","enum":["LR","RL","TB","BT"]},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]},"shape":{"default":"box","type":"string","enum":["box","decision"]}},"required":["id","label"]}},"edges":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","edges"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"sequence"},"config":{"type":"object","properties":{"actors":{"minItems":2,"maxItems":8,"type":"array","items":{"type":"string","minLength":1,"maxLength":400}},"messages":{"maxItems":60,"type":"array","items":{"type":"object","properties":{"from":{"type":"integer","minimum":0,"maximum":9007199254740991},"to":{"type":"integer","minimum":0,"maximum":9007199254740991},"text":{"type":"string","minLength":1,"maxLength":400},"reply":{"type":"boolean"}},"required":["from","to","text"]}}},"required":["actors","messages"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"architecture"},"config":{"type":"object","properties":{"groups":{"default":[],"maxItems":12,"type":"array","items":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"nodes":{"minItems":1,"type":"array","items":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"}}},"required":["label","nodes"]}},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]}},"required":["id","label"]}},"links":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","links"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"state"},"config":{"type":"object","properties":{"initial":{"type":"string","minLength":1},"states":{"minItems":1,"maxItems":40,"type":"array","items":{"type":"string","minLength":1,"maxLength":80}},"transitions":{"maxItems":80,"type":"array","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"on":{"type":"string","minLength":1,"maxLength":400}},"required":["from","to"]}},"emphasis":{"default":[],"type":"array","items":{"type":"string"}}},"required":["states","transitions"]}},"required":["type","config"]}]}]}},"required":["block"]},"highlight":{"default":"added","type":"string","enum":["added","removed","both","none"]}},"required":["left","right"]}
+{"type":"object","properties":{"left":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"block":{"anyOf":[{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},{"oneOf":[{"type":"object","properties":{"type":{"type":"string","const":"flow"},"config":{"type":"object","properties":{"direction":{"default":"LR","type":"string","enum":["LR","RL","TB","BT"]},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]},"shape":{"default":"box","type":"string","enum":["box","decision"]}},"required":["id","label"]}},"edges":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","edges"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"sequence"},"config":{"type":"object","properties":{"actors":{"minItems":2,"maxItems":8,"type":"array","items":{"type":"string","minLength":1,"maxLength":400}},"messages":{"maxItems":60,"type":"array","items":{"type":"object","properties":{"from":{"type":"integer","minimum":0,"maximum":9007199254740991},"to":{"type":"integer","minimum":0,"maximum":9007199254740991},"text":{"type":"string","minLength":1,"maxLength":400},"reply":{"type":"boolean"}},"required":["from","to","text"]}}},"required":["actors","messages"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"architecture"},"config":{"type":"object","properties":{"groups":{"default":[],"maxItems":12,"type":"array","items":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"nodes":{"minItems":1,"type":"array","items":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"}}},"required":["label","nodes"]}},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]}},"required":["id","label"]}},"links":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","links"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"state"},"config":{"type":"object","properties":{"initial":{"type":"string","minLength":1},"states":{"minItems":1,"maxItems":40,"type":"array","items":{"type":"string","minLength":1,"maxLength":80}},"transitions":{"maxItems":80,"type":"array","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"on":{"type":"string","minLength":1,"maxLength":400}},"required":["from","to"]}},"emphasis":{"default":[],"type":"array","items":{"type":"string"}}},"required":["states","transitions"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"code"},"config":{"type":"object","properties":{"mode":{"type":"string","enum":["excerpt","diff","snippet"]},"file":{"type":"string","minLength":1,"maxLength":400},"lines":{"type":"string","pattern":"^\\d+(-\\d+)?$"},"lang":{"type":"string","maxLength":20},"patch":{"type":"string","maxLength":20000},"source":{"type":"string","maxLength":20000}},"required":["mode"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"image"},"config":{"type":"object","properties":{"src":{"type":"string","pattern":"^asset:[\\w.-]+\\.(png|jpe?g|gif|webp|svg)$"},"alt":{"type":"string","minLength":1,"maxLength":400},"pins":{"default":[],"maxItems":20,"type":"array","items":{"type":"object","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"text":{"type":"string","minLength":1,"maxLength":400}},"required":["x","y","text"]}}},"required":["src","alt"]}},"required":["type","config"]}]}]}},"required":["block"]},"right":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"block":{"anyOf":[{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},{"oneOf":[{"type":"object","properties":{"type":{"type":"string","const":"flow"},"config":{"type":"object","properties":{"direction":{"default":"LR","type":"string","enum":["LR","RL","TB","BT"]},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]},"shape":{"default":"box","type":"string","enum":["box","decision"]}},"required":["id","label"]}},"edges":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","edges"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"sequence"},"config":{"type":"object","properties":{"actors":{"minItems":2,"maxItems":8,"type":"array","items":{"type":"string","minLength":1,"maxLength":400}},"messages":{"maxItems":60,"type":"array","items":{"type":"object","properties":{"from":{"type":"integer","minimum":0,"maximum":9007199254740991},"to":{"type":"integer","minimum":0,"maximum":9007199254740991},"text":{"type":"string","minLength":1,"maxLength":400},"reply":{"type":"boolean"}},"required":["from","to","text"]}}},"required":["actors","messages"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"architecture"},"config":{"type":"object","properties":{"groups":{"default":[],"maxItems":12,"type":"array","items":{"type":"object","properties":{"label":{"type":"string","minLength":1,"maxLength":400},"nodes":{"minItems":1,"type":"array","items":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"}}},"required":["label","nodes"]}},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]}},"required":["id","label"]}},"links":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","links"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"state"},"config":{"type":"object","properties":{"initial":{"type":"string","minLength":1},"states":{"minItems":1,"maxItems":40,"type":"array","items":{"type":"string","minLength":1,"maxLength":80}},"transitions":{"maxItems":80,"type":"array","items":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"on":{"type":"string","minLength":1,"maxLength":400}},"required":["from","to"]}},"emphasis":{"default":[],"type":"array","items":{"type":"string"}}},"required":["states","transitions"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"code"},"config":{"type":"object","properties":{"mode":{"type":"string","enum":["excerpt","diff","snippet"]},"file":{"type":"string","minLength":1,"maxLength":400},"lines":{"type":"string","pattern":"^\\d+(-\\d+)?$"},"lang":{"type":"string","maxLength":20},"patch":{"type":"string","maxLength":20000},"source":{"type":"string","maxLength":20000}},"required":["mode"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"image"},"config":{"type":"object","properties":{"src":{"type":"string","pattern":"^asset:[\\w.-]+\\.(png|jpe?g|gif|webp|svg)$"},"alt":{"type":"string","minLength":1,"maxLength":400},"pins":{"default":[],"maxItems":20,"type":"array","items":{"type":"object","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"text":{"type":"string","minLength":1,"maxLength":400}},"required":["x","y","text"]}}},"required":["src","alt"]}},"required":["type","config"]}]}]}},"required":["block"]},"highlight":{"default":"added","type":"string","enum":["added","removed","both","none"]}},"required":["left","right"]}
 ```
 
 ## timeline
@@ -1190,4 +1192,117 @@ Config schema:
 
 ```json
 {"type":"object","properties":{"source":{"type":"string","minLength":1,"maxLength":20000}},"required":["source"]}
+```
+
+## analogy
+
+**Analogy.** "This change is like X": each real part of the change mapped to its counterpart in something familiar, and where the comparison stops holding.
+
+- `title` names the analogy. Each pair maps a `real` part to what it is `like`, with an optional `note`.
+- `illustration` is an optional `image` config (`src`, `alt`, `pins`). `breaks` says where the analogy breaks down: always give it when it does.
+
+Example config:
+
+```json
+{
+  "title": "A ticket counter",
+  "pairs": [
+    {
+      "real": "Request",
+      "like": "Customer in the queue"
+    },
+    {
+      "real": "Token bucket",
+      "like": "Tickets left for this hour"
+    },
+    {
+      "real": "429 with Retry-After",
+      "like": "\"Come back at 3pm\"",
+      "note": "the client is told when"
+    }
+  ],
+  "breaks": "A counter serves one queue; the limiter keeps a bucket per API key."
+}
+```
+
+Config schema:
+
+```json
+{"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":400},"pairs":{"minItems":1,"maxItems":12,"type":"array","items":{"type":"object","properties":{"real":{"type":"string","minLength":1,"maxLength":400},"like":{"type":"string","minLength":1,"maxLength":400},"note":{"type":"string","minLength":1,"maxLength":400}},"required":["real","like"]}},"illustration":{"type":"object","properties":{"src":{"type":"string","pattern":"^asset:[\\w.-]+\\.(png|jpe?g|gif|webp|svg)$"},"alt":{"type":"string","minLength":1,"maxLength":400},"pins":{"default":[],"maxItems":20,"type":"array","items":{"type":"object","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"text":{"type":"string","minLength":1,"maxLength":400}},"required":["x","y","text"]}}},"required":["src","alt"]},"breaks":{"type":"string","maxLength":20000}},"required":["title","pairs"]}
+```
+
+## stepThrough
+
+**Step-through.** A flow or sequence walked one step at a time: each step lights the nodes or messages it is about under a caption. The user moves through it with the arrow keys or buttons.
+
+- `diagram` is an inline `{ type: "flow" | "sequence", config }`.
+- A flow step lights `nodes` by id; a sequence step lights `messages` by index into the sequence's `messages`.
+- Keep it to the few steps that matter, each caption one sentence. Under reduced motion every step shows at once.
+
+Example config:
+
+```json
+{
+  "diagram": {
+    "type": "sequence",
+    "config": {
+      "actors": [
+        "Client",
+        "API",
+        "Redis"
+      ],
+      "messages": [
+        {
+          "from": 0,
+          "to": 1,
+          "text": "GET /orders"
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "text": "take token"
+        },
+        {
+          "from": 2,
+          "to": 1,
+          "text": "0 left",
+          "reply": true
+        },
+        {
+          "from": 1,
+          "to": 0,
+          "text": "429",
+          "reply": true
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "caption": "Every request asks the limiter first.",
+      "messages": [
+        0,
+        1
+      ]
+    },
+    {
+      "caption": "Redis says the bucket is empty.",
+      "messages": [
+        2
+      ]
+    },
+    {
+      "caption": "The client gets 429 and when to retry.",
+      "messages": [
+        3
+      ]
+    }
+  ]
+}
+```
+
+Config schema:
+
+```json
+{"type":"object","properties":{"diagram":{"oneOf":[{"type":"object","properties":{"type":{"type":"string","const":"flow"},"config":{"type":"object","properties":{"direction":{"default":"LR","type":"string","enum":["LR","RL","TB","BT"]},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]},"shape":{"default":"box","type":"string","enum":["box","decision"]}},"required":["id","label"]}},"edges":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","edges"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"sequence"},"config":{"type":"object","properties":{"actors":{"minItems":2,"maxItems":8,"type":"array","items":{"type":"string","minLength":1,"maxLength":400}},"messages":{"maxItems":60,"type":"array","items":{"type":"object","properties":{"from":{"type":"integer","minimum":0,"maximum":9007199254740991},"to":{"type":"integer","minimum":0,"maximum":9007199254740991},"text":{"type":"string","minLength":1,"maxLength":400},"reply":{"type":"boolean"}},"required":["from","to","text"]}}},"required":["actors","messages"]}},"required":["type","config"]}]},"steps":{"minItems":1,"maxItems":20,"type":"array","items":{"type":"object","properties":{"caption":{"type":"string","minLength":1,"maxLength":400},"nodes":{"default":[],"maxItems":60,"type":"array","items":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"}},"messages":{"default":[],"maxItems":60,"type":"array","items":{"type":"integer","minimum":0,"maximum":9007199254740991}}},"required":["caption"]}}},"required":["diagram","steps"]}
 ```

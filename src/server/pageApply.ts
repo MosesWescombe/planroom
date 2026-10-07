@@ -1,6 +1,6 @@
 import { describeAnchor } from '../shared/anchors.js';
 import { askTranscript } from '../shared/ask.js';
-import { checkBlockConfig, checklistItemKey } from '../shared/blocks.js';
+import { checkBlockConfig, checklistItemKey, yourTakeConfig } from '../shared/blocks.js';
 import {
     acceptGate,
     afterConflict,
@@ -19,16 +19,30 @@ import {
     sectionOfBlock,
     unreview
 } from '../shared/derive.js';
-import { ASK_PAGE_REQUESTS, type LoggedAttachment, type NewLoggedEvent, type PageRequest } from '../shared/events.js';
+import { type LoggedAttachment, type NewLoggedEvent, PAGE_REQUESTS, type PageRequest } from '../shared/events.js';
 import { answerProblem, describeAnswer, type QuestionRecord } from '../shared/questions.js';
 import {
     type Attachment,
     type BlockRecord,
+    blockIdsOf,
     ownRecord,
     type SectionRecord,
     type ThreadMessage,
     type ThreadRecord
 } from '../shared/records.js';
+import {
+    currentRound,
+    deriveComments,
+    describeTake,
+    findingsUnlocked,
+    impactMapOf,
+    type ReviewPreferences,
+    type RoundRecord,
+    SIGN_OFF_LOCK,
+    slideShown,
+    TAKE_TITLES,
+    unreacted
+} from '../shared/review.js';
 import { type Revision, type RevisionChange, revisionMeta, undoBlocker } from '../shared/revisions.js';
 import { recordsDir } from '../shared/state.js';
 import type { ActivityEntry } from '../shared/view.js';
@@ -40,6 +54,10 @@ export interface PageOutcome {
     revision?: Revision;
     /** Run `openspec validate` after committing. */
     validate?: boolean;
+    /** Post the review's comments after committing, with the reviewer's choices for comments on lines that changed. */
+    post?: Record<string, 'reanchor' | 'drop' | 'anyway'>;
+    /** Save these review preferences to this machine's `review.json`. */
+    preferences?: ReviewPreferences;
 }
 
 /** Log something the user did; the activity feed keeps these quiet. */
@@ -230,6 +248,278 @@ function reopenSession(draft: Draft): PageOutcome {
     return { event: { type: 'session.reopen', from } };
 }
 
+/** The requests every kind with comment threads takes the same way. */
+const THREAD_REQUESTS: ReadonlySet<PageRequest['type']> = new Set([
+    'comment.create',
+    'thread.reply',
+    'comment.resolve',
+    'message.send'
+]);
+
+/** The review's current round, refused when there is no review or Post is under way. */
+function workingRound(draft: Draft): RoundRecord {
+    const review = draft.state.review ?? reject('There is no review open');
+    const round = currentRound(review);
+    if (round.posting?.state === 'posting') reject('Post is running; wait for it to finish');
+    return round;
+}
+
+/** Refuse a change to a round that is posted. */
+function notPosted(round: RoundRecord): void {
+    if (round.postedAt) reject(`Round ${round.n} is posted; it takes no more changes`);
+}
+
+/** The next id for a comment the reviewer writes (`N-n`), advancing its counter in the draft. */
+function nextNoteId(draft: Draft): string {
+    const counters = { ...draft.state.counters, note: draft.state.counters.note + 1 };
+    draft.state.counters = counters;
+    return `N-${counters.note}`;
+}
+
+/** The round's impact map while the reviewer can still write under it: published, and their concerns not yet sent. */
+function impactOpen(draft: Draft, round: RoundRecord): NonNullable<ReturnType<typeof impactMapOf>> {
+    if (!round.publishedAt) reject('The walkthrough is not published yet');
+    notPosted(round);
+    if (round.impact?.sentAt) reject('You already sent your concerns to the agent');
+    return impactMapOf(draft.state, round.n) ?? reject(`Round ${round.n} has no impact map`);
+}
+
+/** Leave the preview for triage, as a changed reaction does. */
+function backToTriage(draft: Draft, round: RoundRecord): void {
+    if (round.previewing) draft.updateRound(round.n, (current) => ({ ...current, previewing: false }));
+}
+
+/** Apply a review's own page request: a take, the walkthrough, a reaction, the comments and their posting, preferences. */
+function applyReviewRequest(draft: Draft, request: PageRequest): PageOutcome {
+    const { now, state } = draft;
+    const round = workingRound(draft);
+    switch (request.type) {
+        case 'take.answer': {
+            const block =
+                ownRecord(state.blocks, request.blockId) ?? reject(`block ${request.blockId} does not exist`, 'blockId', 404);
+            const config = block.type === 'yourTake' ? yourTakeConfig.safeParse(block.config).data : undefined;
+            if (!config) reject(`block ${block.id} is not a your-take card`, 'blockId', 400);
+            const slide = Object.values(state.slides).find((candidate) => blockIdsOf(candidate).includes(block.id));
+            if (!slide || slide.round !== round.n || !slideShown(slide, round))
+                reject(`block ${block.id} is not on round ${round.n}'s walkthrough`, 'blockId');
+            if (state.takes[block.id]) reject('You already gave your take on this card');
+            const { answer } = request;
+            if (answer.kind !== config.kind) reject(`This card asks for a ${config.kind} answer`, 'answer.kind', 400);
+            if (answer.kind === 'check' && config.kind === 'check' && answer.choice >= config.options.length)
+                reject(`Pick one of the ${config.options.length} options`, 'answer.choice', 400);
+            draft.putTake(block.id, { answer, blockVersion: block.version, at: now });
+            noteYours(draft, { title: 'You gave your take', detail: TAKE_TITLES[config.kind] });
+            return {
+                event: {
+                    type: 'take.answer',
+                    blockId: block.id,
+                    kind: config.kind,
+                    answer,
+                    summary: describeTake(config, answer)
+                }
+            };
+        }
+        case 'reviewers.start': {
+            notPosted(round);
+            if (round.reviewers) reject('You already started the review for this round');
+            draft.updateRound(round.n, (current) => ({ ...current, reviewers: { ...request.reviewers, at: now } }));
+            const { strength, model, effort } = request.reviewers;
+            noteYours(draft, { title: 'You started the review', detail: `${strength}, ${model} at ${effort} effort` });
+            return { event: { type: 'reviewers.start', round: round.n, reviewers: request.reviewers } };
+        }
+        case 'walkthrough.done': {
+            if (!round.publishedAt) reject('The walkthrough is not published yet');
+            if (round.walkthrough) reject(`You already ${round.walkthrough.how} this walkthrough`);
+            if (request.how === 'finished' && !round.tradeoffsAt)
+                reject('Trade-offs is still being written: skip to the findings instead');
+            draft.updateRound(round.n, (current) => ({ ...current, walkthrough: { how: request.how, at: now } }));
+            noteYours(draft, {
+                title: request.how === 'finished' ? 'You finished the walkthrough' : 'You skipped to the findings'
+            });
+            return { event: { type: 'walkthrough.done', how: request.how, round: round.n } };
+        }
+        case 'impact.save': {
+            const map = impactOpen(draft, round);
+            const areas = new Set(map.areas.map((area) => area.id));
+            for (const id of Object.keys(request.concerns))
+                if (!areas.has(id)) reject(`The impact map has no area "${id}"`, 'concerns', 400);
+            const concerns = Object.fromEntries(Object.entries(request.concerns).filter(([, list]) => list.length > 0));
+            draft.updateRound(round.n, (current) => ({ ...current, impact: { concerns, added: request.added } }));
+            return {};
+        }
+        case 'impact.send': {
+            const map = impactOpen(draft, round);
+            const { concerns = {}, added = [] } = round.impact ?? {};
+            draft.updateRound(round.n, (current) => ({ ...current, impact: { concerns, added, sentAt: now } }));
+            const count = [...Object.values(concerns), ...added.map((area) => area.concerns)].flat().length;
+            noteYours(draft, {
+                title: 'You sent your concerns on the impact map',
+                detail: count ? `${count} across the areas` : 'with nothing to add'
+            });
+            return {
+                event: {
+                    type: 'impact.send',
+                    round: round.n,
+                    areas: [
+                        ...map.areas.map((area) => ({ id: area.id, title: area.title, concerns: concerns[area.id] ?? [] })),
+                        ...added
+                    ]
+                }
+            };
+        }
+        case 'item.react': {
+            const item = ownRecord(state.items, request.itemId);
+            if (!item || item.round !== round.n) reject(`round ${round.n} has no finding ${request.itemId}`, 'itemId', 404);
+            if (item.withdrawn) reject(`The agent withdrew ${item.id}: ${item.withdrawn.reason}`);
+            if (!findingsUnlocked(round)) reject('Finish or skip the walkthrough first');
+            notPosted(round);
+            if (round.posts[`item:${item.id}`]?.id !== undefined) reject(`${item.id}'s comment is already posted`);
+            const before = state.reactions[item.id];
+            const next = {
+                verdict: request.verdict,
+                ...(request.verdict === 'reword' && request.text ? { text: request.text } : {}),
+                ...(request.verdict === 'reject' && request.reason ? { reason: request.reason } : {}),
+                itemVersion: item.version,
+                ...(before?.task !== undefined ? { task: before.task } : {}),
+                ...(before?.unsigned !== undefined ? { unsigned: before.unsigned } : {}),
+                at: now
+            };
+            if (before && before.verdict === next.verdict && before.text === next.text && before.reason === next.reason)
+                return {};
+            draft.putReaction(item.id, next);
+            backToTriage(draft, round);
+            const verb = { agree: 'agreed with', reword: 'reworded', reject: 'rejected' }[request.verdict];
+            noteYours(draft, { title: `You ${verb} ${item.id}`, detail: item.title, ref: `item:${item.id}` });
+            return {
+                event: {
+                    type: 'item.react',
+                    itemId: item.id,
+                    title: item.title,
+                    verdict: request.verdict,
+                    ...(next.text ? { text: next.text } : {}),
+                    ...(next.reason ? { reason: next.reason } : {})
+                }
+            };
+        }
+        case 'comment.choose': {
+            notPosted(round);
+            const comment =
+                deriveComments(state, round.n).find((candidate) => candidate.key === request.key) ??
+                reject(`There is no comment ${request.key} to post`, 'key', 404);
+            if (round.posts[comment.key]?.id !== undefined) reject('That comment is already posted');
+            if (request.unsigned !== undefined) {
+                if (comment.yours === null) reject('A comment you wrote has no sign-off', 'unsigned', 400);
+                if (request.unsigned && comment.locked)
+                    reject(
+                        `The sign-off stays while ${comment.yours}% of the words are yours; it can come off above ${SIGN_OFF_LOCK}%`,
+                        'unsigned'
+                    );
+            }
+            const choice = {
+                ...(request.task !== undefined ? { task: request.task } : {}),
+                ...(request.unsigned !== undefined ? { unsigned: request.unsigned } : {})
+            };
+            const [kind, id = ''] = comment.key.split(/:(.*)/s);
+            if (kind === 'item') draft.putReaction(id, { ...state.reactions[id]!, ...choice });
+            else if (kind === 'note')
+                draft.putNote({ ...state.notes[id]!, ...(request.task !== undefined ? { task: request.task } : {}) });
+            else draft.updateRound(round.n, (current) => ({ ...current, summary: { ...current.summary, ...choice } }));
+            return {};
+        }
+        case 'note.save': {
+            notPosted(round);
+            const files = new Set(round.files.flatMap((file) => [file.path, ...(file.from ? [file.from] : [])]));
+            if (request.anchor && !files.has(request.anchor.file))
+                reject(`${request.anchor.file} is not in round ${round.n}'s diff`, 'anchor.file', 400);
+            const existing = request.id === undefined ? undefined : ownRecord(state.notes, request.id);
+            if (request.id !== undefined && (!existing || existing.round !== round.n))
+                reject(`round ${round.n} has no comment ${request.id}`, 'id', 404);
+            if (existing && round.posts[`note:${existing.id}`]?.id !== undefined) reject('That comment is already posted');
+            const task = request.task ?? existing?.task;
+            draft.putNote({
+                id: existing?.id ?? nextNoteId(draft),
+                round: round.n,
+                anchor: request.anchor,
+                text: request.text,
+                ...(task !== undefined ? { task } : {}),
+                at: now
+            });
+            return {};
+        }
+        case 'note.delete': {
+            const existing = ownRecord(state.notes, request.id);
+            if (!existing || existing.round !== round.n) reject(`round ${round.n} has no comment ${request.id}`, 'id', 404);
+            if (round.posts[`note:${existing.id}`]?.id !== undefined) reject('That comment is already posted');
+            draft.removeNote(existing.id);
+            return {};
+        }
+        case 'summary.edit': {
+            notPosted(round);
+            if (round.posts.summary?.id !== undefined) reject('The summary is already posted');
+            const { text: _text, ...rest } = round.summary;
+            const text = request.text === undefined ? round.summary.text : request.text.trim() ? request.text : undefined;
+            const summary = {
+                ...rest,
+                ...(text !== undefined ? { text } : {}),
+                ...(request.deleted !== undefined ? { deleted: request.deleted } : {})
+            };
+            draft.updateRound(round.n, (current) => ({ ...current, summary }));
+            return {};
+        }
+        case 'comments.open': {
+            if (!findingsUnlocked(round)) reject('Finish or skip the walkthrough first');
+            if (round.postedAt || round.previewing || unreacted(state, round.n).length) return {};
+            draft.updateRound(round.n, (current) => ({ ...current, previewing: true }));
+            return {};
+        }
+        case 'comments.post': {
+            if (state.review?.target.kind !== 'pr')
+                reject('A local branch has nothing to post to: copy the comments as Markdown instead', 'type', 400);
+            notPosted(round);
+            const waiting = unreacted(state, round.n).length;
+            if (waiting) reject(`${waiting} finding${waiting === 1 ? '' : 's'} still need${waiting === 1 ? 's' : ''} a reaction`);
+            if (!round.previewing) reject('Open Comments to preview them first');
+            const moved = round.posting?.state === 'moved' ? (round.posting.moved?.keys ?? []) : [];
+            const unchosen = moved.filter((key) => !request.choices?.[key]);
+            if (unchosen.length)
+                reject(
+                    `Choose re-anchor, drop or post anyway for ${unchosen.join(', ')}, on lines the author changed`,
+                    'choices',
+                    400
+                );
+            const confirmed = Object.values(round.earlier).some((entry) => entry.confirmed && !entry.resolvedAt);
+            if (deriveComments(state, round.n).length === 0 && !confirmed) reject('There is nothing to post');
+            draft.updateRound(round.n, (current) => ({
+                ...current,
+                posting: { state: 'posting', at: now, ...(current.posting?.moved ? { moved: current.posting.moved } : {}) }
+            }));
+            noteYours(draft, { title: 'You posted your review' });
+            return { post: request.choices ?? {} };
+        }
+        case 'earlier.confirm': {
+            const entry =
+                ownRecord(round.earlier, request.key) ??
+                reject(`round ${round.n} has no earlier comment ${request.key}`, 'key', 404);
+            if (request.confirmed && entry.label !== 'addressed')
+                reject('Only an addressed comment can be confirmed for resolving');
+            if (entry.resolvedAt) reject('That comment is already resolved');
+            draft.updateRound(round.n, (current) => ({
+                ...current,
+                earlier: { ...current.earlier, [request.key]: { ...entry, confirmed: request.confirmed } }
+            }));
+            return {};
+        }
+        case 'preferences.set':
+            noteYours(draft, { title: 'You changed your review preferences' });
+            return {
+                preferences: request.preferences,
+                event: { type: 'preferences.change', preferences: request.preferences }
+            };
+        default:
+            return reject(`A review has no ${request.type}`, 'type', 400);
+    }
+}
+
 /**
  * Apply one page request to a draft. Throws RejectedError when the request does not
  * fit the current state; the session then discards the draft and answers with the
@@ -237,16 +527,23 @@ function reopenSession(draft: Draft): PageOutcome {
  */
 export function applyPageRequest(draft: Draft, request: PageRequest, revisions: readonly Revision[]): PageOutcome {
     const { now, state } = draft;
-    if (state.kind === 'ask' && !ASK_PAGE_REQUESTS.has(request.type)) reject(`An ask has no ${request.type}`, 'type', 400);
-    if (state.kind === 'plan' && request.type === 'ask.done') reject('Only an ask has answers to send', 'type', 400);
+    if (!PAGE_REQUESTS[state.kind].has(request.type)) {
+        if (state.kind === 'ask') reject(`An ask has no ${request.type}`, 'type', 400);
+        if (request.type === 'ask.done') reject('Only an ask has answers to send', 'type', 400);
+        reject(state.kind === 'review' ? `A review has no ${request.type}` : `Only a review takes ${request.type}`, 'type', 400);
+    }
     if (request.type === 'session.reopen') return reopenSession(draft);
     if (state.phases.acceptedAt) reject('The proposal was accepted; this session is read-only.');
     if (state.phases.ended)
         reject(
             state.kind === 'ask'
                 ? 'You sent your answers; this ask is read-only.'
-                : `You ${state.phases.ended.how} this session; it is read-only.`
+                : state.kind === 'review'
+                  ? 'You ended this review; it is read-only.'
+                  : `You ${state.phases.ended.how} this session; it is read-only.`
         );
+    if (state.kind === 'review' && request.type !== 'session.end' && !THREAD_REQUESTS.has(request.type))
+        return applyReviewRequest(draft, request);
 
     switch (request.type) {
         case 'answer.submit': {

@@ -1,6 +1,14 @@
 import isEqual from 'lodash/isEqual.js';
 import { z } from 'zod';
-import { checkBlockConfig } from '../shared/blocks.js';
+import {
+    architectureConfig,
+    checkBlockConfig,
+    flowConfig,
+    REVIEW_BLOCK_TYPES,
+    sequenceConfig,
+    stepThroughConfig,
+    yourTakeConfig
+} from '../shared/blocks.js';
 import {
     directionsQuestion,
     investigatedDirections,
@@ -10,11 +18,24 @@ import {
     unreview,
     upsertQuestion
 } from '../shared/derive.js';
-import { type AgentEvent, ASK_AGENT_EVENTS, agentEventTypes, emitBatch } from '../shared/events.js';
+import { AGENT_EVENTS, type AgentEvent, agentEventTypes, emitBatch } from '../shared/events.js';
 import { type Issue, toIssues } from '../shared/issues.js';
 import { type ContextBlock, isInfo, type QuestionRecord } from '../shared/questions.js';
-import { type BlockRecord, ownRecord, type ThreadRecord, type Touched } from '../shared/records.js';
+import { type BlockRecord, blockIdsOf, ownRecord, type ThreadRecord, type Touched } from '../shared/records.js';
+import {
+    CHAPTER_TITLES,
+    CHAPTERS,
+    currentRound,
+    deckSlides,
+    impactMapOf,
+    type ReviewPreferences,
+    type RoundRecord,
+    type SlideContent,
+    slideShown,
+    TAKE_TITLES
+} from '../shared/review.js';
 import type { Revision } from '../shared/revisions.js';
+import type { SessionKind } from '../shared/state.js';
 import type { ActivityEntry } from '../shared/view.js';
 import { blockContentOf, type Draft, RejectedError } from './draft.js';
 
@@ -158,24 +179,442 @@ function checkDirections(
     }
 }
 
-/** Reject a batch an ask cannot take: one with an event of a plan's phases, or a question that belongs to a direction. */
-function checkAsk(events: AgentEvent[]): void {
+/** A session kind as a message names it. */
+const KIND_NAMES: Record<SessionKind, string> = { plan: 'a plan', ask: 'an ask', review: 'a review' };
+
+/**
+ * Every block a batch sends, by where it sits: write-up and slide blocks, question context and options, reply blocks and
+ * a finding's context.
+ */
+function sentBlocks(events: AgentEvent[]): { path: string; type: string; config: unknown }[] {
+    const inline = (path: string, blocks: ContextBlock[] | undefined) =>
+        (blocks ?? []).map((block, index) => ({ path: `${path}[${index}].type`, type: block.type, config: block.config }));
+    return events.flatMap((event, index) => {
+        const at = `events[${index}]`;
+        switch (event.type) {
+            case 'doc.block.upsert':
+                return [{ path: `${at}.block.type`, type: event.block.type, config: event.block.config }];
+            case 'question.upsert':
+                return [
+                    ...inline(`${at}.question.context.blocks`, event.question.context?.blocks),
+                    ...(event.question.options ?? []).flatMap((option, position) =>
+                        inline(`${at}.question.options[${position}].blocks`, option.blocks)
+                    )
+                ];
+            case 'comment.reply':
+            case 'comment.edit':
+                return inline(`${at}.blocks`, event.blocks);
+            case 'item.upsert':
+                return inline(`${at}.item.blocks`, event.item.blocks);
+            default:
+                return [];
+        }
+    });
+}
+
+/**
+ * Reject a batch the session's kind cannot take: an event of another kind, a review-only block outside a review, a
+ * your-take card of a kind the reviewer turned off, and in an ask, a question that belongs to a direction.
+ */
+function checkKind(kind: SessionKind, events: AgentEvent[], preferences: ReviewPreferences | undefined): void {
+    const allowed = AGENT_EVENTS[kind];
     const issues = events.flatMap((event, index): Issue[] => {
-        if (!ASK_AGENT_EVENTS.has(event.type))
+        if (!allowed.has(event.type)) {
+            const owner = AGENT_EVENTS.plan.has(event.type) ? 'a plan' : 'a review';
             return [
                 {
                     path: `events[${index}].type`,
-                    message: `an ask takes only ${[...ASK_AGENT_EVENTS].join(', ')}; ${event.type} belongs to a plan`
+                    message: `${KIND_NAMES[kind]} takes only ${[...allowed].join(', ')}; ${event.type} belongs to ${owner}`
                 }
             ];
-        if (event.type !== 'question.upsert') return [];
+        }
+        if (kind !== 'ask' || event.type !== 'question.upsert') return [];
         const { input, direction } = event.question;
         if (input === 'directions') return [{ path: `events[${index}].question.input`, message: 'an ask has no directions' }];
         if (direction !== undefined)
             return [{ path: `events[${index}].question.direction`, message: 'an ask has no directions' }];
         return [];
     });
+    for (const block of sentBlocks(events)) {
+        if (kind !== 'review' && REVIEW_BLOCK_TYPES.has(block.type))
+            issues.push({ path: block.path, message: `a ${block.type} block belongs to a review; this is ${KIND_NAMES[kind]}` });
+        if (kind === 'review' && block.type === 'yourTake' && preferences) {
+            const takeKind = yourTakeConfig.safeParse(block.config).data?.kind;
+            if (takeKind && !preferences.takes[takeKind])
+                issues.push({
+                    path: block.path,
+                    message: `the reviewer turned ${TAKE_TITLES[takeKind].toLowerCase()} cards off; use only the kinds their preferences enable`
+                });
+        }
+    }
     if (issues.length) throw new RejectedError(issues, 400);
+}
+
+/**
+ * The ids of blocks on a published slide of any round, with the slide: each part of the deck is fixed once it is out,
+ * the blocks that explain the impact map's areas with it.
+ */
+function publishedBlocks(draft: Draft): Map<string, string> {
+    const owners = new Map<string, string>();
+    for (const round of draft.state.review?.rounds ?? []) {
+        for (const slide of deckSlides(draft.state, round.n))
+            if (slideShown(slide, round)) for (const id of blockIdsOf(slide)) owners.set(id, slide.id);
+        const map = round.publishedAt ? impactMapOf(draft.state, round.n) : undefined;
+        for (const id of map?.areas.flatMap((area) => area.blocks) ?? []) owners.set(id, map!.slideId);
+    }
+    return owners;
+}
+
+/** Refuse publishing while a block on `slides` or behind the impact map does not render. */
+function checkRenders(draft: Draft, blocks: { id: string; on: string }[], index: number, fail: Fail): void {
+    for (const { id, on } of blocks)
+        if (draft.state.blocks[id]?.problem)
+            fail(index, '.type', `block "${id}" on ${on} does not render; fix it before publishing`);
+}
+
+/**
+ * Publish the deck's first part, Why to What it might impact: every one of those chapters needs a slide, and What it
+ * might impact the round's one impact map, every block its areas name sent. Trade-offs stays staged.
+ */
+function publishFirstPart(draft: Draft, round: RoundRecord, index: number, fail: Fail): void {
+    const slides = deckSlides(draft.state, round.n).filter((slide) => slide.chapter !== 'tradeoffs');
+    if (slides.length === 0) {
+        fail(index, '.type', 'there is nothing to publish: stage the slides with slide.upsert first');
+        return;
+    }
+    const empty = CHAPTERS.filter((name) => name !== 'tradeoffs' && !slides.some((slide) => slide.chapter === name));
+    if (empty.length) {
+        fail(index, '.type', `every chapter needs a slide; ${empty.map((name) => CHAPTER_TITLES[name]).join(', ')} has none`);
+        return;
+    }
+    const maps = slides.flatMap((slide) =>
+        blockIdsOf(slide)
+            .filter((id) => draft.state.blocks[id]?.type === 'impactMap')
+            .map((id) => ({ id, slide }))
+    );
+    const map = impactMapOf(draft.state, round.n);
+    if (maps.length !== 1 || maps[0]!.slide.chapter !== 'touches' || !map) {
+        fail(
+            index,
+            '.type',
+            maps.length > 1
+                ? `a deck has one impactMap; ${maps.map((entry) => entry.id).join(', ')} are on its slides`
+                : `${CHAPTER_TITLES.touches} needs one valid impactMap block on its slide: the areas the change might reach`
+        );
+        return;
+    }
+    for (const area of map.areas)
+        for (const id of area.blocks)
+            if (!Object.hasOwn(draft.state.blocks, id))
+                fail(index, '.type', `block "${id}" for the ${area.id} area has not been sent; send it with doc.block.upsert`);
+    checkRenders(
+        draft,
+        [
+            ...slides.flatMap((slide) => blockIdsOf(slide).map((id) => ({ id, on: `slide ${slide.id}` }))),
+            ...map.areas.flatMap((area) => area.blocks.map((id) => ({ id, on: `the ${area.id} area` })))
+        ],
+        index,
+        fail
+    );
+    draft.updateRound(round.n, (current) => ({ ...current, publishedAt: draft.now }));
+    draft.note({
+        title: 'Published the walkthrough',
+        detail: `${slides.length} slides, up to ${CHAPTER_TITLES.touches}`,
+        kind: 'question'
+    });
+}
+
+/** Publish Trade-offs, once the reviewer has sent their concerns on the impact map or skipped the walkthrough. */
+function publishTradeoffs(draft: Draft, round: RoundRecord, index: number, fail: Fail): void {
+    if (!round.impact?.sentAt && !round.walkthrough) {
+        fail(index, '.type', 'Trade-offs waits for the reviewer: publish it after their impact.send event');
+        return;
+    }
+    const slides = deckSlides(draft.state, round.n).filter((slide) => slide.chapter === 'tradeoffs');
+    if (slides.length === 0) {
+        fail(index, '.type', 'stage the Trade-offs slides with slide.upsert first');
+        return;
+    }
+    checkRenders(
+        draft,
+        slides.flatMap((slide) => blockIdsOf(slide).map((id) => ({ id, on: `slide ${slide.id}` }))),
+        index,
+        fail
+    );
+    draft.updateRound(round.n, (current) => ({ ...current, tradeoffsAt: draft.now }));
+    draft.note({ title: 'Published Trade-offs', detail: `${slides.length} slides`, kind: 'question' });
+}
+
+/** Where this batch's review events sit, for problems found once the whole batch has applied. */
+interface ReviewBatch {
+    slideEvents: Map<string, number>;
+    itemEvents: Map<string, number>;
+}
+
+type Fail = (index: number, path: string, message: string) => void;
+
+/** The agent-owned fields of a slide, to tell a re-send from a change. */
+function slideContentOf(slide: SlideContent): SlideContent {
+    const { id, chapter, order, title, blocks } = slide;
+    return { id, chapter, order, title, blocks };
+}
+
+/** Apply one review event: stage a slide, report progress, publish the deck, or write a finding, the summary or a label. */
+function applyReviewEvent(
+    draft: Draft,
+    event: Extract<
+        AgentEvent,
+        {
+            type:
+                | 'slide.upsert'
+                | 'deck.progress'
+                | 'deck.publish'
+                | 'item.upsert'
+                | 'item.withdraw'
+                | 'summary.draft'
+                | 'earlier.label';
+        }
+    >,
+    index: number,
+    fail: Fail,
+    result: BatchResult,
+    batch: ReviewBatch
+): void {
+    const review = draft.state.review;
+    if (!review) {
+        fail(index, '.type', 'no review is open');
+        return;
+    }
+    const round = currentRound(review);
+    const now = draft.now;
+    const applied = (ref: string, changed: boolean, version?: number) =>
+        result.applied.push({ index, type: event.type, ref, ...(version !== undefined ? { version } : {}), changed });
+    /** Whether the round is posted, refusing the event when it is: a posted round takes no more findings. */
+    const posted = (): boolean => {
+        if (round.postedAt) fail(index, '.type', `round ${round.n} is posted; it takes no more ${event.type}`);
+        return Boolean(round.postedAt);
+    };
+    switch (event.type) {
+        case 'slide.upsert': {
+            const { slide } = event;
+            const existing = draft.state.slides[slide.id];
+            if (existing && existing.round !== round.n) {
+                fail(
+                    index,
+                    '.slide.id',
+                    `slide ${slide.id} belongs to round ${existing.round}, whose deck is fixed; give this round's slide a new id`
+                );
+                return;
+            }
+            if (round.tradeoffsAt) {
+                fail(index, '.type', `round ${round.n}'s deck is published, so it is fixed for the round`);
+                return;
+            }
+            if (round.publishedAt && (slide.chapter !== 'tradeoffs' || (existing && slideShown(existing, round)))) {
+                fail(
+                    index,
+                    '.slide.chapter',
+                    `round ${round.n}'s deck is published up to What it might impact; only Trade-offs slides can still be staged`
+                );
+                return;
+            }
+            batch.slideEvents.set(slide.id, index);
+            const changed = !existing || !isEqual(slideContentOf(existing), slideContentOf(slide));
+            if (changed) draft.putSlide({ ...slide, round: round.n, version: (existing?.version ?? 0) + 1, updatedAt: now });
+            applied(slide.id, changed, draft.state.slides[slide.id]?.version);
+            return;
+        }
+        case 'deck.progress': {
+            const progress = {
+                ...round.progress,
+                ...(event.pictures ? { pictures: event.pictures } : {}),
+                ...(event.review ? { review: event.review } : {})
+            };
+            draft.updateRound(round.n, (current) => ({
+                ...current,
+                ...(event.outline ? { outline: event.outline } : {}),
+                progress
+            }));
+            applied(`round ${round.n}`, true);
+            return;
+        }
+        case 'deck.publish': {
+            if (round.tradeoffsAt) {
+                fail(index, '.type', `round ${round.n}'s deck is already published`);
+                return;
+            }
+            if (round.publishedAt) publishTradeoffs(draft, round, index, fail);
+            else publishFirstPart(draft, round, index, fail);
+            applied(`round ${round.n}`, true);
+            return;
+        }
+        case 'item.upsert': {
+            const { item } = event;
+            const existing = draft.state.items[item.id];
+            if (posted()) return;
+            if (existing && existing.round !== round.n) {
+                fail(
+                    index,
+                    '.item.id',
+                    `finding ${item.id} belongs to round ${existing.round}; give this round's finding a new id`
+                );
+                return;
+            }
+            const files = new Set(round.files.flatMap((file) => [file.path, ...(file.from ? [file.from] : [])]));
+            if (item.anchor && !files.has(item.anchor.file)) {
+                fail(index, '.item.anchor.file', `${item.anchor.file} is not in round ${round.n}'s diff`);
+                return;
+            }
+            if (item.replyTo !== undefined && !Object.hasOwn(round.earlier, item.replyTo)) {
+                fail(index, '.item.replyTo', `round ${round.n} has no earlier comment "${item.replyTo}"`);
+                return;
+            }
+            batch.itemEvents.set(item.id, index);
+            const content = JSON.parse(JSON.stringify(item));
+            const {
+                round: _round,
+                version: _version,
+                updatedAt: _at,
+                withdrawn,
+                ...before
+            } = existing ?? {
+                round: 0,
+                version: 0,
+                updatedAt: ''
+            };
+            const changed = !existing || Boolean(withdrawn) || !isEqual(before, content);
+            if (changed) draft.putItem({ ...content, round: round.n, version: (existing?.version ?? 0) + 1, updatedAt: now });
+            reportInlineProblems(result, `${item.id} blocks`, item.blocks);
+            applied(item.id, changed, draft.state.items[item.id]?.version);
+            return;
+        }
+        case 'item.withdraw': {
+            const existing = ownRecord(draft.state.items, event.id);
+            if (!existing || existing.round !== round.n) {
+                fail(index, '.id', `round ${round.n} has no finding ${event.id}`);
+                return;
+            }
+            if (draft.state.reactions[event.id]) {
+                fail(index, '.id', `the reviewer already reacted to ${event.id}; reply in its thread instead`);
+                return;
+            }
+            const changed = !existing.withdrawn;
+            if (changed)
+                draft.putItem({
+                    ...existing,
+                    withdrawn: { reason: event.reason, at: now },
+                    version: existing.version + 1,
+                    updatedAt: now
+                });
+            applied(event.id, changed, draft.state.items[event.id]?.version);
+            return;
+        }
+        case 'summary.draft': {
+            if (posted()) return;
+            const changed = round.summary.draft !== event.text;
+            if (changed)
+                draft.updateRound(round.n, (current) => ({ ...current, summary: { ...current.summary, draft: event.text } }));
+            applied('summary', changed);
+            return;
+        }
+        case 'earlier.label': {
+            const entry = ownRecord(round.earlier, event.key);
+            if (!entry) {
+                fail(index, '.key', `round ${round.n} has no earlier comment "${event.key}"`);
+                return;
+            }
+            const next = {
+                ...entry,
+                label: event.label,
+                ...(event.note ? { note: event.note } : {}),
+                ...(event.code ? { code: event.code } : {})
+            };
+            const changed = !isEqual(next, entry);
+            if (changed)
+                draft.updateRound(round.n, (current) => ({ ...current, earlier: { ...current.earlier, [event.key]: next } }));
+            applied(event.key, changed);
+            return;
+        }
+    }
+}
+
+/** The node ids a finding can pin to on a diagram block: flow and architecture node ids, sequence actors. */
+function diagramNodes(block: BlockRecord | undefined): string[] | undefined {
+    const ids = (nodes: { id: string }[]) => nodes.map((node) => node.id);
+    switch (block?.type) {
+        case 'flow': {
+            const config = flowConfig.safeParse(block.config).data;
+            return config && ids(config.nodes);
+        }
+        case 'architecture': {
+            const config = architectureConfig.safeParse(block.config).data;
+            return config && ids(config.nodes);
+        }
+        case 'sequence':
+            return sequenceConfig.safeParse(block.config).data?.actors;
+        case 'stepThrough': {
+            const diagram = stepThroughConfig.safeParse(block.config).data?.diagram;
+            if (!diagram) return undefined;
+            return diagram.type === 'flow' ? ids(diagram.config.nodes) : diagram.config.actors;
+        }
+        default:
+            return undefined;
+    }
+}
+
+/**
+ * The review's integrity over the batch's end state: each block a changed slide lists exists and sits on one slide
+ * once, and a finding pinned to a diagram names a node it has.
+ */
+function checkReviewIntegrity(draft: Draft, batch: ReviewBatch, fail: Fail): void {
+    const owners = new Map<string, string>();
+    for (const slide of Object.values(draft.state.slides))
+        for (const id of blockIdsOf(slide)) if (!owners.has(id)) owners.set(id, slide.id);
+    for (const [slideId, index] of batch.slideEvents) {
+        const slide = draft.state.slides[slideId];
+        if (!slide) continue;
+        const seen = new Set<string>();
+        slide.blocks.forEach((entry, position) => {
+            const row =
+                typeof entry === 'string'
+                    ? [[entry, [position]] as const]
+                    : entry.map((id, column) => [id, [position, column]] as const);
+            for (const [blockId, at] of row) {
+                const path = `.slide.blocks${at.map((step) => `[${step}]`).join('')}`;
+                const owner = owners.get(blockId);
+                if (!Object.hasOwn(draft.state.blocks, blockId))
+                    fail(
+                        index,
+                        path,
+                        `block "${blockId}" has not been sent; send it with doc.block.upsert in this batch or an earlier one`
+                    );
+                else if (seen.has(blockId)) fail(index, path, `block "${blockId}" is already listed on this slide`);
+                else if (owner !== slideId) fail(index, path, `block "${blockId}" is already on slide ${owner}`);
+                seen.add(blockId);
+            }
+        });
+    }
+    for (const [itemId, index] of batch.itemEvents) {
+        const link = draft.state.items[itemId]?.diagram;
+        if (!link) continue;
+        const nodes = diagramNodes(draft.state.blocks[link.block]);
+        if (!nodes)
+            fail(
+                index,
+                '.item.diagram.block',
+                `block "${link.block}" is not a flow, sequence, architecture or step-through diagram`
+            );
+        else if (!nodes.includes(link.node))
+            fail(index, '.item.diagram.node', `diagram "${link.block}" has no node "${link.node}"`);
+    }
+}
+
+/** The label the top bar shows while the agent edits a review. Findings stay unnamed until the reviewer reaches them. */
+function reviewEditing(draft: Draft): string | undefined {
+    const fields = new Set(draft.listPatches().map((patch) => patch.field));
+    if (fields.has('slides') || fields.has('blocks')) return 'the deck';
+    if (fields.has('items')) return 'the review';
+    return undefined;
 }
 
 /**
@@ -186,7 +625,8 @@ function checkAsk(events: AgentEvent[]): void {
 export function applyAgentBatch(
     draft: Draft,
     events: AgentEvent[],
-    summary: string | undefined
+    summary: string | undefined,
+    preferences?: ReviewPreferences
 ): { result: BatchResult; revision?: Revision; editing?: string; validate: boolean } {
     if (draft.state.phases.acceptedAt) {
         throw new RejectedError([
@@ -203,11 +643,13 @@ export function applyAgentBatch(
                 message:
                     draft.state.kind === 'ask'
                         ? 'The user sent their answers, so this ask is read-only. Wait for the ask.done if you have not had it, then call planroom_ask with its id to ask more.'
-                        : `The user ${draft.state.phases.ended.how} this session, so it is read-only. Stop.`
+                        : draft.state.kind === 'review'
+                          ? 'The reviewer ended this review, so it is read-only. Stop; planroom_review with the same target reopens it.'
+                          : `The user ${draft.state.phases.ended.how} this session, so it is read-only. Stop.`
             }
         ]);
     }
-    if (draft.state.kind === 'ask') checkAsk(events);
+    checkKind(draft.state.kind, events, preferences);
     const now = draft.now;
     const result: BatchResult = { applied: [], blockProblems: [] };
     const issues: Issue[] = [];
@@ -218,6 +660,9 @@ export function applyAgentBatch(
     const sectionEvents = new Map<string, number>();
     const questionEvents = new Map<string, number>();
     const questionsBefore = draft.state.questions;
+    const slideEvents = new Map<string, number>();
+    const itemEvents = new Map<string, number>();
+    const fixed = publishedBlocks(draft);
     let validate = false;
 
     // Once the user finishes Phase 1, even mid-batch, the question set is closed: rejecting a new question is how
@@ -414,6 +859,15 @@ export function applyAgentBatch(
                 const content = JSON.parse(JSON.stringify(envelope));
                 const changed =
                     !existing || !isEqual(blockContentOf(existing), blockContentOf({ ...content, version: 0, updatedAt: '' }));
+                const slide = fixed.get(envelope.id);
+                if (changed && slide) {
+                    fail(
+                        index,
+                        '.block.id',
+                        `block "${envelope.id}" is on slide ${slide}, published, so it cannot change this round`
+                    );
+                    break;
+                }
                 const check = checkBlockConfig(envelope.type, envelope.config);
                 if (!check.ok) result.blockProblems.push({ block: envelope.id, reason: check.reason, issues: check.issues });
                 if (changed) {
@@ -553,10 +1007,21 @@ export function applyAgentBatch(
                 result.applied.push({ index, type: event.type, ref: draft.state.changeId, changed: true });
                 break;
             }
+            case 'slide.upsert':
+            case 'deck.progress':
+            case 'deck.publish':
+            case 'item.upsert':
+            case 'item.withdraw':
+            case 'summary.draft':
+            case 'earlier.label':
+                applyReviewEvent(draft, event, index, fail, result, { slideEvents, itemEvents });
+                break;
             default:
                 break;
         }
     });
+
+    if (draft.state.kind === 'review') checkReviewIntegrity(draft, { slideEvents, itemEvents }, fail);
 
     // Referential integrity over the batch's end state: every listed block exists and sits once, in one section.
     for (const problem of listingProblems(draft.state, draft.changedSections())) {
@@ -602,7 +1067,8 @@ export function applyAgentBatch(
         draft.putThread({ ...thread, messages });
     }
 
-    const changes = draft.revisionChanges();
+    // A review's blocks live on its slides, which are fixed once published, so they keep no write-up revisions.
+    const changes = draft.state.kind === 'review' ? [] : draft.revisionChanges();
     let revision: Revision | undefined;
     if (changes.length) {
         const n = draft.state.revision + 1;
@@ -612,6 +1078,6 @@ export function applyAgentBatch(
         result.revision = n;
     }
     if (validate) result.validating = true;
-    const editing = editingLabel(draft, questionsChanged);
+    const editing = draft.state.kind === 'review' ? reviewEditing(draft) : editingLabel(draft, questionsChanged);
     return { result, ...(revision ? { revision } : {}), ...(editing ? { editing } : {}), validate };
 }

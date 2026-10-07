@@ -238,10 +238,10 @@ export const blockCatalog: Record<BlockType, CatalogEntry> = {
     },
     compare: {
         title: 'Before / after',
-        use: 'Two diagrams side by side, with the difference painted.',
+        use: 'Two diagrams, code excerpts or images side by side, with the difference between two diagrams painted.',
         notes: [
-            'Each side is the id of a flow, sequence, architecture or state block in the write-up, or an inline `{ type, config }` for one of those types. Its `label` is optional.',
-            'highlight: added | removed | both | none. Nodes are matched by id.'
+            'Each side is the id of a flow, sequence, architecture, state, code or image block, or an inline `{ type, config }` for one of those types. Its `label` is optional.',
+            'highlight: added | removed | both | none. Nodes are matched by id, so it paints only when both sides are diagrams.'
         ],
         example: {
             left: {
@@ -434,6 +434,109 @@ export const blockCatalog: Record<BlockType, CatalogEntry> = {
         use: 'Escape hatch for a diagram no native block covers (a git graph, a quadrant chart). Prefer a native block when one fits.',
         example: {
             source: 'gitGraph\n  commit\n  branch limiter\n  commit\n  commit\n  checkout main\n  merge limiter'
+        }
+    },
+    analogy: {
+        title: 'Analogy',
+        use: '"This change is like X": each real part of the change mapped to its counterpart in something familiar, and where the comparison stops holding.',
+        notes: [
+            '`title` names the analogy. Each pair maps a `real` part to what it is `like`, with an optional `note`.',
+            '`illustration` is an optional `image` config (`src`, `alt`, `pins`). `breaks` says where the analogy breaks down: always give it when it does.'
+        ],
+        example: {
+            title: 'A ticket counter',
+            pairs: [
+                { real: 'Request', like: 'Customer in the queue' },
+                { real: 'Token bucket', like: 'Tickets left for this hour' },
+                { real: '429 with Retry-After', like: '"Come back at 3pm"', note: 'the client is told when' }
+            ],
+            breaks: 'A counter serves one queue; the limiter keeps a bucket per API key.'
+        }
+    },
+    stepThrough: {
+        title: 'Step-through',
+        use: 'A flow or sequence walked one step at a time: each step lights the nodes or messages it is about under a caption. The user moves through it with the arrow keys or buttons.',
+        notes: [
+            '`diagram` is an inline `{ type: "flow" | "sequence", config }`.',
+            "A flow step lights `nodes` by id; a sequence step lights `messages` by index into the sequence's `messages`.",
+            'Keep it to the few steps that matter, each caption one sentence. Under reduced motion every step shows at once.'
+        ],
+        example: {
+            diagram: {
+                type: 'sequence',
+                config: {
+                    actors: ['Client', 'API', 'Redis'],
+                    messages: [
+                        { from: 0, to: 1, text: 'GET /orders' },
+                        { from: 1, to: 2, text: 'take token' },
+                        { from: 2, to: 1, text: '0 left', reply: true },
+                        { from: 1, to: 0, text: '429', reply: true }
+                    ]
+                }
+            },
+            steps: [
+                { caption: 'Every request asks the limiter first.', messages: [0, 1] },
+                { caption: 'Redis says the bucket is empty.', messages: [2] },
+                { caption: 'The client gets 429 and when to retry.', messages: [3] }
+            ]
+        }
+    },
+    yourTake: {
+        title: 'Your take',
+        use: 'Review only. A card that makes the reviewer commit to their own view before seeing yours: predict, pros and cons, risk rating or an understanding check. Your view is hidden until they answer, and their answer reaches you as a `take.answer` event.',
+        notes: [
+            'kind: predict | prosCons | risk | check. Use only the kinds the preferences enable.',
+            '`predict`: a `prompt` asked before the slide explains it, optional `options` to pick from, your `answer` (one of the options when there are options) and its `explanation`.',
+            "`prosCons`: an optional `prompt` and your own `pros` and `cons`, shown beside the reviewer's with the overlap marked.",
+            '`risk`: your `ratings` for correctness, performance, security and maintainability, 1 (low risk) to 5 (high), and optionally `why`.',
+            '`check`: one multiple-choice `question` per chapter, its `options`, the index of the `correct` one, an `explanation`, and the `slide` id that explains it. No score is kept.'
+        ],
+        example: {
+            kind: 'predict',
+            prompt: 'What happens to a request when Redis is down?',
+            options: ['It gets a 503', 'It goes through unlimited', 'It waits for Redis'],
+            answer: 'It goes through unlimited',
+            explanation: 'The limiter fails open: availability wins, and on-call is paged.'
+        }
+    },
+    impactMap: {
+        title: 'Impact map',
+        use: "Review only, and once per round: the What it might impact chapter's slide. The areas the change might reach beyond its diff, drawn around it. The reviewer opens an area to read how the change reaches it and adds their questions and concerns under it; moving on from the slide sends them to you as an `impact.send` event.",
+        notes: [
+            '2 to 8 `areas`, each an `id` (lowercase, hyphens), a `title`, a one-line `summary` of how the change reaches it, and up to 4 `blocks`: the ids of blocks that explain it, sent with `doc.block.upsert`.',
+            'Explain each area by showing it: a `flow` or `sequence` of the path from the change, a `stepThrough` or an `html` visual to animate it, `code` for the caller or config it meets.',
+            'The reviewer can add areas of their own. The map is fixed once the first part of the deck is published.'
+        ],
+        example: {
+            areas: [
+                {
+                    id: 'billing',
+                    title: 'Billing exports',
+                    summary: 'The nightly export reads the retry count this change caps.',
+                    blocks: ['billing-flow']
+                },
+                {
+                    id: 'alerts',
+                    title: 'On-call alerts',
+                    summary: 'Fewer retries means the timeout alert fires sooner.',
+                    blocks: ['alerts-steps', 'alerts-config']
+                }
+            ]
+        }
+    },
+    html: {
+        title: 'Interactive visual',
+        use: 'Review only, and only for an interactive visual no other block or SVG can show: a slider over a retry policy, a state machine to play, a small simulation. It runs in a sandboxed frame with no network and no access to the page.',
+        notes: [
+            '`html` is the body of a document, with its CSS and script inline. `alt` describes what it shows; `height` is in pixels.',
+            'No links, no forms and no network: `fetch`, images from URLs and fonts from URLs are all blocked. Inline images and fonts as `data:` URLs.',
+            'As the only block on a slide it fills the slide. The page labels it "interactive, sandboxed".'
+        ],
+        example: {
+            title: 'Retry delay by attempt',
+            alt: 'A slider for the base delay and the retry delays it gives for five attempts',
+            height: 220,
+            html: '<label>Base <input id="b" type="range" min="50" max="500" value="100"></label><p id="out"></p><script>const b=document.getElementById("b");const show=()=>{document.getElementById("out").textContent=[0,1,2,3,4].map(n=>b.value*2**n+" ms").join(", ")};b.oninput=show;show();</script>'
         }
     }
 };

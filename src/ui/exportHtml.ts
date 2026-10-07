@@ -85,6 +85,26 @@ async function inlineImages(copy: Element, load: BlobLoader): Promise<void> {
     );
 }
 
+/**
+ * Keeps each `html` block live in the file: the page frames it from the page server, which a file cannot reach, so its
+ * document moves into the frame's `srcdoc`, its policy still first in its head and the frame still sandboxed. A block
+ * that cannot be read keeps its frame, empty.
+ */
+async function inlineFrames(copy: Element, load: BlobLoader): Promise<void> {
+    await Promise.all(
+        [...copy.querySelectorAll<HTMLIFrameElement>('iframe[data-html-block]')].map(async (frame) => {
+            const src = frame.getAttribute('src');
+            if (!src) return;
+            try {
+                frame.setAttribute('srcdoc', await (await load(new URL(src, document.baseURI).href)).text());
+                frame.removeAttribute('src');
+            } catch {
+                // The page shows the same empty frame.
+            }
+        })
+    );
+}
+
 /** The standalone HTML document for `main`, a column of `page`, with the page's title, root attributes and styles. */
 export async function buildHtml(main: HTMLElement, page: Document = document, load: BlobLoader = fetchBlob): Promise<string> {
     const out = page.implementation.createHTMLDocument(page.title);
@@ -113,6 +133,7 @@ export async function buildHtml(main: HTMLElement, page: Document = document, lo
     const copy = main.cloneNode(true) as HTMLElement;
     copyFormState(main, copy);
     await inlineImages(copy, load);
+    await inlineFrames(copy, load);
     out.body.append(copy);
     return `<!doctype html>\n${out.documentElement.outerHTML}`;
 }

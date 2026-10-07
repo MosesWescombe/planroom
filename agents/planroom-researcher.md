@@ -1,6 +1,6 @@
 ---
 name: planroom-researcher
-description: Read-only research for a Planroom plan or ask - answers one factual question about this repo, with path:line evidence, or about an outside product, from its docs, release notes and pricing pages. Only the planroom and planroom-ask skills delegate to it; not for planning, design or edits.
+description: Read-only research for a Planroom plan, ask or review - answers one factual question about this repo or a review's worktree, with path:line evidence, or about an outside product, from its docs, release notes and pricing pages. Only the planroom, planroom-ask and planroom-review skills delegate to it; not for planning, design or edits.
 tools: Read, Bash, WebSearch, WebFetch
 model: sonnet
 effort: medium

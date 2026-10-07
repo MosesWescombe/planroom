@@ -49,6 +49,20 @@ export const askInput = z.object({
         )
 });
 
+/** `planroom_review`'s input. */
+export const reviewInput = z.object({
+    target: z
+        .string()
+        .trim()
+        .min(1)
+        .max(400)
+        .describe(
+            'What to review: a Bitbucket Cloud PR link (https://bitbucket.org/<workspace>/<repo>/pull-requests/<n>), a bare PR ' +
+                "number of the checkout's origin repo, or a local branch name, reviewed against its merge base with the default branch"
+        ),
+    title: z.string().max(200).optional().describe('A title for the page; by default the PR title or the branch name')
+});
+
 /** `planroom_wait`'s input. */
 export const waitInput = z.object({
     after: z.number().int().min(0).describe('The highest event seq you have handled; 0 to start from the beginning'),

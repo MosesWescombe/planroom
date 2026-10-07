@@ -19,8 +19,10 @@ import {
 } from '../shared/derive.js';
 import { emitBatch, type LoggedEvent, type LoggedEventType } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
+import { currentRound, deckSlides, deriveComments, reviewStage, roundItems, slideShown } from '../shared/review.js';
 import { type PlanFormat, type SessionKind, StateFileError } from '../shared/state.js';
-import { askInput, DEFAULT_WAIT_SEC, openInput, stateInput, waitInput } from '../shared/tools.js';
+import { askInput, DEFAULT_WAIT_SEC, openInput, reviewInput, stateInput, waitInput } from '../shared/tools.js';
+import { BitbucketError } from './bitbucket.js';
 import type { ChannelNotifier } from './delivery.js';
 import { RejectedError } from './draft.js';
 import { type PageServer, startPageServer } from './http.js';
@@ -28,7 +30,9 @@ import { ChangeLockedError } from './lock.js';
 import type { BrowserOpener } from './opener.js';
 import type { OpenSpecRunner } from './openspec.js';
 import { hasPlan } from './plans.js';
+import { type ReviewHost, resolveTarget } from './review.js';
 import { Session } from './session.js';
+import { GitError } from './worktree.js';
 
 export { DEFAULT_WAIT_SEC };
 
@@ -69,19 +73,34 @@ const ASK_TOOL: Tool = {
     inputSchema: inputSchema(askInput)
 };
 
-/** The tools both servers serve after their opener, over whichever session it opened. */
+/** The review server's opener. */
+const REVIEW_TOOL: Tool = {
+    name: 'planroom_review',
+    description:
+        'Open or resume a Planroom Review of a Bitbucket Cloud PR (a link or a number of the origin repo) or a local branch (nothing is ' +
+        'posted for a branch). The server fetches the PR, adds a temporary git worktree at its head under .planroom/reviews/<id>/worktree, ' +
+        'and opens the review page. Returns { url, reviewId, resumed, stage, round, pr, files, worktree, diff, preferences, postable, cursor, repoRoot }: ' +
+        'print the url, read the code in `worktree` (never in your working directory), and planroom_wait from `cursor`. `diff` is the ' +
+        'commit range under review: run `git diff <base> <head>` in the worktree. `preferences` say which your-take cards to use and how ' +
+        'many. Start no reviewer subagent before the reviewer starts the round from the page: `reviewers.start` names how many, ' +
+        'at what model and effort, and `reviewers` returns it once they have. A posted review whose PR head has moved resumes as the next round, whose `earlier` comments you follow up.',
+    inputSchema: inputSchema(reviewInput)
+};
+
+/** The tools every server serves after its opener, over whichever session it opened. */
 const SESSION_TOOLS: Tool[] = [
     {
         name: 'planroom_emit',
         description:
             'Apply a batch of agent events to the open page, atomically: question.upsert/close/merge, understanding.update, ' +
-            'doc.section.upsert, doc.block.upsert, comment.reply (markdown `text`, optionally with diagram, table or other `blocks`), comment.edit (rewrite your reply in place), suggestion.decline, proposal.trace, proposal.ready. ' +
+            'doc.section.upsert, doc.block.upsert, comment.reply (markdown `text`, optionally with diagram, table or other `blocks`), comment.edit (rewrite your reply in place), suggestion.decline, proposal.trace, proposal.ready; ' +
+            'in a review, slide.upsert, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft and earlier.label. Each session kind refuses the events of the others. ' +
             'A malformed batch applies nothing and lists every problem by path. A block whose config fails its type is still stored, ' +
             'shown as an error card, and listed in blockProblems: fix it in place by re-sending it, never by adding a new one. `summary` labels the write-up revision. `doing` tells the user what you are on next, ' +
             'e.g. "researching how alarms are indexed", until your next planroom_wait. `subagents` lists what each subagent you are waiting on is doing, ' +
             'and lasts across waits until you send a new list, [] once they have all reported back. Both can be sent with no events: ' +
             'send that emit in the same message as the tool calls it describes, since one on its own costs a whole turn. ' +
-            'Block shapes: references/blocks.md in the planroom or planroom-ask skill.',
+            'Block shapes: references/blocks.md in the planroom, planroom-ask or planroom-review skill.',
         inputSchema: inputSchema(emitBatch)
     },
     {
@@ -108,10 +127,14 @@ const SESSION_TOOLS: Tool[] = [
  * Each server's tools as `tools/list` returns them, with input schemas generated from the shared zod schemas: the
  * planning server (`plan`) opens plans, the question server (`ask`) opens asks, so a user can turn either off in `/mcp`.
  */
-export const TOOLS: Record<SessionKind, Tool[]> = { plan: [OPEN_TOOL, ...SESSION_TOOLS], ask: [ASK_TOOL, ...SESSION_TOOLS] };
+export const TOOLS: Record<SessionKind, Tool[]> = {
+    plan: [OPEN_TOOL, ...SESSION_TOOLS],
+    ask: [ASK_TOOL, ...SESSION_TOOLS],
+    review: [REVIEW_TOOL, ...SESSION_TOOLS]
+};
 
 /** Each server's name, which `planroom install` registers it under and channel messages carry as their source. */
-export const SERVER_NAMES: Record<SessionKind, string> = { plan: 'planroom', ask: 'planroom-ask' };
+export const SERVER_NAMES: Record<SessionKind, string> = { plan: 'planroom', ask: 'planroom-ask', review: 'planroom-review' };
 
 /** How page events reach the agent, from the server named `source`. */
 const delivery = (source: string) =>
@@ -138,12 +161,20 @@ export const INSTRUCTIONS: Record<SessionKind, string> = {
         'and hands the answers back as context. Load the planroom-ask skill before calling these tools.',
         'planroom_ask returns the page URL: always print it for the user.',
         delivery(SERVER_NAMES.ask)
+    ].join(' '),
+    review: [
+        'Planroom Review walks a reviewer through a Bitbucket PR or a local branch on a live page: a deck of slides, then the review',
+        'findings they agree with, reword or reject, then the comments to post. Load the planroom-review skill before calling these tools.',
+        'planroom_review returns the page URL: always print it for the user.',
+        delivery(SERVER_NAMES.review)
     ].join(' ')
 };
 
 export interface PlanroomOptions {
-    /** Which server this is: `plan` serves planroom_open, `ask` serves planroom_ask. */
+    /** Which server this is: `plan` serves planroom_open, `ask` planroom_ask, `review` planroom_review. */
     kind: SessionKind;
+    /** For the review server: Bitbucket access and the preferences file, worked out on its first review. */
+    reviewHost?: () => Promise<ReviewHost>;
     /** Planroom's version, which the server reports when the agent connects. */
     version: string;
     repoRoot: string;
@@ -174,7 +205,8 @@ function failed(error: unknown): CallToolResult {
     let body: Record<string, unknown>;
     if (error instanceof RejectedError) body = { error: 'Rejected; nothing was applied.', issues: error.issues };
     else if (error instanceof ChangeLockedError) body = { error: error.message, url: error.holder.url };
-    else if (error instanceof StateFileError) body = { error: error.message };
+    else if (error instanceof StateFileError || error instanceof BitbucketError || error instanceof GitError)
+        body = { error: error.message };
     else body = { error: error instanceof Error ? error.message : String(error) };
     return { content: [{ type: 'text', text: JSON.stringify(body) }], isError: true };
 }
@@ -200,7 +232,7 @@ export function channelContent(event: LoggedEvent): string {
  */
 export function createPlanroom(options: PlanroomOptions): Planroom {
     const { kind } = options;
-    const opener = (kind === 'plan' ? OPEN_TOOL : ASK_TOOL).name;
+    const opener = { plan: OPEN_TOOL, ask: ASK_TOOL, review: REVIEW_TOOL }[kind].name;
     const server = new Server(
         { name: SERVER_NAMES[kind], version: options.version },
         { capabilities: { tools: {}, experimental: { 'claude/channel': {} } }, instructions: INSTRUCTIONS[kind] }
@@ -401,13 +433,84 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         };
     };
 
+    /** The review server's Bitbucket access and preferences file, worked out once. */
+    let host: Promise<ReviewHost> | undefined;
+
+    /** What the agent works from in a review: where it stands, the change, the worktree and the preferences. */
+    const reviewContext = (live: Session) => {
+        const review = live.current.review!;
+        const round = currentRound(review);
+        const additions = round.files.reduce((sum, file) => sum + file.additions, 0);
+        const deletions = round.files.reduce((sum, file) => sum + file.deletions, 0);
+        return {
+            reviewId: live.changeId,
+            stage: reviewStage(live.current),
+            round: round.n,
+            target: review.target,
+            pr: {
+                title: review.title,
+                description: review.description,
+                ...(review.author ? { author: review.author } : {}),
+                ...(review.link ? { link: review.link } : {}),
+                ...(review.source ? { source: review.source } : {}),
+                ...(review.destination ? { destination: review.destination } : {})
+            },
+            files: round.files,
+            stats: { files: round.files.length, additions, deletions },
+            worktree: live.worktreeDir,
+            diff: { base: round.base, head: round.head },
+            ...(round.n > 1 ? { earlier: round.earlier } : {}),
+            ...(round.reviewers ? { reviewers: round.reviewers } : {}),
+            preferences: live.reviewPreferences,
+            postable: live.postable
+        };
+    };
+
+    /**
+     * Open a review for the agent, or return the open one, and open its page in the browser. Opening resolves the
+     * target first, so a resumed review whose PR head moved since it was posted starts its next round.
+     */
+    const review = async (input: unknown) => {
+        const { target, title } = parseArgs(reviewInput, input);
+        switchedTo = undefined;
+        const reviewHost = await (host ??= (
+            options.reviewHost ?? (() => Promise.reject(new Error('This Planroom has no review host')))
+        )());
+        const resolved = await resolveTarget(options.repoRoot, target, reviewHost.access);
+        if (title) resolved.title = title;
+        const here = openHere('review', resolved.id);
+        const {
+            live,
+            url: openedUrl,
+            resumed
+        } = here ? { ...here, resumed: true } : await serve(() => Session.openReview({ ...base, resolved, host: reviewHost }));
+        await live.syncReview(resolved);
+        live.delivery.touch();
+        return {
+            url: openedUrl,
+            resumed,
+            ...reviewContext(live),
+            cursor: live.current.agentCursor,
+            repoRoot: options.repoRoot,
+            browserOpened: here ? false : await options.openBrowser(openedUrl)
+        };
+    };
+
     /**
      * Switch the page to another plan in the repo, for its plan switcher, and return that plan's page URL. Only a
      * change that already has a plan opens this way, so the page cannot create one, and the page navigates itself.
      */
     const switchPlan = async (changeId: string): Promise<string> => {
-        if (kind === 'ask')
-            throw new RejectedError([{ path: 'changeId', message: 'This Planroom only asks questions: it opens no plans' }], 404);
+        if (kind !== 'plan')
+            throw new RejectedError(
+                [
+                    {
+                        path: 'changeId',
+                        message: `This Planroom ${kind === 'ask' ? 'only asks questions' : 'only reviews'}: it opens no plans`
+                    }
+                ],
+                404
+            );
         if (!(await hasPlan(options.repoRoot, changeId)))
             throw new RejectedError([{ path: 'changeId', message: `${changeId} has no plan to open` }], 404);
         const here = openHere('plan', changeId);
@@ -421,6 +524,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
     const handlers: Record<string, (input: unknown, signal: AbortSignal) => Promise<unknown>> = {
         planroom_open: (input) => serially(() => open(input)),
         planroom_ask: (input) => serially(() => ask(input)),
+        planroom_review: (input) => serially(() => review(input)),
         planroom_emit: (input) => known().emit(input),
         planroom_wait: async (input, signal) => {
             const { after, timeoutSec } = parseArgs(waitInput, input);
@@ -452,6 +556,29 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             const { lastEvent: _lastEvent, counters: _counters, ...state } = live.current;
             const cursor = { cursor: live.delivery.agentCursor, latestSeq: live.delivery.lastSeq, repoRoot: options.repoRoot };
             if (state.kind === 'ask') return { url, ...cursor, context: askTranscript(state), state };
+            if (state.kind === 'review') {
+                const round = currentRound(state.review!);
+                return {
+                    url,
+                    ...cursor,
+                    ...reviewContext(live),
+                    deck: deckSlides(state, round.n).map((slide) => ({
+                        id: slide.id,
+                        chapter: slide.chapter,
+                        title: slide.title,
+                        published: slideShown(slide, round)
+                    })),
+                    impact: round.impact ?? null,
+                    findings: roundItems(state, round.n).map((item) => ({
+                        id: item.id,
+                        kind: item.kind,
+                        title: item.title,
+                        reaction: state.reactions[item.id]?.verdict ?? null
+                    })),
+                    comments: deriveComments(state, round.n).map(({ key, body, task }) => ({ key, body, task })),
+                    state
+                };
+            }
             const gate = phase1Gate(state, state.phases.phase1.direction);
             return {
                 url,

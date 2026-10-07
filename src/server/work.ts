@@ -1,6 +1,7 @@
 import lowerFirst from 'lodash/lowerFirst.js';
 import { type Phase, sectionLabel, sectionOfBlock } from '../shared/derive.js';
 import type { LoggedEvent } from '../shared/events.js';
+import type { ReviewStage } from '../shared/review.js';
 import type { SessionState } from '../shared/state.js';
 
 /** What the agent is on: `doing` in words that follow "Agent", and the thread when it is a comment. */
@@ -17,12 +18,23 @@ export const PHASE_WORK: Record<Phase, string> = {
     accepted: 'thinking'
 };
 
+/** What a working agent is doing on a review when nothing it received says more. */
+export const REVIEW_WORK: Record<ReviewStage, string> = {
+    building: 'building the walkthrough',
+    walkthrough: 'standing by while you read',
+    triage: 'standing by while you react to the findings',
+    preview: 'standing by while you check the comments',
+    posted: 'finishing up',
+    'next-round': 'starting the next round'
+};
+
 /** Where an anchor sits, for a short label: `Q-3`, `§4`, a proposal file or the summary. */
 function placeOf(target: string, state: SessionState): string | undefined {
     const colon = target.indexOf(':');
     const kind = colon === -1 ? target : target.slice(0, colon);
     const id = target.slice(colon + 1);
-    if (kind === 'question' || kind === 'file') return id;
+    if (kind === 'question' || kind === 'file' || kind === 'item') return id;
+    if (kind === 'slide') return `slide "${state.slides[id]?.title ?? id}"`;
     if (kind === 'section') return sectionLabel(state, id);
     if (kind === 'block') {
         const section = sectionOfBlock(state, id);
@@ -66,6 +78,20 @@ function workFor(event: LoggedEvent, events: readonly LoggedEvent[], state: Sess
             return { doing: 'revising the proposal', ...(event.threadId ? { thread: event.threadId } : {}) };
         case 'validation.result':
             return event.passed ? undefined : { doing: 'fixing validation errors' };
+        case 'take.answer':
+            return { doing: 'noting your take' };
+        case 'reviewers.start':
+            return { doing: 'starting the reviewers' };
+        case 'walkthrough.done':
+            return { doing: 'standing by while you react to the findings' };
+        case 'impact.send':
+            return { doing: 'investigating the impact and writing Trade-offs' };
+        case 'item.react':
+            return event.verdict === 'reject'
+                ? { doing: `weighing your rejection of ${event.itemId}` }
+                : { doing: `noting your reaction to ${event.itemId}` };
+        case 'preferences.change':
+            return { doing: 'reading your new preferences' };
         case 'block.fix': {
             const place = placeOf(`block:${event.blockId}`, state);
             return { doing: `fixing a block${place ? ` in ${place}` : ''}` };

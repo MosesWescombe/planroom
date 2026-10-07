@@ -4,6 +4,7 @@ import { checkCommand, currentPhase } from '../shared/derive.js';
 import { type LoggedEvent, type NewLoggedEvent, pageRequest } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
 import type { ValidationRecord } from '../shared/records.js';
+import { currentRound, type ReviewPreferences, reviewStage } from '../shared/review.js';
 import { type Revision, revisionMeta } from '../shared/revisions.js';
 import { emptyState, type PlanFormat, planDir, planFormat, type SessionState } from '../shared/state.js';
 import type { ActivityEntry, AgentStatus, Patch, ProposalView, View } from '../shared/view.js';
@@ -15,8 +16,12 @@ import { writeAtomic } from './fsutil.js';
 import { acquireLock, releaseLock, releaseLockSync, updateLock } from './lock.js';
 import type { OpenSpecRunner } from './openspec.js';
 import { applyPageRequest } from './pageApply.js';
-import { askDir, ignoreInGit, LOCAL_FILES, planroomDir, SessionStore } from './store.js';
-import { describeWork, followsAgent, PHASE_WORK, type Work } from './work.js';
+import { postRound } from './posting.js';
+import { readPreferences, writePreferences } from './preferences.js';
+import { freshReview, nextRound, type ResolvedTarget, type ReviewHost } from './review.js';
+import { askDir, ignoreInGit, LOCAL_FILES, planroomDir, reviewDir, SessionStore } from './store.js';
+import { describeWork, followsAgent, PHASE_WORK, REVIEW_WORK, type Work } from './work.js';
+import { ensureWorktree, filePatch, removeWorktree } from './worktree.js';
 
 /** kebab-case: lowercase letters and digits in words joined by single hyphens. */
 export const CHANGE_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -43,6 +48,15 @@ export interface AskOptions {
     title?: string;
     /** The repo-relative `.md` file the transcript is written to when the user sends their answers. */
     output?: string;
+    cli: OpenSpecRunner;
+    now?: () => Date;
+}
+
+/** What `Session.openReview` needs: the repo, the resolved target, and Bitbucket access and the preferences file. */
+export interface ReviewOptions {
+    repoRoot: string;
+    resolved: ResolvedTarget;
+    host: ReviewHost;
     cli: OpenSpecRunner;
     now?: () => Date;
 }
@@ -87,7 +101,10 @@ export function formatFor(repoRoot: string, changeId: string, requested: PlanFor
 }
 
 /** The fields a page view adds to the persisted state, which the server works out live. */
-export type LiveFields = Pick<View, 'agent' | 'activity' | 'revisions' | 'proposal' | 'validating' | 'viewOnly' | 'elsewhere'>;
+export type LiveFields = Pick<
+    View,
+    'agent' | 'activity' | 'revisions' | 'proposal' | 'validating' | 'viewOnly' | 'elsewhere' | 'preferences' | 'postable'
+>;
 
 /** A plan's page view: the page's fields of its persisted state, plus the live ones. */
 export function viewOf(state: SessionState, live: LiveFields): View {
@@ -109,7 +126,13 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         traces,
         validation,
         phases,
-        revision
+        revision,
+        review,
+        slides,
+        items,
+        reactions,
+        takes,
+        notes
     } = state;
     return {
         changeId,
@@ -130,6 +153,12 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         validation,
         phases,
         revision,
+        review,
+        slides,
+        items,
+        reactions,
+        takes,
+        notes,
         ...live
     };
 }
@@ -157,6 +186,12 @@ export class Session {
     /** Validations in flight; more than one when the user re-runs while one is still going. */
     private validations = 0;
     private stopWatching: (() => void) | undefined;
+    /** A review's Bitbucket access and preferences file. */
+    private host: ReviewHost | undefined;
+    /** A review's preferences, as last read or saved. */
+    private preferences: ReviewPreferences | undefined;
+    /** The Post in flight, if any. */
+    private posting: Promise<void> | undefined;
     /** Releases the lock synchronously if the process exits with the session still open. */
     private readonly exitHandler = () => releaseLockSync(this.store.lockFile);
     readonly delivery: EventDelivery;
@@ -231,19 +266,38 @@ export class Session {
         }));
     }
 
+    /**
+     * Open or resume a review in `.planroom/reviews/<id>/`, which needs no `openspec/` and whose `.planroom/` ignores
+     * itself in git. A new review starts at round 1 of the resolved target. `syncReview` then brings it up to date.
+     */
+    static async openReview(options: ReviewOptions): Promise<{ session: Session; resumed: boolean }> {
+        const { repoRoot, resolved, host } = options;
+        checkId(resolved.id, 'target', 'pr-412');
+        const dir = reviewDir(repoRoot, resolved.id);
+        await ignoreInGit(join(repoRoot, '.planroom'));
+        const opened = await Session.start(options, dir, new SessionStore(dir), async (now) => ({
+            ...emptyState(resolved.id, resolved.title, now),
+            kind: 'review',
+            review: await freshReview(repoRoot, resolved, now)
+        }));
+        opened.session.host = host;
+        opened.session.preferences = await readPreferences(host.preferencesFile);
+        return opened;
+    }
+
     /** Take the lock, then restore the persisted state or start one from `fresh`, and watch a plan's folder. */
     private static async start(
         options: Pick<OpenOptions, 'repoRoot' | 'cli' | 'now'>,
         changeDir: string,
         store: SessionStore,
-        fresh: (now: string) => SessionState
+        fresh: (now: string) => SessionState | Promise<SessionState>
     ): Promise<{ session: Session; resumed: boolean }> {
         const clock = options.now ?? (() => new Date());
         await store.init();
         await acquireLock(store.lockFile, '(starting)', clock().toISOString());
         try {
             const loaded = await store.load();
-            const state = loaded?.state ?? fresh(clock().toISOString());
+            const state = loaded?.state ?? (await fresh(clock().toISOString()));
             if (!loaded) await store.saveState(state);
             const { repoRoot, cli } = options;
             const session = new Session(
@@ -313,6 +367,77 @@ export class Session {
         });
     }
 
+    /** A review's worktree, as an absolute path. */
+    get worktreeDir(): string | undefined {
+        return this.state.review ? join(this.repoRoot, this.state.review.worktree) : undefined;
+    }
+
+    /** Where a review's `code` excerpts are read from: its worktree, at the commit under review. */
+    get codeRoot(): string | undefined {
+        return this.worktreeDir;
+    }
+
+    /**
+     * Bring a review up to date with its target: reopen it if the reviewer ended it, release a Post a crash cut short so
+     * it can be retried, and start the next round when a posted round's head has moved. Then check the worktree out at
+     * the current round's head. A reopened review starts the agent afresh, so it counts everything logged as read.
+     */
+    async syncReview(resolved: ResolvedTarget): Promise<void> {
+        const host = this.host;
+        if (!host || !this.state.review) throw new Error('syncReview outside a review');
+        await this.exclusive(async () => {
+            const review = this.state.review!;
+            const round = currentRound(review);
+            const draft = new Draft(this.state, this.nowIso());
+            const { ended, ...phases } = draft.state.phases;
+            if (ended) {
+                draft.setPhases(phases);
+                this.delivery.acknowledge(this.delivery.lastSeq);
+                draft.state.agentCursor = this.delivery.agentCursor;
+                draft.note({ title: 'Reopened the review' });
+            }
+            const { title, description, author, link } = resolved;
+            const summary = { ...review, title, description, ...(author ? { author } : {}), ...(link ? { link } : {}) };
+            if (round.posting?.state === 'posting') {
+                summary.rounds = review.rounds.map((each) =>
+                    each.n === round.n ? { ...each, posting: { state: 'partial' as const, at: draft.now } } : each
+                );
+            }
+            if (round.postedAt && resolved.head !== round.head) {
+                const next = await nextRound(this.repoRoot, review, resolved.head, host.access, draft.now);
+                summary.rounds = [...summary.rounds, next];
+                draft.note({ title: `Round ${next.n} started`, detail: 'the author pushed since your review', kind: 'question' });
+            }
+            draft.setReview(summary);
+            await this.store.saveState(draft.state);
+            this.commit(draft);
+        });
+        await ensureWorktree(this.repoRoot, this.worktreeDir!, currentRound(this.state.review!).head);
+    }
+
+    /** A review's preferences: this machine's `review.json`, as last read or saved. */
+    get reviewPreferences(): ReviewPreferences | undefined {
+        return this.preferences;
+    }
+
+    /** Whether a review can post, and what to set up while it cannot. */
+    get postable(): { ready: boolean; problem?: string } | undefined {
+        if (!this.host) return undefined;
+        const { ready, problem } = this.host.access;
+        return { ready, ...(problem ? { problem } : {}) };
+    }
+
+    /** One round's diff, of one file or all of them, from its base to its head. */
+    async reviewDiff(roundNumber: number | undefined, file?: string): Promise<{ round: number; patch: string }> {
+        const review = this.state.review;
+        const round =
+            roundNumber === undefined ? review && currentRound(review) : review?.rounds.find((r) => r.n === roundNumber);
+        if (!round) throw new RejectedError([{ path: 'round', message: 'There is no such round' }], 404);
+        if (file !== undefined && !round.files.some((changed) => changed.path === file || changed.from === file))
+            throw new RejectedError([{ path: 'file', message: `${file} is not in round ${round.n}'s diff` }], 404);
+        return { round: round.n, patch: await filePatch(this.repoRoot, round.base, round.head, file) };
+    }
+
     /** Record the page URL in the lock, so a second session's error can name it. */
     async publishUrl(url: string): Promise<void> {
         await updateLock(this.store.lockFile, url, this.nowIso());
@@ -333,7 +458,7 @@ export class Session {
         return this.exclusive(async () => {
             const { events, summary, doing, subagents } = parseBatch(input);
             const draft = new Draft(this.state, this.nowIso());
-            const { result, revision, editing, validate } = applyAgentBatch(draft, events, summary);
+            const { result, revision, editing, validate } = applyAgentBatch(draft, events, summary, this.preferences);
             if (revision) await this.store.saveRevision(revision);
             await this.store.saveState(draft.state);
             this.commit(draft, revision);
@@ -395,8 +520,15 @@ export class Session {
         return this.exclusive(async () => {
             const parsed = pageRequest.safeParse(input);
             if (!parsed.success) throw new RejectedError(toIssues(parsed.error), 400);
+            if (parsed.data.type === 'comments.post' && this.host && !this.host.access.ready)
+                throw new RejectedError([{ path: 'type', message: this.host.access.problem ?? 'Posting is not set up' }], 409);
             const draft = new Draft(this.state, this.nowIso());
             const outcome = applyPageRequest(draft, parsed.data, this.revisions);
+            if (outcome.preferences && this.host) {
+                await writePreferences(this.host.preferencesFile, outcome.preferences);
+                this.preferences = outcome.preferences;
+                this.broadcast([{ field: 'preferences', value: outcome.preferences }]);
+            }
             let sent = outcome.event;
             if (sent?.type === 'ask.done') sent = { ...sent, ...(await this.writeOutput(draft.state.output, sent.context)) };
             const event = sent ? this.stamp(sent, draft.now) : undefined;
@@ -407,6 +539,7 @@ export class Session {
             this.commit(draft, outcome.revision);
             if (event) this.delivery.publish(event);
             if (outcome.validate) this.startValidation('rerun');
+            if (outcome.post) this.startPosting(outcome.post);
             return event ? { seq: event.seq } : {};
         });
     }
@@ -439,6 +572,37 @@ export class Session {
         this.commit(draft);
         this.delivery.publish(logged);
         return logged;
+    }
+
+    /** Apply a server-side change through a draft, persisted before it resolves, logging the event it returns. */
+    private change(fn: (draft: Draft) => NewLoggedEvent | undefined): Promise<void> {
+        return this.exclusive(async () => {
+            if (this.closed) return;
+            const draft = new Draft(this.state, this.nowIso());
+            const event = fn(draft);
+            if (event) {
+                await this.appendServerEvent(draft, event);
+                return;
+            }
+            await this.store.saveState(draft.state);
+            this.commit(draft);
+        });
+    }
+
+    /** Post the review's comments outside the queue, each outcome recorded inside it as it lands. */
+    private startPosting(choices: Record<string, 'reanchor' | 'drop' | 'anyway'>): void {
+        const host = this.host;
+        if (!host) return;
+        this.posting = postRound(
+            {
+                repoRoot: this.repoRoot,
+                client: host.access.client,
+                state: () => this.state,
+                change: (fn) => this.change(fn),
+                closed: () => this.closed
+            },
+            choices
+        ).catch((error: unknown) => console.error(`planroom: posting ${this.changeId} failed`, error));
     }
 
     // ---------------------------------------------------------------- OpenSpec
@@ -489,6 +653,7 @@ export class Session {
 
     /** Wait for any validation in flight and the activity log; tests use this to observe the result. */
     async settled(): Promise<void> {
+        await this.posting;
         await this.queue;
         while (this.validations > 0) {
             await new Promise((resolve) => setTimeout(resolve, 10));
@@ -576,6 +741,7 @@ export class Session {
         if (this.work) return this.work;
         const running = this.subagents.length;
         if (running) return { doing: `waiting on ${running === 1 ? 'a subagent' : `${running} subagents`}` };
+        if (this.state.kind === 'review') return { doing: REVIEW_WORK[reviewStage(this.state)] };
         return { doing: PHASE_WORK[currentPhase(this.state)] };
     }
 
@@ -596,7 +762,9 @@ export class Session {
             activity: this.activity,
             revisions: revisionMeta(this.revisions),
             proposal: this.proposal,
-            validating: this.validations > 0
+            validating: this.validations > 0,
+            ...(this.preferences ? { preferences: this.preferences } : {}),
+            ...(this.postable ? { postable: this.postable } : {})
         });
     }
 
@@ -620,7 +788,13 @@ export class Session {
         this.stopWatching?.();
         clearTimeout(this.editingTimer);
         await this.queue.catch(() => undefined);
+        await this.posting;
         await this.activityLog;
+        const worktree = this.worktreeDir;
+        if (worktree)
+            await removeWorktree(this.repoRoot, worktree).catch((error: unknown) =>
+                console.error(`planroom: could not remove the worktree of ${this.changeId}`, error)
+            );
         await releaseLock(this.store.lockFile);
         process.off('exit', this.exitHandler);
         this.listeners.clear();
