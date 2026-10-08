@@ -174,13 +174,14 @@ function undo(draft: Draft, revisions: readonly Revision[], n: number): { event:
                 draft.removeBlock(change.id);
                 forgetBlock(draft, change.id);
             } else {
-                const { id, type, config, caption, refs } = change.before;
+                const { id, type, config, caption, refs, technical } = change.before;
                 const restored: BlockRecord = {
                     id,
                     type,
                     config,
                     ...(caption !== undefined ? { caption } : {}),
                     ...(refs !== undefined ? { refs } : {}),
+                    ...(technical !== undefined ? { technical } : {}),
                     version: (current?.version ?? 0) + 1,
                     updatedAt: now
                 };

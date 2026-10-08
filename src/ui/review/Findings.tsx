@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { barConfig, fileTreeConfig, riskMatrixConfig } from '../../shared/blocks';
 import {
+    type ChangedFile,
     type CodeAnchor,
     commentBody,
     describeCodeAnchor,
@@ -25,6 +26,7 @@ import { useReadOnly } from '../readOnly';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 import { BitbucketComment, CommentEditor } from './BitbucketComment';
+import { buildTree, commonRoot, type Folder } from './FileTreeSelect';
 import { useIsCurrentRound, useShownRound } from './hooks';
 
 /** What each kind of finding is called. */
@@ -314,38 +316,64 @@ function FileDiff({ round, path, items, focus }: { round: number; path: string; 
     );
 }
 
-/** Each changed file, opened on demand, with how many findings sit on it. */
+/** One changed file, its diff fetched once opened, with how many findings sit on it. */
+function FileEntry({ round, file, name, items }: { round: number; file: ChangedFile; name: string; items: ItemRecord[] }) {
+    const [shown, setShown] = useState(false);
+    const count = items.filter((item) => item.anchor?.file === file.path).length;
+    return (
+        <details className="review-file" onToggle={(event) => setShown(event.currentTarget.open)}>
+            <summary>
+                <span className="file-path">{name}</span>
+                <span className="mono small change-add">+{file.additions}</span>
+                <span className="mono small change-remove">−{file.deletions}</span>
+                {count > 0 && <span className="count">{count}</span>}
+            </summary>
+            {shown && <FileDiff round={round} path={file.path} items={items} />}
+        </details>
+    );
+}
+
+/** A folder of changed files, open by default and collapsible, with its subfolders and files indented under it. */
+function FolderEntry({
+    folder,
+    round,
+    byPath,
+    items
+}: {
+    folder: Folder;
+    round: number;
+    byPath: ReadonlyMap<string, ChangedFile>;
+    items: ItemRecord[];
+}) {
+    return (
+        <>
+            {folder.folders.map((child) => (
+                <details key={child.name} className="review-folder" open>
+                    <summary>
+                        <span className="file-path">{child.name}/</span>
+                    </summary>
+                    <div className="review-folder-body">
+                        <FolderEntry folder={child} round={round} byPath={byPath} items={items} />
+                    </div>
+                </details>
+            ))}
+            {folder.files.map(({ name, path }) => (
+                <FileEntry key={path} round={round} file={byPath.get(path)!} name={name} items={items} />
+            ))}
+        </>
+    );
+}
+
+/** The changed files as a tree of collapsible folders from their common root, each file's diff opened on demand. */
 function Files({ round, items }: { round: RoundRecord; items: ItemRecord[] }) {
-    const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+    const paths = round.files.map((file) => file.path);
+    const root = commonRoot(paths);
+    const byPath = new Map(round.files.map((file) => [file.path, file]));
     return (
         <section className="review-files" aria-label="The diff">
             <h2 className="eyebrow">The diff, with the findings beside their lines</h2>
-            {round.files.map((file) => {
-                const count = items.filter((item) => item.anchor?.file === file.path).length;
-                return (
-                    <details
-                        key={file.path}
-                        className="review-file"
-                        onToggle={(event) => {
-                            const shown = event.currentTarget.open;
-                            setOpen((current) => {
-                                const next = new Set(current);
-                                if (shown) next.add(file.path);
-                                else next.delete(file.path);
-                                return next;
-                            });
-                        }}
-                    >
-                        <summary>
-                            <span className="file-path">{file.path}</span>
-                            <span className="mono small change-add">+{file.additions}</span>
-                            <span className="mono small change-remove">−{file.deletions}</span>
-                            {count > 0 && <span className="count">{count}</span>}
-                        </summary>
-                        {open.has(file.path) && <FileDiff round={round.n} path={file.path} items={items} />}
-                    </details>
-                );
-            })}
+            {root.length > 0 && <div className="mono small muted">{root.join('/')}/</div>}
+            <FolderEntry folder={buildTree(paths, root)} round={round.n} byPath={byPath} items={items} />
         </section>
     );
 }
@@ -540,9 +568,16 @@ export function Findings() {
                                 </p>
                             </header>
                             {items.length === 0 ? (
-                                <p className="muted">
-                                    The agent's review is still running. Findings appear here as it verifies them.
-                                </p>
+                                round.progress?.reviewedAt ? (
+                                    <p className="muted">
+                                        The review is done and found nothing to raise. The diff is below if you want to look
+                                        yourself.
+                                    </p>
+                                ) : (
+                                    <p className="muted">
+                                        The agent's review is still running. Findings appear here as it verifies them.
+                                    </p>
+                                )
                             ) : (
                                 <>
                                     <Views round={round} items={items} />

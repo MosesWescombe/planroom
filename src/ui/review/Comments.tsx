@@ -362,13 +362,7 @@ function Earlier({ round, editable }: { round: RoundRecord; editable: boolean })
                         </span>
                         {entry.resolvedAt && <span className="chip">Resolved</span>}
                     </header>
-                    <div className="bb-body">
-                        <BitbucketMarkdown source={entry.post.body} />
-                    </div>
-                    {entry.note && <p className="small">{entry.note}</p>}
-                    {entry.code && (
-                        <CodeViewer source={entry.code} format="diff" label="The code that shows it" title="What changed" />
-                    )}
+                    {entry.note && <p className="earlier-note">{entry.note}</p>}
                     {entry.replies.length > 0 && (
                         <ul className="replies">
                             {entry.replies.map((reply, index) => (
@@ -377,6 +371,18 @@ function Earlier({ round, editable }: { round: RoundRecord; editable: boolean })
                                 </li>
                             ))}
                         </ul>
+                    )}
+                    <details className="earlier-fold">
+                        <summary>Your comment</summary>
+                        <div className="bb-body">
+                            <BitbucketMarkdown source={entry.post.body} />
+                        </div>
+                    </details>
+                    {entry.code && (
+                        <details className="earlier-fold">
+                            <summary>The code that shows it</summary>
+                            <CodeViewer source={entry.code} format="diff" label="The code that shows it" title="What changed" />
+                        </details>
                     )}
                     {followups[key] && (
                         <button type="button" className="button-link small" onClick={() => goTo(`item:${followups[key]}`)}>

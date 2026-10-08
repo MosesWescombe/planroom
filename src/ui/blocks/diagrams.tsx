@@ -395,6 +395,15 @@ export function GraphDiagram({
     );
 }
 
+/** A sequence message's wrapped lines, stacked up so the last sits at `last`. */
+function MessageLines({ lines, x, last }: { lines: string[]; x: number; last: number }) {
+    return lines.map((line, index) => (
+        <tspan key={index} x={x} y={last - (lines.length - 1 - index) * 16}>
+            {line}
+        </tspan>
+    ));
+}
+
 /**
  * Draw a laid-out sequence: actors with lifelines, and messages between them, dashed for replies, looped for
  * self-calls. A step-through's `highlight` lights its step's messages, by index; `pins` badge actors by label.
@@ -444,8 +453,8 @@ export function SequenceDiagram({
                                 points={`${x},${message.y - 8} ${x + 28},${message.y - 8} ${x + 28},${message.y + 6} ${x + 3},${message.y + 6}`}
                                 markerEnd={`url(#${ids.plain})`}
                             />
-                            <text x={x + 34} y={message.y + 2} className="dg-edge-label is-message">
-                                {message.text}
+                            <text className="dg-edge-label is-message">
+                                <MessageLines lines={message.lines} x={x + 34} last={message.y + 2} />
                             </text>
                         </g>
                     );
@@ -461,13 +470,8 @@ export function SequenceDiagram({
                             className={`dg-edge${message.reply ? ' is-dashed is-reply' : ''}`}
                             markerEnd={`url(#${ids.plain})`}
                         />
-                        <text
-                            x={(from.x + to.x) / 2}
-                            y={message.y - 7}
-                            textAnchor="middle"
-                            className={`dg-edge-label is-message${message.reply ? ' is-reply' : ''}`}
-                        >
-                            {message.text}
+                        <text textAnchor="middle" className={`dg-edge-label is-message${message.reply ? ' is-reply' : ''}`}>
+                            <MessageLines lines={message.lines} x={(from.x + to.x) / 2} last={message.y - 7} />
                         </text>
                     </g>
                 );

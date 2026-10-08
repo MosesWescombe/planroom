@@ -538,6 +538,18 @@ describe('the findings', () => {
         ]);
     });
 
+    it('says the review found nothing once the agent reports it done, and groups the diff into folders', async () => {
+        const store = storeWith(reviewView({ round: DONE }));
+        render(<App store={store} />);
+        await userEvent.click(screen.getByRole('button', { name: /Review/ }));
+        expect(screen.getByText(/still running/)).toBeInTheDocument();
+        act(() =>
+            store.apply([{ field: 'review', value: reviewView({ round: { ...DONE, progress: { reviewedAt: NOW } } }).review }])
+        );
+        expect(screen.getByText(/found nothing to raise/)).toBeInTheDocument();
+        expect(document.querySelectorAll('.review-file').length).toBeGreaterThan(0);
+    });
+
     it.each([
         ['charts', () => document.querySelector('[data-block-type="bar"]')],
         ['matrix', () => document.querySelector('[data-block-type="riskMatrix"]')],

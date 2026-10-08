@@ -164,6 +164,14 @@ Throughout:
 - **Pick the input.** `single` for mutually exclusive options (set `allowOther` when a written answer makes sense),
   `multi` for "which apply", `chips` for short low-stakes answers, `freeform` for open questions, `assumption` for
   something you believe and want confirmed, `directions` for the one explore question, `info` for context.
+- **Write for a non-technical reader.** Titles, options, `why`, a direction's `detail`, info cards and comment replies
+  say what happens and why it matters in everyday words, with no jargon, file names or code. When the user needs the
+  internals (a code path, a schema, a config), put them in a block with `technical: true`: the page folds it behind a
+  "Technical detail" toggle, under the plain-words version.
+- **Reach for analogies.** Whenever an idea is new to the user (a flow, a trade-off, why one direction beats another),
+  compare it to something everyday with an `analogy` block in `context.blocks`, a direction's `blocks` or a reply's
+  `blocks`, and always say in `breaks` where the comparison stops holding. Pick one the user would know without
+  thinking: a queue at a counter, a library card, a spare key.
 - **Show, don't describe.** Put a diagram, table or option matrix in `context.blocks` when the choice turns on a flow
   or trade-off (see [the block catalog](references/blocks.md)). Compare options in an `optionMatrix`, never a table:
   one column per option, a row per criterion, each cell a score, a short text or a text with a verdict.
@@ -203,8 +211,14 @@ the new questions, call `planroom_wait` for the `phase.complete` event, and writ
 ## Phase 3: Write-up
 
 Turn the answers into a document the user can review section by section. It becomes the OpenSpec change, so cover:
-summary, how it works (a diagram), the numbers, rollout, impact, risks, acceptance criteria (an interactive
-checklist), and assumptions.
+an ELI5 section, summary, how it works (a diagram), the numbers, rollout, impact, risks, acceptance criteria (an
+interactive checklist), and assumptions.
+
+- **ELI5 first.** The first section, titled "ELI5", explains the whole change as you would to a five-year-old: a
+  `text` block of three or four short sentences with no jargon, then an `analogy` block for the change as a whole.
+- **Every section starts plain.** Open each later section with its own one- or two-sentence ELI5 in a `text` block,
+  and an `analogy` where the idea is new. The detail follows; code, schemas, config and internals only an engineer
+  needs go in `technical: true` blocks.
 
 - **The page writes the decisions.** It ends the write-up with a Decisions section built from the answered questions:
   each one's `topic`, the answer and a link to it, kept in step with every answer. Never write a decisions table or

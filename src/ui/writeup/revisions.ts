@@ -23,9 +23,9 @@ export function loadRevisions(upTo: number): Promise<Revision[]> {
     return Promise.all(all);
 }
 
-/** A block as comparable text: its config pretty-printed, plus its caption. */
+/** A block as comparable text: its config pretty-printed, plus its caption and whether it is folded as technical. */
 export function blockText(block: BlockContent): string {
-    return `${JSON.stringify(block.config, null, 2)}${block.caption ? `\ncaption: ${block.caption}` : ''}`;
+    return `${JSON.stringify(block.config, null, 2)}${block.caption ? `\ncaption: ${block.caption}` : ''}${block.technical ? '\ntechnical' : ''}`;
 }
 
 export interface BlockDiff {

@@ -17,6 +17,7 @@ export const blockRecord = z.object({
     config: z.record(z.string(), z.unknown()),
     caption: z.string().optional(),
     refs: z.array(z.string()).optional(),
+    technical: z.boolean().optional(),
     version: z.number().int().min(1),
     /** Present when the config failed its type's schema, or the type is unknown. */
     problem: z.object({ reason: z.enum(['unknown-type', 'invalid']), issues: z.array(issue) }).optional(),

@@ -36,3 +36,37 @@ describe('a block whose lazy renderer fails to load', () => {
         }
     });
 });
+
+describe('a technical block', () => {
+    it('sits folded behind a toggle labelled with its caption, and a plain block does not', () => {
+        const technical = {
+            id: 't1',
+            type: 'text',
+            config: { body: 'Keys live in Redis' },
+            caption: 'Key layout',
+            technical: true
+        };
+        const plain = { id: 't2', type: 'text', config: { body: 'Callers wait their turn' } };
+        const store = storeWith(
+            makeView({
+                blocks: [
+                    blockRecord(technical.id, technical.type, technical.config),
+                    blockRecord(plain.id, plain.type, plain.config)
+                ],
+                sections: [sectionRecord('s1', 1, [technical.id, plain.id])]
+            })
+        );
+        renderWith(
+            store,
+            <>
+                <BlockView block={technical} placement="writeup" />
+                <BlockView block={plain} placement="writeup" />
+            </>,
+            'writeup'
+        );
+        const fold = screen.getByText('Technical detail: Key layout').closest('details');
+        expect(fold).not.toHaveAttribute('open');
+        expect(fold).toContainElement(screen.getByText('Keys live in Redis'));
+        expect(screen.getByText('Callers wait their turn').closest('details')).toBeNull();
+    });
+});

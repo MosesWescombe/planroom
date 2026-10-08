@@ -111,6 +111,7 @@ export interface BlockInput {
     config: Record<string, unknown>;
     caption?: string;
     refs?: string[];
+    technical?: boolean;
     problem?: { reason: 'unknown-type' | 'invalid'; issues: Issue[] };
 }
 
@@ -277,7 +278,8 @@ export function BlockContent({ block, placement }: { block: BlockInput; placemen
 /**
  * A block with its frame: the content, an optional caption and question refs, and
  * the full-screen action every block gets, plus a whole-block comment in the write-up
- * for images and diagrams that have little text to select.
+ * for images and diagrams that have little text to select. A technical block sits
+ * folded behind a "Technical detail" toggle, for readers who want it.
  */
 export const BlockView = memo(function BlockView({ block, placement }: { block: BlockInput; placement: Placement }) {
     const [full, setFull] = useState(false);
@@ -285,7 +287,7 @@ export const BlockView = memo(function BlockView({ block, placement }: { block: 
     const target = placement === 'writeup' || placement === 'slide' ? `block:${block.id}` : undefined;
     const label = block.caption ?? `${block.type} ${block.id}`;
     const zooms = !block.problem && ZOOMS.has(block.type);
-    return (
+    const figure = (
         <figure className={`block block-${block.type}`} data-block-type={block.type}>
             <div className="block-tools">
                 <button
@@ -342,5 +344,12 @@ export const BlockView = memo(function BlockView({ block, placement }: { block: 
                 </Modal>
             )}
         </figure>
+    );
+    if (!block.technical) return figure;
+    return (
+        <details className="technical-fold">
+            <summary>{block.caption ? `Technical detail: ${block.caption}` : 'Technical detail'}</summary>
+            {figure}
+        </details>
     );
 });

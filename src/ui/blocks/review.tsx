@@ -1,20 +1,13 @@
-import {
-    type CSSProperties,
-    createContext,
-    type FormEvent,
-    useContext,
-    useEffect,
-    useId,
-    useMemo,
-    useRef,
-    useState
-} from 'react';
+import { type CSSProperties, type FormEvent, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { RISK_AREAS, type YourTakeConfig } from '../../shared/blocks';
 import { comparePoints, TAKE_TITLES, type TakeAnswer } from '../../shared/review';
 import { LinkedText } from '../components/LinkedText';
 import { Markdown } from '../components/Markdown';
+import { ZoomFootContext } from '../components/ZoomView';
 import { usePrinting, useReducedMotion } from '../hooks';
 import { useReadOnly } from '../readOnly';
+import { StepperContext } from '../stepper';
 import { deepEqual, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 import type { BlockProps } from './Block';
@@ -22,14 +15,6 @@ import { ImageBlock } from './basic';
 import { GraphDiagram, SequenceDiagram } from './diagrams';
 import { flowGraph, layoutGraph, layoutSequence } from './layout';
 import { usePins } from './pins';
-
-/** A step-through as the deck drives it: `move` takes it a step and says whether it could. */
-export interface Stepper {
-    move(direction: 1 | -1): boolean;
-}
-
-/** How a step-through on the slide on show offers the deck its steps; the arrow keys move it before the deck. */
-export const StepperContext = createContext<((stepper: Stepper) => () => void) | undefined>(undefined);
 
 /** `analogy`: what the change is like, part by part, and where the comparison stops holding. */
 export function AnalogyBlock({ id, config, placement }: BlockProps<'analogy'>) {
@@ -68,8 +53,8 @@ export function AnalogyBlock({ id, config, placement }: BlockProps<'analogy'>) {
 
 /**
  * `stepThrough`: a diagram walked a step at a time, each step lighting its nodes or messages under its caption. The
- * arrow keys and buttons move it; on a slide the deck hands it the keys first. Under reduced motion, and in print, every
- * step shows at once, which is its final state.
+ * arrow keys and buttons move it; on a slide the deck hands it the keys first, and full screen the buttons sit under
+ * the zoomed diagram. Under reduced motion, and in print, every step shows at once, which is its final state.
  */
 export function StepThroughBlock({ id, config }: BlockProps<'stepThrough'>) {
     const reduced = useReducedMotion();
@@ -79,6 +64,7 @@ export function StepThroughBlock({ id, config }: BlockProps<'stepThrough'>) {
     const at = useRef(step);
     at.current = step;
     const register = useContext(StepperContext);
+    const foot = useContext(ZoomFootContext);
     const { steps, diagram } = config;
     const move = (direction: 1 | -1): boolean => {
         const next = at.current + direction;
@@ -93,6 +79,27 @@ export function StepThroughBlock({ id, config }: BlockProps<'stepThrough'>) {
     const pins = usePins(id);
     const flow = useMemo(() => (diagram.type === 'flow' ? layoutGraph(flowGraph(diagram.config)) : undefined), [diagram]);
     const sequence = useMemo(() => (diagram.type === 'sequence' ? layoutSequence(diagram.config) : undefined), [diagram]);
+    const controls = (
+        <div className="step-controls">
+            <button type="button" className="button-secondary button-small" disabled={step === 0} onClick={() => move(-1)}>
+                Back
+            </button>
+            <p className="step-caption" aria-live="polite">
+                <span className="mono muted">
+                    {step + 1}/{steps.length}
+                </span>{' '}
+                <LinkedText text={steps[step]!.caption} />
+            </p>
+            <button
+                type="button"
+                className="button-secondary button-small"
+                disabled={step === steps.length - 1}
+                onClick={() => move(1)}
+            >
+                Next step
+            </button>
+        </div>
+    );
     return (
         <div
             className="step-through"
@@ -117,31 +124,10 @@ export function StepThroughBlock({ id, config }: BlockProps<'stepThrough'>) {
                         </li>
                     ))}
                 </ol>
+            ) : foot ? (
+                createPortal(controls, foot)
             ) : (
-                <div className="step-controls">
-                    <button
-                        type="button"
-                        className="button-secondary button-small"
-                        disabled={step === 0}
-                        onClick={() => move(-1)}
-                    >
-                        Back
-                    </button>
-                    <p className="step-caption" aria-live="polite">
-                        <span className="mono muted">
-                            {step + 1}/{steps.length}
-                        </span>{' '}
-                        <LinkedText text={steps[step]!.caption} />
-                    </p>
-                    <button
-                        type="button"
-                        className="button-secondary button-small"
-                        disabled={step === steps.length - 1}
-                        onClick={() => move(1)}
-                    >
-                        Next step
-                    </button>
-                </div>
+                controls
             )}
         </div>
     );

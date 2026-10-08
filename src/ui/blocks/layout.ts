@@ -101,6 +101,10 @@ const MONO_CHAR_WIDTH = 6.7;
 const LINE_HEIGHT = 16;
 const DETAIL_HEIGHT = 14;
 const MAX_LINE = 24;
+/** A sequence message wraps at about this many characters, so a long one makes its row taller, not every column wider. */
+const MESSAGE_LINE = 28;
+/** A sequence row with a one-line message. */
+const MESSAGE_ROW = 34;
 /** A schema table's heading band, and each column row under it. */
 export const TABLE = { head: 30, row: 20, foot: 6 };
 /** Room a C4 person's head takes above its box, and a database's lid. */
@@ -133,8 +137,8 @@ export function curvePath(points: readonly { x: number; y: number }[]): string {
     return parts.join(' ');
 }
 
-/** Break a label into at most three lines of about MAX_LINE characters. */
-export function wrapLabel(label: string, max = MAX_LINE): string[] {
+/** Break a label into lines of about `max` characters, at most `most` of them, the last cut short with an ellipsis. */
+export function wrapLabel(label: string, max = MAX_LINE, most = 3): string[] {
     const words = label.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let line = '';
@@ -147,11 +151,11 @@ export function wrapLabel(label: string, max = MAX_LINE): string[] {
         }
     }
     if (line) lines.push(line);
-    if (lines.length > 3)
+    if (lines.length > most)
         return [
-            ...lines.slice(0, 2),
+            ...lines.slice(0, most - 1),
             `${lines
-                .slice(2)
+                .slice(most - 1)
                 .join(' ')
                 .slice(0, max - 1)}…`
         ];
@@ -412,27 +416,29 @@ export interface SequenceLayout {
     width: number;
     height: number;
     actors: { label: string; x: number; width: number; tone: NodeTone }[];
-    messages: { from: number; to: number; y: number; text: string; reply: boolean }[];
+    /** `y` is the arrow's; `lines` is the wrapped text, stacked up from just above it. */
+    messages: { from: number; to: number; y: number; text: string; lines: string[]; reply: boolean }[];
 }
 
-/** Actors in evenly spaced columns, one row per message. */
+/** Actors in evenly spaced columns, one row per message, as tall as its wrapped text. */
 export function layoutSequence(config: BlockConfigs['sequence'], tones?: Map<string, NodeTone>): SequenceLayout {
     const widths = config.actors.map((actor) => Math.max(84, actor.length * CHAR_WIDTH + 24));
-    const longestMessage = Math.max(0, ...config.messages.map((message) => message.text.length * 6.4 + 16));
-    const column = Math.max(...widths, longestMessage, 110) + 24;
+    const wrapped = config.messages.map((message) => wrapLabel(message.text, MESSAGE_LINE, Number.POSITIVE_INFINITY));
+    const longestLine = Math.max(0, ...wrapped.flat().map((line) => line.length * CHAR_WIDTH + 16));
+    const column = Math.max(...widths, longestLine, 110) + 24;
     const actors = config.actors.map((label, index) => ({
         label,
         x: 8 + column / 2 + index * column,
         width: widths[index]!,
         tone: tones?.get(label) ?? 'plain'
     }));
-    const top = 60;
-    const messages = config.messages.map((message, index) => ({
-        ...message,
-        y: top + index * 34,
-        reply: Boolean(message.reply)
-    }));
-    return { width: 16 + column * config.actors.length, height: top + config.messages.length * 34 + 8, actors, messages };
+    let y = 60 - MESSAGE_ROW;
+    const messages = config.messages.map((message, index) => {
+        const lines = wrapped[index]!;
+        y += MESSAGE_ROW + (lines.length - 1) * LINE_HEIGHT;
+        return { ...message, y, lines, reply: Boolean(message.reply) };
+    });
+    return { width: 16 + column * config.actors.length, height: y + MESSAGE_ROW + 8, actors, messages };
 }
 
 /** The node tone a schema `change` paints. */

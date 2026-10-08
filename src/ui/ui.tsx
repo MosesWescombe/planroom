@@ -96,6 +96,9 @@ function reveal(id: string): void {
     window.requestAnimationFrame(() => {
         const element = document.getElementById(id);
         if (!element) return;
+        // A link to a folded technical block opens the fold, so what it points at shows.
+        const fold = element.querySelector<HTMLDetailsElement>(':scope > details.technical-fold');
+        if (fold) fold.open = true;
         element.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
         if (!element.hasAttribute('tabindex')) element.setAttribute('tabindex', '-1');
         element.focus?.({ preventScroll: true });

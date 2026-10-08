@@ -1,5 +1,15 @@
 import clamp from 'lodash/clamp';
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+    createContext,
+    type KeyboardEvent,
+    type PointerEvent,
+    type ReactNode,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState
+} from 'react';
+import { StepperContext, useSteppers } from '../stepper';
 import { MinusIcon, PlusIcon } from './icons';
 
 const MIN_SCALE = 0.25;
@@ -28,11 +38,15 @@ const ZOOM_KEYS: Partial<Record<string, number>> = { '+': STEP, '=': STEP, '-': 
 /** Controls inside the content keep their clicks rather than starting a drag. */
 const INTERACTIVE = 'button, a, input, select, textarea, summary';
 
+/** Where content portals controls that belong under the view rather than zoomed with it, as a step-through's buttons. */
+export const ZoomFootContext = createContext<HTMLElement | null>(null);
+
 /**
  * A full-screen image or diagram that zooms and scrolls. The content lays out at the picture's own width, is scaled
  * with a transform, and sits in a box of the scaled size, so the viewport's own scrolling reaches all of it and no
  * more. It opens fitted to the screen. The wheel, a trackpad pinch, the buttons, or + and − zoom, keeping the point
- * under the cursor in place; 0 fits again. Drag, the scrollbars, the arrow keys or a sideways swipe move it.
+ * under the cursor in place; 0 fits again. Drag, the scrollbars, the arrow keys or a sideways swipe move it, except
+ * that a step-through inside takes left and right first, and puts its buttons in the foot under the view.
  */
 export function ZoomView({ label, children }: { label: string; children: ReactNode }) {
     const viewport = useRef<HTMLDivElement>(null);
@@ -48,6 +62,8 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
     /** The scroll position that keeps the zoom's focal point still, applied once the new size has rendered. */
     const scrollAfter = useRef<Point>(undefined);
     const drag = useRef<{ from: Point; scroll: Point }>(undefined);
+    const [foot, setFoot] = useState<HTMLDivElement | null>(null);
+    const steppers = useSteppers();
 
     const zoomTo = (next: number, focus?: Point) => {
         const view = viewport.current;
@@ -137,6 +153,10 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
 
     const onKeyDown = (event: KeyboardEvent) => {
         if (event.ctrlKey || event.metaKey || event.altKey) return;
+        if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && steppers.move(event.key === 'ArrowRight' ? 1 : -1)) {
+            event.preventDefault();
+            return;
+        }
         const step = ZOOM_KEYS[event.key];
         if (!step && event.key !== '0') return;
         event.preventDefault();
@@ -216,10 +236,13 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
                         className="zoom-content"
                         style={{ ...(size ? { width: size.width } : {}), transform: `scale(${scale})` }}
                     >
-                        {children}
+                        <ZoomFootContext.Provider value={foot}>
+                            <StepperContext.Provider value={steppers.register}>{children}</StepperContext.Provider>
+                        </ZoomFootContext.Provider>
                     </div>
                 </div>
             </div>
+            <div ref={setFoot} className="zoom-foot" />
         </div>
     );
 }

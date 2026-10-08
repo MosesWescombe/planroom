@@ -89,10 +89,12 @@ export const agentEvent = z.discriminatedUnion('type', [
                 .max(30)
                 .optional(),
             pictures: z.object({ drawn: z.number().int().min(0), total: z.number().int().min(0) }).optional(),
-            review: z.string().trim().min(1).max(200).optional()
+            review: z.string().trim().min(1).max(200).optional(),
+            /** Every finding is sent: the review is over, whether or not it found any. */
+            reviewed: z.literal(true).optional()
         })
-        .refine((event) => event.outline || event.pictures || event.review, {
-            message: 'send `outline`, `pictures` or `review`',
+        .refine((event) => event.outline || event.pictures || event.review || event.reviewed, {
+            message: 'send `outline`, `pictures`, `review` or `reviewed`',
             path: ['outline']
         }),
     /**

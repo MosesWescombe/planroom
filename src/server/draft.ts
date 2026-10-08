@@ -34,8 +34,8 @@ export function reject(message: string, path = '', status: 400 | 404 | 409 = 409
 
 /** A block's content as the revision log stores it: its agent-owned fields, deep-copied. */
 export function blockContentOf(block: BlockRecord): BlockContent {
-    const { id, type, config, caption, refs } = block;
-    return JSON.parse(JSON.stringify({ id, type, config, caption, refs }));
+    const { id, type, config, caption, refs, technical } = block;
+    return JSON.parse(JSON.stringify({ id, type, config, caption, refs, technical }));
 }
 
 /** A section's content as the revision log stores it, with its own copy of the block list and of each row in it. */

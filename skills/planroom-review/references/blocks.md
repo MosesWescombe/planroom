@@ -2,13 +2,15 @@
 
 # Planroom block catalog
 
-Every block is sent as `{ "type": "doc.block.upsert", "block": { "id", "type", "config", "caption"? } }` and placed on a slide
+Every block is sent as `{ "type": "doc.block.upsert", "block": { "id", "type", "config", "caption"?, "technical"? } }` and placed on a slide
 that lists its id: `{ "type": "slide.upsert", "slide": { "id", "chapter", "order", "title", "blocks": [ids] } }`.
 Send a block before, or in the same batch as, the slide that lists it. A block in a `comment.reply`'s `blocks` has no `id`.
 
 - An entry in a slide's `blocks` can be a list of two or three ids instead of one: those blocks sit side by side as columns, and
   stack on a narrow screen. `"blocks": ["how-text", ["how-before", "how-after"]]` puts two diagrams next to each other.
 - A block on a published slide is fixed for the round: re-sending it is refused.
+- `technical: true` folds the block behind a "Technical detail" toggle, its caption as the label: for code, schemas and internals
+  a non-technical reader can skip. Explain the point in plain words in a block that is not folded.
 - Text in any config is shown as text. Never send HTML: it is displayed literally, except in an `html` block.
 - Diagrams take nodes and edges only; the page lays them out. Chart colours come from the page, never from you.
 - A config that fails its schema is still stored and shown as an error card, and `planroom_emit` lists it in `blockProblems`

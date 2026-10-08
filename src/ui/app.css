@@ -2784,6 +2784,27 @@ button.rail-strip-item {
     flex-wrap: wrap;
 }
 
+/* A technical block folded away, so the plain-words explanation reads on its own. */
+.technical-fold {
+    min-width: 0;
+}
+
+/* Kept a list item, so the browser's disclosure triangle shows it opens. */
+.technical-fold > summary {
+    padding: 8px 0;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.technical-fold > summary:hover {
+    color: var(--ink-2);
+}
+
+.technical-fold[open] > summary {
+    margin-bottom: 8px;
+}
+
 .block-error {
     display: flex;
     flex-direction: column;
@@ -3730,7 +3751,9 @@ button.rail-strip-item {
     fill: var(--agent-text);
 }
 
+/* A sequence's messages are what it says, so they read at the actors' size. */
 .dg-edge-label.is-message {
+    font-size: 13px;
     fill: var(--ink);
 }
 
@@ -4469,6 +4492,11 @@ button.rail-strip-item {
 
 .zoom-content img {
     -webkit-user-drag: none;
+}
+
+/* Controls the content puts under the view, unzoomed: a step-through's buttons. */
+.zoom-foot:empty {
+    display: none;
 }
 
 /*
@@ -6474,6 +6502,20 @@ button.nav-item {
     gap: 8px;
 }
 
+.review-folder > summary {
+    padding: 4px 0;
+    cursor: pointer;
+}
+
+.review-folder-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 4px 6px;
+    padding-left: 14px;
+    border-left: 1px solid var(--line);
+}
+
 .review-file {
     border: 1px solid var(--line);
     border-radius: 10px;
@@ -6721,6 +6763,22 @@ button.nav-item {
 .label-none {
     background: var(--sunken);
     color: var(--ink-2);
+}
+
+.earlier-note {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* The comment and the code behind a fold, so a card opens on the verdict and the replies. */
+.earlier-fold > summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ink-2);
+}
+
+.earlier-fold[open] > summary {
+    margin-bottom: 8px;
 }
 
 .replies {

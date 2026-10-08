@@ -428,7 +428,8 @@ function applyReviewEvent(
             const progress = {
                 ...round.progress,
                 ...(event.pictures ? { pictures: event.pictures } : {}),
-                ...(event.review ? { review: event.review } : {})
+                ...(event.review ? { review: event.review } : {}),
+                ...(event.reviewed ? { reviewedAt: now } : {})
             };
             draft.updateRound(round.n, (current) => ({
                 ...current,

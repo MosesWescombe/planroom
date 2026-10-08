@@ -68,6 +68,10 @@ Each card is a `question.upsert`.
   something you believe and want confirmed (a one-line statement as the `title`, no options; the user confirms it with
   `answer.choice` `"holds"` or corrects it in `answer.text`), and `info` for context. An ask has no `directions` input
   and no `direction` field: the server refuses them.
+- **Write for a non-technical reader.** Titles, options, `why`, info cards and replies use everyday words, with no
+  jargon, file names or code. Put internals the user may want in a block with `technical: true`, which the page folds
+  behind a "Technical detail" toggle. When an idea is new to them, compare it to something everyday with an `analogy`
+  block, and always say in `breaks` where the comparison stops holding.
 - **Show, don't describe.** Put a diagram, table or option matrix in `context.blocks` when the choice turns on a flow
   or trade-off, shaped as in [the block catalog](references/blocks.md). An ask has no write-up, so a block goes only in
   a question's `context.blocks` or a reply's `blocks`, with no `id`. Compare options in an `optionMatrix`, never a

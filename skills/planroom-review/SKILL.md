@@ -58,7 +58,8 @@ Start both at once: the review subagents and the illustrator work while you writ
      split the files between them. Then one in **verify** mode with every item they found.
 
    A verifier is told to refute rather than find: keep only what it confirms, with its confidence. Report progress:
-   `deck.progress { review: "3 of 5 reviewers done" }`.
+   `deck.progress { review: "3 of 5 reviewers done" }`. When the last finding is sent, or the review found none, send
+   `deck.progress { reviewed: true }` so the page stops saying you are reviewing.
 3. **Brief the pictures**: one `planroom-illustrator` subagent per illustration, each with a brief (what it shows, what
    must be labelled, the analogy if any, the size) and the file to write: `<repoRoot>/.planroom/reviews/<reviewId>/assets/<name>.svg`.
    Report `deck.progress { pictures: { drawn, total } }` as they land.

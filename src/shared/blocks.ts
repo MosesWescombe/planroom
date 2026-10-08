@@ -1033,7 +1033,9 @@ export const blockEnvelope = z.object({
     type: z.string().min(1).max(40),
     config: z.record(z.string(), z.unknown()),
     caption: z.string().max(1000).optional(),
-    refs: z.array(recordId).max(40).optional()
+    refs: z.array(recordId).max(40).optional(),
+    /** Detail a non-technical reader can skip: the page folds the block behind a "Technical detail" toggle. */
+    technical: z.boolean().optional()
 });
 export type BlockEnvelope = z.infer<typeof blockEnvelope>;
 

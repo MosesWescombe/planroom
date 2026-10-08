@@ -3,7 +3,16 @@ import userEvent from '@testing-library/user-event';
 import dagre from 'dagre';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { blockCatalog } from '../../shared/blockCatalog';
-import { blockTypes, c4Config, codeConfig, ganttConfig, mindmapConfig, sankeyConfig, schemaConfig } from '../../shared/blocks';
+import {
+    blockTypes,
+    c4Config,
+    codeConfig,
+    ganttConfig,
+    mindmapConfig,
+    sankeyConfig,
+    schemaConfig,
+    sequenceConfig
+} from '../../shared/blocks';
 import { blockRecord, sectionRecord } from '../../test/fixtures';
 import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
 import { parsePatch } from '../code/CodeViewer';
@@ -20,6 +29,7 @@ import {
     layoutGraph,
     layoutMindmap,
     layoutSankey,
+    layoutSequence,
     rowCentre,
     scheduleGantt,
     schemaGraph,
@@ -473,6 +483,25 @@ describe('block interactions', () => {
         expect(within(screen.getByRole('dialog')).getByRole('toolbar', { name: 'Zoom' })).toBeInTheDocument();
     });
 
+    it('full screen, a step-through keeps its buttons under the zoomed diagram, and the arrow keys still step it', () => {
+        renderBlock({ id: 'st', type: 'stepThrough', config: blockCatalog.stepThrough.example });
+        fireEvent.click(screen.getByRole('button', { name: 'Full screen' }));
+        const dialog = within(screen.getByRole('dialog'));
+        const viewport = dialog.getByRole('group', { name: 'stepThrough st' });
+        const next = dialog.getByRole('button', { name: 'Next step' });
+        expect(viewport).not.toContainElement(next);
+        expect(dialog.getByText('Every request asks the limiter first.')).toBeInTheDocument();
+
+        expect(fireEvent.keyDown(viewport, { key: 'ArrowRight' })).toBe(false);
+        expect(dialog.getByText('Redis says the bucket is empty.')).toBeInTheDocument();
+        fireEvent.click(next);
+        expect(dialog.getByText('The client gets 429 and when to retry.')).toBeInTheDocument();
+        // Past the last step the key is not taken, so it scrolls the view as usual.
+        expect(fireEvent.keyDown(viewport, { key: 'ArrowRight' })).toBe(true);
+        fireEvent.keyDown(viewport, { key: 'ArrowLeft' });
+        expect(dialog.getByText('Redis says the bucket is empty.')).toBeInTheDocument();
+    });
+
     it('keeps text blocks in the plain full screen, without zoom', () => {
         renderBlock({ id: 't', type: 'table', config: blockCatalog.table.example });
         fireEvent.click(screen.getByRole('button', { name: 'Full screen' }));
@@ -606,6 +635,26 @@ describe('diagram rendering', () => {
         ]);
         fireEvent.mouseLeave(node('Client'));
         expect(document.querySelector('svg.diagram')).not.toHaveClass('has-focus');
+    });
+
+    it('sequence diagram: a long message wraps onto lines that make its row taller, not every column wider', () => {
+        const long = layoutSequence(
+            sequenceConfig.parse({
+                actors: ['Client', 'API'],
+                messages: [
+                    { from: 0, to: 1, text: 'write fuota_held_at where null, not dormant, not deleted, then publish it' },
+                    { from: 1, to: 0, text: 'ok', reply: true }
+                ]
+            })
+        );
+        const [first, second] = long.messages;
+        expect(first?.lines.length).toBeGreaterThan(2);
+        expect(first?.lines.join(' ')).toBe(first?.text);
+        const [client, api] = long.actors;
+        // A column spans the longest line, well short of the message on one line at 7px a character.
+        expect(defined(api).x - defined(client).x).toBeLessThan(defined(first).text.length * 7 * 0.5);
+        expect(defined(second).y - defined(first).y).toBe(34);
+        expect(defined(first).y).toBe(60 + (defined(first).lines.length - 1) * 16);
     });
 
     it("schema diagram: a relation joins the rows of the columns it names, with a crow's foot at the many end and a bar at the one", () => {

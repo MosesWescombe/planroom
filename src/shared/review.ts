@@ -382,7 +382,9 @@ export const roundRecord = z.object({
     progress: z
         .object({
             pictures: z.object({ drawn: z.number().int().min(0), total: z.number().int().min(0) }).optional(),
-            review: z.string().optional()
+            review: z.string().optional(),
+            /** When the agent sent its last finding: the review is over, with or without findings. */
+            reviewedAt: z.string().optional()
         })
         .optional(),
     /** The reviewer subagents the reviewer chose for this round, and when they started them. */

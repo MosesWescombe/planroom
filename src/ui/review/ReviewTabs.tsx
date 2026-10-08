@@ -87,10 +87,12 @@ export function ReviewTabs() {
                 subtitle: unlocked
                     ? items.length
                         ? `${reacted} of ${plural(items.length, 'finding')} reacted to`
-                        : 'Agent is reviewing'
+                        : round.progress?.reviewedAt
+                          ? 'No findings'
+                          : 'Agent is reviewing'
                     : 'After the walkthrough',
                 unlocked,
-                done: unlocked && items.length > 0 && reacted === items.length
+                done: unlocked && (items.length > 0 ? reacted === items.length : Boolean(round.progress?.reviewedAt))
             },
             {
                 id: 'comments',

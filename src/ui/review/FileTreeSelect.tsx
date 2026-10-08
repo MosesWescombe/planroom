@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronIcon } from '../components/icons';
 
 /** A folder of the tree: its name, the folders under it and the files in it. */
-interface Folder {
+export interface Folder {
     name: string;
     folders: Folder[];
     files: { name: string; path: string }[];

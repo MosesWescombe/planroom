@@ -13,7 +13,8 @@ export const blockContent = z.object({
     type: z.string(),
     config: z.record(z.string(), z.unknown()),
     caption: z.string().optional(),
-    refs: z.array(z.string()).optional()
+    refs: z.array(z.string()).optional(),
+    technical: z.boolean().optional()
 });
 export type BlockContent = z.infer<typeof blockContent>;
 

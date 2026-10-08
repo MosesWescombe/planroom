@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
     CHAPTER_TITLES,
@@ -12,7 +12,6 @@ import {
 } from '../../shared/review';
 import { BlockView } from '../blocks/Block';
 import { sendImpact } from '../blocks/impact';
-import { type Stepper, StepperContext } from '../blocks/review';
 import { CheckIcon } from '../components/icons';
 import { Rail } from '../components/Rail';
 import { ReviewerFields } from '../components/Settings';
@@ -20,6 +19,7 @@ import { AgentNow } from '../components/SidePanel';
 import { plural } from '../format';
 import { usePrinting, useReducedMotion } from '../hooks';
 import { useReadOnly } from '../readOnly';
+import { StepperContext, useSteppers } from '../stepper';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy, useUiState } from '../ui';
 import { useIsCurrentRound, useShownRound } from './hooks';
@@ -266,13 +266,7 @@ function Deck({ round }: { round: RoundRecord }) {
             : Math.max(0, slide === undefined ? 0 : slides.indexOf(slide));
     const impactAt = impactSlide === undefined ? -1 : slides.indexOf(impactSlide);
     const unsent = impactAt >= 0 && current && !readOnly && !round.impact?.sentAt;
-    const steppers = useRef(new Set<Stepper>());
-    const register = useCallback((stepper: Stepper) => {
-        steppers.current.add(stepper);
-        return () => {
-            steppers.current.delete(stepper);
-        };
-    }, []);
+    const { register, move } = useSteppers();
 
     const go = useCallback(
         (next: number) => {
@@ -301,12 +295,11 @@ function Deck({ round }: { round: RoundRecord }) {
             if (event.key === 'Escape' && overview) setOverview(false);
             if (!direction || overview) return;
             event.preventDefault();
-            for (const stepper of steppers.current) if (stepper.move(direction)) return;
-            go(index + direction);
+            if (!move(direction)) go(index + direction);
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [go, index, overview]);
+    }, [go, move, index, overview]);
 
     const done = round.walkthrough;
     const finish = () => quietly(track(send({ type: 'walkthrough.done', how: 'finished' })).then(() => setTab('findings')));
