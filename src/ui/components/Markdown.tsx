@@ -74,6 +74,18 @@ export function InlineMarkdown({ source }: { source: string }) {
     );
 }
 
+/** What a title may use: inline marks with no paragraph or link, so it sits inside a heading or a button. */
+const TITLE = ['strong', 'em', 'code'];
+
+/** Markdown for a heading or a nav label: **bold**, *italic* and `code`, with links and block syntax left as text. */
+export function TitleMarkdown({ source }: { source: string }) {
+    return (
+        <ReactMarkdown allowedElements={TITLE} unwrapDisallowed remarkPlugins={[inlineOnly]}>
+            {source}
+        </ReactMarkdown>
+    );
+}
+
 /** What a Bitbucket comment renders, as Bitbucket's Python-Markdown does: no raw HTML, task lists or suggestion blocks. */
 const BITBUCKET = [...DOCUMENT];
 

@@ -459,6 +459,16 @@ describe('the findings', () => {
         expect(screen.getByText('80% confidence')).toBeInTheDocument();
     });
 
+    it("renders a finding's title as Markdown, a link left as its text", () => {
+        const items = [item('I-1', { title: 'Drop the `as any` cast, **twice**, see [docs](https://x.test)' })];
+        render(<App store={storeWith(reviewView({ round: DONE, items }))} />);
+        const heading = instance(document.querySelector('#item-I-1 .finding-title'), HTMLElement);
+        expect(heading.querySelector('code')).toHaveTextContent('as any');
+        expect(heading.querySelector('strong')).toHaveTextContent('twice');
+        expect(heading.querySelector('a')).toBeNull();
+        expect(heading).toHaveTextContent('Drop the as any cast, twice, see docs');
+    });
+
     it("shows a finding's context blocks under its claim", () => {
         const blocks = [{ type: 'text', config: { body: 'The client gives up after one timeout.' }, caption: 'The caller' }];
         render(<App store={storeWith(reviewView({ round: DONE, items: [item('I-1', { blocks })] }))} />);

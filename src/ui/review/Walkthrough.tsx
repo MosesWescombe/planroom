@@ -13,6 +13,7 @@ import {
 import { BlockView } from '../blocks/Block';
 import { sendImpact } from '../blocks/impact';
 import { CheckIcon } from '../components/icons';
+import { TitleMarkdown } from '../components/Markdown';
 import { Rail } from '../components/Rail';
 import { ReviewerFields } from '../components/Settings';
 import { AgentNow } from '../components/SidePanel';
@@ -56,7 +57,9 @@ function Slide({ id, number, total }: { id: string; number: number; total: numbe
                 </span>
             </div>
             <h2 id={`slide-title-${id}`} className="slide-title">
-                <span data-anchor-target={`slide:${id}`}>{slide.title}</span>
+                <span data-anchor-target={`slide:${id}`}>
+                    <TitleMarkdown source={slide.title} />
+                </span>
             </h2>
             {slide.blocks.map((item) =>
                 typeof item === 'string' ? (
@@ -227,7 +230,9 @@ function Overview({ slides, index, onPick }: { slides: string[]; index: number; 
                         <span className="eyebrow">
                             {CHAPTER_TITLES[card.chapter]} <span className="mono">· {position + 1}</span>
                         </span>
-                        <span className="overview-title">{card.title}</span>
+                        <span className="overview-title">
+                            <TitleMarkdown source={card.title} />
+                        </span>
                         <span className="small muted">{plural(card.blocks, 'block')}</span>
                     </button>
                 </li>
@@ -416,7 +421,9 @@ function DeckContents({ round }: { round: RoundRecord }) {
                                         <span className="mono muted contents-number">
                                             {entries.findIndex((other) => other.id === entry.id) + 1}
                                         </span>
-                                        <span className="nav-name">{entry.title}</span>
+                                        <span className="nav-name">
+                                            <TitleMarkdown source={entry.title} />
+                                        </span>
                                     </button>
                                 </li>
                             ))}

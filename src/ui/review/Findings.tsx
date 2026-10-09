@@ -18,7 +18,7 @@ import { type CodeRow, CodeViewer } from '../code/CodeViewer';
 import { resolveLanguage } from '../code/highlight';
 import { commentOnWhole } from '../comments/composer';
 import { CheckIcon, LockIcon } from '../components/icons';
-import { Markdown } from '../components/Markdown';
+import { Markdown, TitleMarkdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
 import { plural } from '../format';
@@ -225,7 +225,9 @@ const Finding = memo(function Finding({ id }: { id: string }) {
                 <span className="mono small muted">{item.id}</span>
             </div>
             <h3 className="finding-title">
-                <span data-anchor-target={`item:${id}`}>{item.title}</span>
+                <span data-anchor-target={`item:${id}`}>
+                    <TitleMarkdown source={item.title} />
+                </span>
             </h3>
             {item.anchor && <AnchorLink item={item} anchor={item.anchor} />}
             <div className="prose">
@@ -307,7 +309,9 @@ function FileDiff({ round, path, items, focus }: { round: number; path: string; 
                           >
                               <span className="badge badge-kind">{KIND_NAMES[item.kind]}</span>
                               {item.severity && <span className={`badge severity-${item.severity}`}>{item.severity}</span>}
-                              <span className="strong">{item.title}</span>
+                              <span className="strong">
+                                  <TitleMarkdown source={item.title} />
+                              </span>
                           </button>
                       ))
                     : null;
@@ -485,7 +489,9 @@ function FindingList({ round }: { round: RoundRecord }) {
                     <li key={entry.id}>
                         <button type="button" className="nav-item" onClick={() => goTo(`item:${entry.id}`)}>
                             <span className="mono muted contents-number">{entry.id}</span>
-                            <span className="nav-name">{entry.title}</span>
+                            <span className="nav-name">
+                                <TitleMarkdown source={entry.title} />
+                            </span>
                             {entry.reacted && (
                                 <span className="state-mark state-answered" role="img" aria-label={`you chose ${entry.reacted}`}>
                                     <CheckIcon size={9} />

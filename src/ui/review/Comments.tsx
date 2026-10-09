@@ -14,7 +14,7 @@ import {
 } from '../../shared/review';
 import { CodeViewer } from '../code/CodeViewer';
 import { CheckIcon, WarningIcon } from '../components/icons';
-import { BitbucketMarkdown } from '../components/Markdown';
+import { BitbucketMarkdown, TitleMarkdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
 import { plural } from '../format';
@@ -641,7 +641,7 @@ export function CommentsTab() {
                                     {parts.waiting.map((item) => (
                                         <li key={item.id}>
                                             <button type="button" className="button-link" onClick={() => goTo(`item:${item.id}`)}>
-                                                {item.id}: {item.title}
+                                                {item.id}: <TitleMarkdown source={item.title} />
                                             </button>
                                         </li>
                                     ))}
