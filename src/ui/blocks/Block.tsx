@@ -288,7 +288,7 @@ export const BlockView = memo(function BlockView({ block, placement }: { block: 
     const label = block.caption ?? `${block.type} ${block.id}`;
     const zooms = !block.problem && ZOOMS.has(block.type);
     const figure = (
-        <figure className={`block block-${block.type}`} data-block-type={block.type}>
+        <figure className={`block block-${block.type}`} data-block-type={block.type} data-zoom-label={zooms ? label : undefined}>
             <div className="block-tools">
                 <button
                     type="button"

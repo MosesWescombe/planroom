@@ -12,14 +12,16 @@ import {
 import { StepperContext, useSteppers } from '../stepper';
 import { MinusIcon, PlusIcon } from './icons';
 
-const MIN_SCALE = 0.25;
-const MAX_SCALE = 8;
+export const MIN_SCALE = 0.25;
+export const MAX_SCALE = 8;
 /** One button press or key. */
-const STEP = 1.25;
+export const STEP = 1.25;
 /** Pixels in a wheel event's line, for browsers that report a mouse wheel in lines. */
-const WHEEL_LINE = 33;
+export const WHEEL_LINE = 33;
+/** The scale a wheel pixel multiplies by. */
+export const WHEEL_RATE = 1.002;
 /** Fitting enlarges a small picture at most this much, so a bitmap stays sharp enough. */
-const FIT_MAX = 2;
+export const FIT_MAX = 2;
 
 interface Point {
     x: number;
@@ -33,10 +35,10 @@ function scrollTo(view: HTMLElement, to: Point): void {
 }
 
 /** Keys that zoom in or out a step; `0` fits instead. */
-const ZOOM_KEYS: Partial<Record<string, number>> = { '+': STEP, '=': STEP, '-': 1 / STEP, _: 1 / STEP };
+export const ZOOM_KEYS: Partial<Record<string, number>> = { '+': STEP, '=': STEP, '-': 1 / STEP, _: 1 / STEP };
 
 /** Controls inside the content keep their clicks rather than starting a drag. */
-const INTERACTIVE = 'button, a, input, select, textarea, summary';
+export const INTERACTIVE = 'button, a, input, select, textarea, summary';
 
 /** Where content portals controls that belong under the view rather than zoomed with it, as a step-through's buttons. */
 export const ZoomFootContext = createContext<HTMLElement | null>(null);
@@ -142,7 +144,7 @@ export function ZoomView({ label, children }: { label: string; children: ReactNo
                       : 1;
             const delta = event.deltaY * unit;
             const box = view.getBoundingClientRect();
-            zoom.current(current.current * 1.002 ** -delta, { x: event.clientX - box.left, y: event.clientY - box.top });
+            zoom.current(current.current * WHEEL_RATE ** -delta, { x: event.clientX - box.left, y: event.clientY - box.top });
         };
         view.addEventListener('wheel', onWheel, { passive: false });
         return () => view.removeEventListener('wheel', onWheel);

@@ -49,7 +49,7 @@ export function ConnectionPill() {
 /**
  * Exports the open tab without the page's controls, as a PDF through the browser's print dialog ("Save as PDF"), which
  * keeps text selectable and diagrams as vectors, or as one standalone HTML file. The print styles in app.css drop the
- * page chrome and unroll the scrolling column; exportHtml.ts applies the same styles to its file.
+ * page chrome and unroll the scrolling column; exportHtml.tsx applies the same styles to its file.
  */
 function ExportButton() {
     const [open, setOpen] = useState(false);
