@@ -8,7 +8,7 @@ The agent's own review of the PR: how findings are produced and verified, when t
 
 ### Requirement: Review runs at the reviewer's strength and is then verified
 
-As a round opens, the page SHALL ask the reviewer to start its review, offering a strength of single, standard or thorough and the subagents' model and effort, pre-filled from their preferences. The agent SHALL start no `planroom-reviewer` subagent until the reviewer starts the round, then SHALL start them as the chosen strength says, each reading the diff and the worktree and each at the chosen model and effort. The round SHALL record the choice, and `planroom_review` and `planroom_state` SHALL return it. At `single` one reviewer SHALL cover every dimension and verify its own findings. At `standard` one reviewer SHALL cover every dimension and a verify pass SHALL follow. At `thorough` one reviewer SHALL run per dimension (correctness, security, performance, design fit and tests), splitting the files between them for a large diff, and a verify pass SHALL follow. A verify pass, the same agent told to refute rather than find, SHALL drop every item it cannot confirm from the code. Each surviving item SHALL show its confidence.
+As a round opens, the page SHALL ask the reviewer to start its review, offering a strength of single, standard or thorough and the subagents' model and effort, pre-filled from their preferences. The agent SHALL start no `planroom-reviewer` subagent until the reviewer starts the round, then SHALL start them as the chosen strength says, each reading the diff and the worktree and each at the chosen model and effort. The round SHALL record the choice, and `planroom_review` and `planroom_state` SHALL return it. At `single` one reviewer SHALL cover every dimension and verify its own findings. At `standard` one reviewer SHALL cover every dimension and a verify pass SHALL follow. At `thorough` one reviewer SHALL run per dimension (correctness, security, performance, design fit and tests), splitting the files between them for a large diff, and a verify pass SHALL follow. A verify pass, the same agent told to refute rather than find, SHALL drop every item it cannot confirm from the code. Each surviving item SHALL show its confidence. The agent SHALL report when it has sent its last finding, and until then the Review tab SHALL say the review is still running, so a review that found nothing reads as finished.
 
 #### Scenario: Unconfirmed item dropped
 
@@ -25,6 +25,11 @@ As a round opens, the page SHALL ask the reviewer to start its review, offering 
 - **WHEN** a review opens
 - **THEN** the page shows the strength, model and effort from the reviewer's preferences with a Start button, and the agent starts no reviewer subagent until it is pressed
 
+#### Scenario: Nothing found
+
+- **WHEN** the agent reports the review done without having sent a finding
+- **THEN** the Review tab stops saying the review is still running and says it found nothing to raise
+
 #### Scenario: Single strength
 
 - **WHEN** the reviewer starts the round at `single` with model haiku and effort low
@@ -32,7 +37,7 @@ As a round opens, the page SHALL ask the reviewer to start its review, offering 
 
 ### Requirement: A finding is an issue, a design opinion or a question
 
-Every finding SHALL be one of three kinds. An issue SHALL carry a severity of blocker, important or minor, evidence, a suggested fix, and a likelihood and impact for the risk matrix. A design opinion SHALL carry the agent's reasoning and the alternative it weighed. A question for the author SHALL be something the code does not explain. Every finding SHALL have an anchor of a file plus a new-file or old-file line range, an optional link to a node in the deck's diagrams, up to four context blocks from the block catalog that show what a reader needs to judge it, and a drafted comment in Bitbucket's Markdown subset. Context blocks SHALL show on the finding's card and SHALL never be posted.
+Every finding SHALL be one of three kinds. An issue SHALL carry a severity of blocker, important or minor, evidence, a suggested fix, and a likelihood and impact for the risk matrix. A design opinion SHALL carry the agent's reasoning and the alternative it weighed. A question for the author SHALL be something the code does not explain. Every finding SHALL have an anchor of a file plus a new-file or old-file line range, an optional link to a node in the deck's diagrams, up to four context blocks from the block catalog that show what a reader needs to judge it, and a drafted comment in Bitbucket's Markdown subset. A finding's title SHALL render as inline Markdown, a link shown as its text, and as plain text with its marks dropped where a label shows text only, as on the risk matrix and a diagram pin. Context blocks SHALL show on the finding's card and SHALL never be posted.
 
 #### Scenario: Issue fields
 
@@ -43,6 +48,11 @@ Every finding SHALL be one of three kinds. An issue SHALL carry a severity of bl
 
 - **WHEN** the agent upserts a finding with a code block of its lines and a before-and-after compare
 - **THEN** its card shows both under its claim, and the comment it drafts carries neither
+
+#### Scenario: Markdown title
+
+- **WHEN** a finding is titled ``Drop the `as any` cast, see [docs](https://x.test)``
+- **THEN** its card shows `as any` as code and "docs" as plain text, with no link, and the risk matrix shows "Drop the as any cast, see docs"
 
 #### Scenario: Invalid anchor
 

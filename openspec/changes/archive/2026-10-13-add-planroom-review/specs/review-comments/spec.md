@@ -83,7 +83,7 @@ Each comment SHALL have a "make it a task" toggle, on by default for blocker iss
 
 ### Requirement: The server posts what was previewed
 
-When Post is pressed the Planroom server SHALL create the comments from the same records and the same derivation the preview renders, so each posted body equals its previewed body byte for byte. Each comment SHALL be sent as a Bitbucket draft (`pending`) and the summary last, with a task created for each comment whose toggle is on. The reviewer SHALL finish the review in Bitbucket, which sends one notification. If a spike on a scratch PR shows API drafts do not join "Finish review", Post SHALL publish the comments directly, summary last, and the page SHALL say so.
+When Post is pressed the Planroom server SHALL create the comments from the same records and the same derivation the preview renders, so each posted body equals its previewed body byte for byte. Each comment SHALL be sent as a Bitbucket draft (`pending`) and the summary last, with a task created for each comment whose toggle is on. The reviewer SHALL finish the review in Bitbucket, which sends one notification. If API drafts turn out not to join "Finish review", Post SHALL publish the comments directly, summary last, and the page SHALL say so.
 
 #### Scenario: Drafts
 
@@ -97,7 +97,7 @@ When Post is pressed the Planroom server SHALL create the comments from the same
 
 #### Scenario: Drafts unavailable
 
-- **WHEN** the spike found API drafts do not appear in Bitbucket's "Finish review"
+- **WHEN** API drafts are found not to appear in Bitbucket's "Finish review"
 - **THEN** Post publishes the comments directly with the summary last and the page says they were published
 
 ### Requirement: Post checks that the PR head has not moved
@@ -130,12 +130,17 @@ Each comment SHALL record its Bitbucket id as soon as it is created. A partial f
 
 ### Requirement: Credentials stay on the server
 
-The server SHALL read `BITBUCKET_API_TOKEN` and `git config user.email` for Bitbucket access. It MUST NOT send either to the page or the agent, write either to disk or log either. While either is missing, Post SHALL be disabled with instructions for setting it. If the token's scope does not allow reading the diff, the message SHALL name both `read:pullrequest:bitbucket` and `read:repository:bitbucket`.
+The server SHALL read `BITBUCKET_API_TOKEN` and `git config user.email` for Bitbucket access. It MUST NOT send either to the page or the agent, write either to disk or log either. While either is missing, Post SHALL be disabled with instructions for setting it. When Bitbucket refuses the token, the message SHALL name `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket` and `read:repository:bitbucket`.
 
 #### Scenario: Missing token
 
 - **WHEN** `BITBUCKET_API_TOKEN` is not set
 - **THEN** Post is disabled and the page says how to set the token
+
+#### Scenario: Token refused
+
+- **WHEN** Bitbucket answers a request with 403
+- **THEN** the error names `read:pullrequest:bitbucket`, `write:pullrequest:bitbucket` and `read:repository:bitbucket`
 
 #### Scenario: No leak
 

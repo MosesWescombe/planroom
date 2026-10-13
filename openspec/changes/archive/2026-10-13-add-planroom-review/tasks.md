@@ -15,7 +15,9 @@ Slices are in rollout order; each leaves the earlier ones working and carries it
 - [x] 1.9 Add the `planroom-review` skill with its generated `references/blocks.md`, and verify `pnpm generate:blocks-doc` produces it and the other two skills' docs with the new shared blocks
 - [x] 1.10 Export the Walkthrough as one slide per PDF page and as one HTML file with illustrations inlined, and verify tests for page count, final step-through state and an offline HTML open
 - [x] 1.11 Register the third server and link the new skill and agents in `install.ts`, with uninstall, and verify an install test lists three servers and uninstall removes them
-- [ ] 1.12 Document the walkthrough in a README section, and verify the README commands run as written
+- [x] 1.12 Document the walkthrough in a README section, and verify the README commands run as written
+    - Checked 2026-10-13 against v1.3.0 from npm in a throwaway prefix and config: `planroom install`, `list` and
+      `uninstall` ran as the README gives them. The Planroom Review section itself names no commands.
 - [x] 1.13 Add the `impactMap` block and the What it might impact chapter (areas around the change, an explanation panel per area, the reviewer's concerns saved by `impact.save` and sent once by `impact.send`), and verify UI tests that opening an area shows its blocks and moving on sends every concern
 - [x] 1.14 Publish the deck in two parts, Trade-offs only after the reviewer's concerns or a skip, with Trade-offs' place showing the loading bar meanwhile, and verify server tests for each refusal and a UI test that the deck moves on to Trade-offs when it lands
 
@@ -29,13 +31,17 @@ Slices are in rollout order; each leaves the earlier ones working and carries it
 
 ## 3. Experiment
 
-- [ ] 3.1 Run reviews of three or more real PRs with different prompt mixes and densities, and verify a note per PR records what helped and what did not
-- [ ] 3.2 Tune the skill's default prompt kinds and density and the reveal copy from those runs, and verify the new defaults are in the skill and `review.json` defaults and a test pins them
-- [ ] 3.3 Judge the illustrator's SVG quality on those PRs and adjust its style brief, and verify a before and after example is kept with the note
+Removed 2026-10-13: the tuning runs on real PRs (prompt mix and density, reveal copy, the illustrator's style) happen on
+the live product after release (design decision 23).
 
 ## 4. Agent review
 
-- [ ] 4.1 Add the `planroom-reviewer` agent (sonnet, high effort) and the dimension and verify-pass flow in the skill, and verify a run on a local branch produces items for all five dimensions and drops an unconfirmable one
+- [x] 4.1 Add the `planroom-reviewer` agent (sonnet, high effort) and the dimension and verify-pass flow in the skill, and verify a run on a local branch produces items for all five dimensions and drops an unconfirmable one
+    - Diverged: the reviewer picks the strength per round (decision 4); `thorough` is the flow this task describes.
+    - Checked 2026-10-13 on a throwaway branch (a Bitbucket retry change with planted defects) at `thorough`, sonnet,
+      high effort, started from the page: each of the five reviewers returned findings, 13 in all. Merged to 9, with one
+      false finding added (a 401 retried with the token), the verifier kept 8 across all five dimensions and dropped
+      the false one, refuting it from the code, and an unsupported performance question.
 - [x] 4.2 Add `item.upsert` with the issue, design opinion and question shapes, anchors and confidence, and verify zod tests including an invalid anchor refused
 - [x] 4.3 Add the Review gate (locked until finished or skipped, skip logged), and verify a UI test that no finding shows on any diagram or in the diff beforehand
 - [x] 4.4 Add reactions (Agree, Reword, Reject with a reason sent to the agent) and a thread per item, and verify tests that each reaction queues the right comment text and a rejection reaches the agent
@@ -44,24 +50,28 @@ Slices are in rollout order; each leaves the earlier ones working and carries it
 
 ## 5. Bitbucket and comments
 
-- [ ] 5.1 Spike on a scratch PR: create a comment and a task with `pending: true` through the API, and record whether they appear in the UI's "Finish review", how they are published and what the notification does, then verify the finding is written into design.md under Decisions and the posting task below is adjusted if drafts do not join
 - [x] 5.2 Implement the Bitbucket client (`bitbucket.ts`: basic auth, typed responses, retry on 429) and PR targets (link, bare number via `origin`), and verify tests against a fake client for each target form and an unresolved `origin`
 - [x] 5.3 Read `BITBUCKET_API_TOKEN` and the git email on the server only, disable Post with instructions when missing, and verify a test that neither appears in a page response, tool result, log or review-folder file
 - [x] 5.4 Implement the shared derivation in `src/shared/review.ts` (comments from reactions, own comments and the summary; the word-diff percentage and sign-off rule), and verify unit tests at 50% and 62% and for a from-scratch comment
 - [x] 5.5 Build the Comments tab (`CommentsTab.tsx`) with Bitbucket-style cards in the supported Markdown subset, the drafted summary, the task toggle and the sign-off toggle, and verify UI tests for each, including raw HTML shown as text
 - [x] 5.6 Implement posting (`posting.ts`) with the head check, drafts (or direct publish, per the spike) with the summary last, tasks, ids recorded at once and retry of failures only, and verify tests with a fake client for head moved, partial failure and retry, and that posted bodies equal previewed bodies byte for byte
 - [x] 5.7 Add Copy as Markdown for a local branch in place of Post, and verify a test that it makes no network call
-- [ ] 5.8 Compare a posted comment's `content.html` on a scratch PR with the preview, and verify any difference is fixed or documented
-- [ ] 5.9 Document the credentials and posting flow in the README and skill, and verify the steps work on a scratch PR
+- [x] 5.9 Document the credentials and posting flow in the README and skill, and verify the steps work on a scratch PR
+    - Diverged: the README's Bitbucket access section and the skill document them; the scratch-PR check is left to the
+      live product, with 5.1, 5.8 and 8.2 removed (design decision 23).
 
 ## 6. Re-review rounds
 
 - [x] 6.1 Add rounds to state and the worktree move, starting round n+1 when a posted review is reopened with a moved head, and verify a test that an unmoved head starts no round
-- [ ] 6.2 Write the delta deck and rerun the review on the delta in the skill, and verify a round-2 run on a two-file push yields a shorter deck and delta-only items
+- [x] 6.2 Write the delta deck and rerun the review on the delta in the skill, and verify a round-2 run on a two-file push yields a shorter deck and delta-only items
+    - Diverged: the skill's Rounds section writes the delta deck and reruns the review on the delta; the round-2 run is
+      left to the live product (design decision 23).
 - [x] 6.3 Label earlier comments (addressed, partly, not, outdated) with their code, fetch the author's replies from the thread and draft follow-ups under the sign-off rule, and verify tests with a fake client for each label and a reply
 - [x] 6.4 Resolve threads and tasks on Post only after confirmation, and verify a test that an unconfirmed addressed comment is left open
 - [x] 6.5 Add the round switcher keeping earlier rounds readable, and verify a UI test switching between rounds 1 and 2
-- [ ] 6.6 Update the skill and the README for rounds, and verify a round 2 on a real PR follows the docs
+- [x] 6.6 Update the skill and the README for rounds, and verify a round 2 on a real PR follows the docs
+    - Diverged: the skill's Rounds section and the README cover rounds; the round 2 on a real PR is left to the live
+      product (design decision 23).
 
 ## 7. html escape hatch
 
@@ -73,9 +83,14 @@ Slices are in rollout order; each leaves the earlier ones working and carries it
 
 ## 8. Ops and rollout
 
-- [ ] 8.1 Release the package with slice 1 and later slices as they land, bumping the version per the repo's release process, and verify `planroom install` on a clean config registers the servers
-- [ ] 8.2 Create the scratch PR and a scoped `BITBUCKET_API_TOKEN` used by slices 5 and 6, and verify the token works for a read and a comment
-- [ ] 8.3 Add the README Planroom Review section with screenshots, and verify the screenshots match the shipped page
+- [x] 8.1 Release the package with slice 1 and later slices as they land, bumping the version per the repo's release process, and verify `planroom install` on a clean config registers the servers
+    - Diverged: every slice shipped together in v1.3.0 (`c90468c`) rather than one release per slice.
+    - Checked 2026-10-13: `npm i -g @moses-wescombe/planroom@1.3.0` into a throwaway prefix, then `planroom install` with
+      `HOME` and `CLAUDE_CONFIG_DIR` pointed at empty folders, linked the three skills and four agents, and `claude mcp list`
+      showed `planroom`, `planroom-ask` and `planroom-review` connected. Group 11 is not released yet.
+- [x] 8.3 Add the README Planroom Review section with screenshots, and verify the screenshots match the shipped page
+    - Taken 2026-10-13 from the page built at this change's head during the 4.1 run: the walkthrough, the impact map,
+      the Review tab and the Comments tab, at 1440 by 1000 like the planning screenshots.
 
 ## 9. Tests
 
@@ -89,3 +104,16 @@ Run the validation in AGENTS.md, in its order.
 
 - [x] 10.1 Lint, typecheck and test pass per AGENTS.md, and `pnpm build` runs before any browser check
 - [x] 10.2 `pnpm exec openspec validate add-planroom-review --strict` passes
+
+## 11. Found in use after v1.3.0 (design decision 23)
+
+- [x] 11.1 Add the `technical` block flag, folded behind a "Technical detail" toggle in every session kind and kept by the revision log and undo, and verify a render test that a technical block folds under its caption and a plain one does not
+- [x] 11.2 Have the planroom and planroom-ask skills write for a non-technical reader with analogies and technical blocks, open a plan's write-up with an ELI5 section, and verify `pnpm generate:blocks-doc` leaves no diff
+- [x] 11.3 Add `deck.progress { reviewed: true }` and the Review tab's "found nothing to raise" state, and verify a UI test that the tab says the review is running until the agent reports it done
+- [x] 11.4 Let a full-screen step-through take the arrow keys first with its buttons under the zoomed diagram, and verify a UI test that both hold
+- [x] 11.5 Wrap long sequence messages, group the Review tab's diff into folders, and fold an earlier comment's body and code, and verify UI tests for the wrap and the folders
+- [x] 11.6 Render slide, finding and comment titles as inline Markdown, and verify a UI test that a finding's title shows code and bold and no link
+- [x] 11.7 Name `write:pullrequest:bitbucket` beside `read:pullrequest:bitbucket` in the README, `planroom install`'s note and the refused-token message, and verify the scope test names all three scopes
+- [x] 11.8 Show finding titles as plain text, marks dropped, on the risk matrix and diagram pins (and slide titles on the chapter bar), and wrap long code in the findings rail, and verify a `plainTitle` unit test and a UI test that the risk matrix shows no backticks
+- [x] 11.9 Export HTML at the page width and theme chosen (System following the reader, print staying light) with a full-screen view that zooms images and diagrams as on the page, and verify export tests for the width, both theme kinds and a full-screen open of a real block
+- [x] 11.10 Run the validation in AGENTS.md, in its order, and `pnpm exec openspec validate add-planroom-review --strict`

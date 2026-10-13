@@ -11,7 +11,12 @@ the app renders, and the user reviews it section by section, with history and un
 The write-up SHALL be a list of titled sections, each listing its blocks in order. The page SHALL render the block
 types `text`, `callout`, `checklist`, `table`, `stats`, `flow`, `sequence`, `architecture`, `state`, `schema`, `c4`,
 `mindmap`, `compare`, `timeline`, `gantt`, `bar`, `line`, `sankey`, `riskMatrix`, `optionMatrix`, `fileTree`, `code`,
-`image` and `mermaid`, each from its config with the app's own component. `text` SHALL carry prose as a markdown subset
+`image`, `mermaid`, `analogy` and `stepThrough`, each from its config with the app's own component. A review session
+SHALL also render `yourTake` and `html`, which MUST be refused in any other session. A `compare` side SHALL be a diagram,
+a `code` block or an `image` block, whether inline or by block id. An `analogy` SHALL map each real part of the change to
+its counterpart in the analogy, with an optional illustration and where the analogy breaks down. A `stepThrough` SHALL
+pair a `flow` or `sequence` diagram with ordered steps, each lighting up nodes or messages under a caption, advanced by
+the arrow keys or buttons. `text` SHALL carry prose as a markdown subset
 rendered as elements. Text in any config MUST render as text, never as markup.
 Diagrams SHALL be laid out by the app from nodes and edges, tables and relations, tasks or flows, and chart colours
 SHALL come from the app's palette. A `schema` relation that names its columns SHALL join those columns' rows and mark
@@ -20,7 +25,8 @@ the task before it ends. An `optionMatrix` SHALL show one column per option and 
 a short text or a text with a verdict shown by an icon as well as colour. A `code` block SHALL show a live repo excerpt,
 a unified diff or a snippet in the code viewer, highlighted by its language and foldable by indentation. Every block
 SHALL support an optional caption, question references and a full-screen view, and no diagram SHALL require a caption or
-label. In full screen, diagrams, charts and images SHALL open fitted to the screen and SHALL zoom and scroll, as SHALL a
+label. A block marked `technical` SHALL be folded behind a "Technical detail" toggle labelled with its caption, in any
+session kind. In full screen, diagrams, charts and images SHALL open fitted to the screen and SHALL zoom and scroll, as SHALL a
 pasted image.
 
 #### Scenario: Zooming a diagram
@@ -79,6 +85,32 @@ pasted image.
 - **WHEN** an `optionMatrix` recommends the first of three options and judges uptime as good, bad and good
 - **THEN** the options are the columns with the first one marked "Recommended", and each verdict shows its icon and its
   word for screen readers
+
+#### Scenario: Analogy
+
+- **WHEN** an `analogy` block maps a queue to a ticket counter, three parts to three counterparts, and names one place
+  the analogy breaks down
+- **THEN** each pair shows side by side with the break-down shown after them, in any session kind
+
+#### Scenario: Step-through
+
+- **WHEN** a `stepThrough` has a sequence diagram and three steps, each lighting one message under a caption
+- **THEN** the first step shows its caption with that message lit, and the arrow keys or the buttons move to the next
+
+#### Scenario: Technical block
+
+- **WHEN** a `code` block captioned "The retry loop" is sent with `technical: true` beside a plain `text` block
+- **THEN** the code shows folded under "Technical detail: The retry loop" until opened, and the text shows unfolded
+
+#### Scenario: Compare with code and image sides
+
+- **WHEN** a `compare` block has a `code` block on its left side and an `image` block on its right
+- **THEN** both sides show next to each other under their labels
+
+#### Scenario: Review-only block in a plan
+
+- **WHEN** the agent sends a `yourTake` or `html` block in a planning or ask session
+- **THEN** the batch is refused naming the block type and the session kind
 
 ### Requirement: Diagrams curve their edges and follow the pointer
 

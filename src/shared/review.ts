@@ -742,7 +742,8 @@ export function frameDocument(html: string): string {
 /**
  * Comments go up as drafts (`pending`) the reviewer publishes with "Finish review" in Bitbucket, which sends one
  * notification. The page says which it was.
- * ponytail: the API documents `pending` but not whether its drafts join the UI's "Finish review"; spike 5.1 on a scratch
- * PR settles it. If they do not, set this to false: Post then publishes directly, summary last, and the page says so.
+ * ponytail: the API documents `pending` but not whether its drafts join the UI's "Finish review"; the first post on the
+ * live product settles it. If they do not, set this to false: Post then publishes directly, summary last, and the page
+ * says so.
  */
 export const POST_AS_DRAFTS = true;

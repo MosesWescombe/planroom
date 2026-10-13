@@ -1,10 +1,9 @@
-# Spec Delta
+# review-walkthrough Specification
 
 ## Purpose
-
 The Walkthrough tab of a review: a cohesive deck of slides the agent builds privately and publishes at once, how the reviewer reads it, how its pictures are drawn and how it is exported.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Slides are staged and published in two parts
 
@@ -103,7 +102,7 @@ Once the reviewer sends their concerns, the agent SHALL investigate each area an
 
 ### Requirement: A slide is a titled set of blocks
 
-A slide SHALL be a title and a list of blocks in the same layout as a write-up section, where an entry is a block id or a row of two or three ids shown side by side. A slide MAY use any block of the catalog, including `analogy`, `stepThrough`, `compare`, `image` and `code`.
+A slide SHALL be a title, rendered as inline Markdown (bold, italic and code, a link shown as its text), and a list of blocks in the same layout as a write-up section, where an entry is a block id or a row of two or three ids shown side by side. A slide MAY use any block of the catalog, including `analogy`, `stepThrough`, `compare`, `image` and `code`.
 
 #### Scenario: Side by side
 
@@ -117,7 +116,7 @@ A slide SHALL be a title and a list of blocks in the same layout as a write-up s
 
 ### Requirement: One slide at a time with an overview
 
-The page SHALL show one slide at a time at full width. The arrow keys and a chapter progress bar SHALL move between slides, and an overview grid SHALL show every slide for jumping to one. When a slide has a step-through, the arrow keys SHALL advance its steps before they move to the next slide.
+The page SHALL show one slide at a time at full width. The arrow keys and a chapter progress bar SHALL move between slides, and an overview grid SHALL show every slide for jumping to one. When a slide has a step-through, the arrow keys SHALL advance its steps before they move to the next slide, and so SHALL they with the step-through full screen, whose step buttons SHALL sit under the zoomed diagram.
 
 #### Scenario: Keys
 
@@ -128,6 +127,11 @@ The page SHALL show one slide at a time at full width. The arrow keys and a chap
 
 - **WHEN** the reviewer presses the right arrow on a slide whose step-through is on step 2 of 5
 - **THEN** the step-through moves to step 3 and the slide stays
+
+#### Scenario: Step-through full screen
+
+- **WHEN** the reviewer opens a step-through full screen, zooms in and presses the right arrow
+- **THEN** the step-through moves to its next step, and its Back and Next step buttons stay under the diagram, unzoomed
 
 #### Scenario: Overview
 
@@ -164,7 +168,7 @@ Slide changes SHALL use CSS transitions and the View Transitions API and step-th
 
 ### Requirement: The walkthrough can be shared as an export
 
-The Walkthrough tab SHALL export as a paged PDF with one slide per page and as a single HTML file with illustrations inlined. A step-through SHALL appear in its final state and your-take cards SHALL appear as answered. The plan and ask exports MUST be unchanged.
+The Walkthrough tab SHALL export as a paged PDF with one slide per page and as a single HTML file with illustrations inlined. A step-through SHALL appear in its final state and your-take cards SHALL appear as answered. The HTML file of every tab, plan and ask included, SHALL be drawn at the page width and theme the reader chose, following its reader's colour scheme on screen under System and printing light, and SHALL keep the full-screen button of images and diagrams, which zooms them as the page does. The plan and ask exports MUST be otherwise unchanged.
 
 #### Scenario: PDF
 
@@ -175,3 +179,8 @@ The Walkthrough tab SHALL export as a paged PDF with one slide per page and as a
 
 - **WHEN** the reviewer exports the walkthrough as HTML
 - **THEN** one file opens offline with every slide and its illustrations inlined
+
+#### Scenario: Full screen in the HTML file
+
+- **WHEN** the reader of an exported HTML file presses a diagram's full-screen button and then +
+- **THEN** the diagram opens fitted in a dialog named by its caption, zooms in a step, and is back in its place once the dialog closes

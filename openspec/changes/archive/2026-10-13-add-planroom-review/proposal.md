@@ -13,6 +13,7 @@ Reviewing someone else's PR is mostly reading a diff cold. The reviewer rebuilds
 - A **Comments** tab: a Bitbucket-faithful preview of inline comments and a drafted summary, agent drafts signed "- Claude" until the reviewer has rewritten most of them, per-comment tasks, and posting by the Planroom server as Bitbucket drafts (a spike confirms this; otherwise it publishes), with a head check first and no double-posting on retry.
 - **Re-review rounds**: after the author pushes, a new round in the same review gets a delta deck, labels earlier comments addressed, partly, not or outdated, shows the author's replies, and drafts follow-ups and resolutions the reviewer confirms.
 - A sandboxed, no-network `html` block as an escape hatch for interactive visuals.
+- Any block can be marked `technical` and folded for a non-technical reader, and the planning and ask skills lead with plain words and analogies.
 - Add two subagents, `planroom-reviewer` and `planroom-illustrator`, both on the `sonnet` alias.
 
 ## Capabilities
@@ -30,15 +31,15 @@ Reviewing someone else's PR is mostly reading a diff cold. The reviewer rebuilds
 
 ### Modified Capabilities
 
-- `plan-writeup`: the block catalog gains `analogy` and `stepThrough`, and `compare` takes code and image sides.
+- `plan-writeup`: the block catalog gains `analogy` and `stepThrough`, `compare` takes code and image sides, and any block can be folded as technical detail.
 - `planning-sessions`: a session has a kind, and `review` joins `plan` and `ask`.
 
 ## Impact
 
 - **`src/server`**: `mcp.ts`, `install.ts`, `session.ts`, `store.ts`, `agentApply.ts`, `pageApply.ts` and `http.ts` extended where they are keyed by session kind; new `bitbucket.ts`, `worktree.ts`, `posting.ts` and `preferences.ts`.
 - **`src/shared`**: `state.ts`, `events.ts`, `view.ts`, `tools.ts`, `blocks.ts`, `blockCatalog.ts` and `blocksDoc.ts` extended; new `review.ts` for the derivation both the page preview and the server poster run.
-- **`src/ui`**: new `review/` (Deck, Overview, ReviewTab, CommentsTab) and `blocks/review.tsx`; changes to the diagram renderers, `CodeViewer`, `Shell`, `PhaseTabs`, `Settings` and `exportHtml`.
+- **`src/ui`**: new `review/` (Deck, Overview, ReviewTab, CommentsTab) and `blocks/review.tsx`; changes to the diagram renderers, `CodeViewer`, `ZoomView`, `Markdown`, `Shell`, `PhaseTabs`, `Settings` and `exportHtml`; new `stepper.ts`.
 - **`src/cli.ts`**: the `--review` flag.
-- **`skills/` and `agents/`**: the `planroom-review` skill with a generated `references/blocks.md`, and the `planroom-reviewer` and `planroom-illustrator` agents; `README.md` gains a section.
-- **External systems**: Bitbucket Cloud's REST API, with a `BITBUCKET_API_TOKEN` (scope `read:pullrequest:bitbucket`) and the git email; the reviewer's `$XDG_CONFIG_HOME`; `.planroom/reviews/<id>/` inside the checkout, already git-ignored.
+- **`skills/` and `agents/`**: the `planroom-review` skill with a generated `references/blocks.md`, and the `planroom-reviewer` and `planroom-illustrator` agents; the `planroom` and `planroom-ask` skills' plain-words rules; `README.md` gains a section.
+- **External systems**: Bitbucket Cloud's REST API, with a `BITBUCKET_API_TOKEN` (scopes `read:pullrequest:bitbucket` and `write:pullrequest:bitbucket`) and the git email; the reviewer's `$XDG_CONFIG_HOME`; `.planroom/reviews/<id>/` inside the checkout, already git-ignored.
 - **Dependencies**: none added. The sign-off word diff uses the `diff` package that is already installed.

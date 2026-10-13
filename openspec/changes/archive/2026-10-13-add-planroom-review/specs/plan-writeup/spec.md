@@ -21,7 +21,8 @@ the task before it ends. An `optionMatrix` SHALL show one column per option and 
 a short text or a text with a verdict shown by an icon as well as colour. A `code` block SHALL show a live repo excerpt,
 a unified diff or a snippet in the code viewer, highlighted by its language and foldable by indentation. Every block
 SHALL support an optional caption, question references and a full-screen view, and no diagram SHALL require a caption or
-label. In full screen, diagrams, charts and images SHALL open fitted to the screen and SHALL zoom and scroll, as SHALL a
+label. A block marked `technical` SHALL be folded behind a "Technical detail" toggle labelled with its caption, in any
+session kind. In full screen, diagrams, charts and images SHALL open fitted to the screen and SHALL zoom and scroll, as SHALL a
 pasted image.
 
 #### Scenario: Zooming a diagram
@@ -91,6 +92,11 @@ pasted image.
 
 - **WHEN** a `stepThrough` has a sequence diagram and three steps, each lighting one message under a caption
 - **THEN** the first step shows its caption with that message lit, and the arrow keys or the buttons move to the next
+
+#### Scenario: Technical block
+
+- **WHEN** a `code` block captioned "The retry loop" is sent with `technical: true` beside a plain `text` block
+- **THEN** the code shows folded under "Technical detail: The retry loop" until opened, and the text shows unfolded
 
 #### Scenario: Compare with code and image sides
 
