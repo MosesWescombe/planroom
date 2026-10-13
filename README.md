@@ -103,25 +103,35 @@ from a checkout of the repo. It reads the change from a temporary git worktree a
    Claude's view. What it might impact maps the areas the change might reach: open one to see how, and write your
    questions and concerns under it, or add an area Claude missed. Moving on sends them to Claude, which investigates
    them and writes Trade-offs, answering each of your concerns beside its own.
+
+   ![A walkthrough slide: an analogy with Claude's own picture, beside a prediction card answered before Claude's view shows](docs/screenshots/review-walkthrough.png)
+
+   ![What it might impact: six areas the change reaches around it, one carrying the reviewer's concern](docs/screenshots/review-impact.png)
+
 2. **Review.** Reviewer subagents, then a verify pass that drops what it cannot confirm. Claude starts none until you
    start the review from the page as it opens, choosing the strength (one reviewer that checks itself, one reviewer and
    a verifier, or one per dimension and a verifier) and the agents' model and effort. The findings stay hidden until
    you finish the walkthrough or skip to them. Agree, reword or reject each one, or argue in its thread first. They
    show as cards, beside their lines in the diff, as pins on the deck's diagrams, as charts, a file heat map and a risk
    matrix.
+
+   ![The Review tab: eight verified findings, all reacted to, by severity, kind, likelihood and impact, and by file](docs/screenshots/review-findings.png)
+
 3. **Comments.** Every comment as Bitbucket will show it. Text Claude drafted ends with "- Claude" until more than half
    of it is your own words. Post creates them as Bitbucket drafts, the summary last, with a task on each you toggle; you
    finish the review in Bitbucket. Post checks the PR has not moved under your comments first, and a retry sends only
    what failed. A local branch copies the comments as Markdown instead and makes no network call.
+
+   ![The Comments tab: each agreed finding as Bitbucket will show it, signed "- Claude", with its task toggle](docs/screenshots/review-comments.png)
 
 When the author pushes and you ask for the review again, a new round covers only what changed, labels your earlier
 comments addressed, partly, not addressed or outdated, shows the author's replies, and drafts follow-ups. Earlier rounds
 stay readable.
 
 **Bitbucket access.** Set `BITBUCKET_API_TOKEN` to a Bitbucket Cloud API token (Atlassian account settings, Security,
-API tokens) with the scope `read:pullrequest:bitbucket`, and `read:repository:bitbucket` if reading the PR is refused,
-in the environment Claude Code starts in. It signs in with your `git config user.email`, which must be the token's
-Atlassian account. Only the Planroom server reads them: they never reach the page, Claude, a log or a file. Without
+API tokens) with the scopes `read:pullrequest:bitbucket` and `write:pullrequest:bitbucket`, and `read:repository:bitbucket`
+if reading the PR is refused, in the environment Claude Code starts in. It signs in with your `git config user.email`,
+which must be the token's Atlassian account. Only the Planroom server reads them: they never reach the page, Claude, a log or a file. Without
 them a public PR still opens, and Post stays off saying what to set.
 
 **Preferences.** Settings has a Review section: which your-take cards Claude uses and how many, the reviewer agents

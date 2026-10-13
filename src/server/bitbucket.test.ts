@@ -59,7 +59,7 @@ describe('the Bitbucket client', () => {
             .pullRequest(PR)
             .catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(BitbucketError);
-        expect(String(error)).toMatch(/read:pullrequest:bitbucket.*read:repository:bitbucket/);
+        expect(String(error)).toMatch(/read:pullrequest:bitbucket.*write:pullrequest:bitbucket.*read:repository:bitbucket/);
     });
 
     it('reads every page of comments with their parents', async () => {

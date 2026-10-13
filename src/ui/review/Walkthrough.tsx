@@ -13,7 +13,7 @@ import {
 import { BlockView } from '../blocks/Block';
 import { sendImpact } from '../blocks/impact';
 import { CheckIcon } from '../components/icons';
-import { TitleMarkdown } from '../components/Markdown';
+import { plainTitle, TitleMarkdown } from '../components/Markdown';
 import { Rail } from '../components/Rail';
 import { ReviewerFields } from '../components/Settings';
 import { AgentNow } from '../components/SidePanel';
@@ -193,7 +193,7 @@ function ChapterBar({ slides, index, onJump }: { slides: string[]; index: number
                                     key={id}
                                     type="button"
                                     className={`segment${position === index ? ' is-current' : position < index ? ' is-read' : ''}`}
-                                    aria-label={`Slide ${position + 1}: ${titles[position]}`}
+                                    aria-label={`Slide ${position + 1}: ${plainTitle(titles[position] ?? '')}`}
                                     aria-current={position === index ? 'step' : undefined}
                                     onClick={() => onJump(position)}
                                 />

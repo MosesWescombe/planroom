@@ -255,6 +255,12 @@ describe('the deck', () => {
         expect(screen.getByRole('heading', { name: 'Slide why' })).toBeInTheDocument();
     });
 
+    it("names a slide's chapter bar segment by its title as plain text", () => {
+        const slides = [{ ...slide('why', 'why', ['why-text']), title: 'Retry in `fetchPr` **twice**' }];
+        render(<App store={storeWith(reviewView({ round: PUBLISHED, slides }))} />);
+        expect(screen.getByRole('button', { name: 'Slide 1: Retry in fetchPr twice' })).toBeInTheDocument();
+    });
+
     it('opens a slide block full screen outside the slide frame, so the side panel cannot cover it', () => {
         render(<App store={storeWith(reviewView({ round: PUBLISHED }))} />);
         fireEvent.click(
@@ -467,6 +473,14 @@ describe('the findings', () => {
         expect(heading.querySelector('strong')).toHaveTextContent('twice');
         expect(heading.querySelector('a')).toBeNull();
         expect(heading).toHaveTextContent('Drop the as any cast, twice, see docs');
+    });
+
+    it("shows a finding's title as plain text on the risk matrix", () => {
+        const items = [item('I-1', { title: 'Drop the `as any` cast, **twice**' })];
+        render(<App store={storeWith(reviewView({ round: DONE, items }))} />);
+        const matrix = instance(document.querySelector('[data-block-type="riskMatrix"]'), HTMLElement);
+        expect(matrix).toHaveTextContent('I-1 Drop the as any cast, twice');
+        expect(matrix.textContent).not.toMatch(/[`*]/);
     });
 
     it("shows a finding's context blocks under its claim", () => {

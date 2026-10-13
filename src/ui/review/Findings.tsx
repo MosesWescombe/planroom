@@ -18,7 +18,7 @@ import { type CodeRow, CodeViewer } from '../code/CodeViewer';
 import { resolveLanguage } from '../code/highlight';
 import { commentOnWhole } from '../comments/composer';
 import { CheckIcon, LockIcon } from '../components/icons';
-import { Markdown, TitleMarkdown } from '../components/Markdown';
+import { Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
 import { plural } from '../format';
@@ -432,7 +432,7 @@ function Views({ round, items }: { round: RoundRecord; items: ItemRecord[] }) {
                             .filter((item) => item.likelihood && item.impact)
                             .slice(0, 20)
                             .map((item) => ({
-                                label: `${item.id} ${item.title}`,
+                                label: `${item.id} ${plainTitle(item.title)}`,
                                 likelihood: item.likelihood,
                                 impact: item.impact
                             }))

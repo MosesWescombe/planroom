@@ -190,7 +190,7 @@ if (values.version) {
     console.log('To turn planning, asking or reviewing off, disable its server in /mcp and its skill in /skills.');
     if (!process.env.BITBUCKET_API_TOKEN)
         console.log(
-            'To post reviews to Bitbucket, set BITBUCKET_API_TOKEN (scope read:pullrequest:bitbucket) for Claude Code; local branches need none.'
+            'To post reviews to Bitbucket, set BITBUCKET_API_TOKEN (scopes read:pullrequest:bitbucket and write:pullrequest:bitbucket) for Claude Code; local branches need none.'
         );
 } else if (command === 'uninstall') {
     uninstall(target, claude);

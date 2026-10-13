@@ -64,8 +64,9 @@ export class BitbucketError extends Error {
 }
 
 const API = 'https://api.bitbucket.org/2.0';
-/** The scopes a review's token needs: reading and commenting on PRs, and the repo when the diff needs it. */
-export const TOKEN_SCOPES = 'read:pullrequest:bitbucket (and read:repository:bitbucket if the diff needs it)';
+/** The scopes a review's token needs: reading PRs, commenting on them, and the repo when the diff needs it. */
+export const TOKEN_SCOPES =
+    'read:pullrequest:bitbucket and write:pullrequest:bitbucket (and read:repository:bitbucket if the diff needs it)';
 /** How often a rate-limited request is tried in all. */
 const ATTEMPTS = 4;
 

@@ -212,7 +212,8 @@ the new questions, call `planroom_wait` for the `phase.complete` event, and writ
 
 Turn the answers into a document the user can review section by section. It becomes the OpenSpec change, so cover:
 an ELI5 section, summary, how it works (a diagram), the numbers, rollout, impact, risks, acceptance criteria (an
-interactive checklist), and assumptions.
+interactive checklist with every item `done: true`, so it starts fully agreed and the user unticks what they dispute),
+and assumptions.
 
 - **ELI5 first.** The first section, titled "ELI5", explains the whole change as you would to a five-year-old: a
   `text` block of three or four short sentences with no jargon, then an `analogy` block for the change as a whole.

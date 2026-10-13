@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback } from 'react';
 import { currentRound, findingsUnlocked, type RoundRecord, roundItems } from '../../shared/review';
 import { type Pin, type Pins, PinsContext } from '../blocks/pins';
+import { plainTitle } from '../components/Markdown';
 import { deepEqual, useSelector } from '../store';
 import { useActions, useUiState } from '../ui';
 
@@ -41,7 +42,7 @@ export function ReviewPins({ children }: { children: ReactNode }) {
                 const on = here.filter((pin) => pin.node === node);
                 byNode.set(node, {
                     count: on.length,
-                    label: on.map((pin) => `${pin.id}: ${pin.title}`).join('\n'),
+                    label: on.map((pin) => `${pin.id}: ${plainTitle(pin.title)}`).join('\n'),
                     open: () => goTo(`item:${on[0]!.id}`)
                 });
             }

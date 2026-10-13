@@ -1797,6 +1797,7 @@ input[type="checkbox"] {
 .nav-name {
     flex-grow: 1;
     min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .ring {

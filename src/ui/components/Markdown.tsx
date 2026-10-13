@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { linkChildren } from './LinkedText';
 
@@ -75,15 +75,26 @@ export function InlineMarkdown({ source }: { source: string }) {
 }
 
 /** What a title may use: inline marks with no paragraph or link, so it sits inside a heading or a button. */
-const TITLE = ['strong', 'em', 'code'];
+const TITLE = { allowedElements: ['strong', 'em', 'code'], unwrapDisallowed: true, remarkPlugins: [inlineOnly] };
 
 /** Markdown for a heading or a nav label: **bold**, *italic* and `code`, with links and block syntax left as text. */
 export function TitleMarkdown({ source }: { source: string }) {
-    return (
-        <ReactMarkdown allowedElements={TITLE} unwrapDisallowed remarkPlugins={[inlineOnly]}>
-            {source}
-        </ReactMarkdown>
-    );
+    return <ReactMarkdown {...TITLE}>{source}</ReactMarkdown>;
+}
+
+/** The text a rendered tree shows. */
+function textOf(node: ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(textOf).join('');
+    return isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
+}
+
+/**
+ * A title as plain text, for a label that shows text only (a chart's legend, a pin): the text TitleMarkdown shows,
+ * from the same parse, with its marks dropped.
+ */
+export function plainTitle(source: string): string {
+    return textOf(ReactMarkdown({ ...TITLE, children: source }));
 }
 
 /** What a Bitbucket comment renders, as Bitbucket's Python-Markdown does: no raw HTML, task lists or suggestion blocks. */
