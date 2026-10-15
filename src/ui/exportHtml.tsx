@@ -367,6 +367,8 @@ export async function buildHtml(
     const copy = main.cloneNode(true) as HTMLElement;
     copyFormState(main, copy);
     keepFullScreen(copy);
+    // Links into this machine's editor name its local paths and open nothing anywhere else.
+    for (const link of copy.querySelectorAll('a[href^="vscode:"]')) link.remove();
     await inlineImages(copy, load);
     await inlineFrames(copy, load);
     const script = out.createElement('script');

@@ -10,6 +10,7 @@ import {
     type YourTakeConfig
 } from './blocks.js';
 import { contextBlock } from './questions.js';
+import { describePlace, type LineIndex, lineIndex, type PageRecord, pageKey, repeatOf, shownOnDiff } from './readthrough.js';
 import { type BlockRecord, blockIdsOf, sectionItem } from './records.js';
 
 /**
@@ -164,9 +165,16 @@ export const itemContent = itemFields.superRefine((item, ctx) => {
 });
 export type ItemContent = z.infer<typeof itemContent>;
 
-/** A stored finding: its content, its round and version, and why the agent withdrew it, if it did. */
+/** The most lines of code a comment quotes. */
+export const MAX_QUOTED_LINES = 40;
+
+/**
+ * A stored finding: its content, its round and version, why the agent withdrew it, if it did, and the code its anchor
+ * names, read by the server.
+ */
 export const itemRecord = itemFields.extend({
     round: z.number().int().min(1),
+    code: z.array(z.string()).max(MAX_QUOTED_LINES).optional(),
     version: z.number().int().min(1),
     withdrawn: z.object({ reason: z.string(), at: z.string() }).optional(),
     updatedAt: z.string()
@@ -271,10 +279,38 @@ export const TAKE_TITLES: Record<TakeKind, string> = {
 /** How many your-take cards the agent puts in a deck. */
 export const DENSITIES = ['light', 'normal', 'heavy'] as const;
 
-/** How many `planroom-reviewer` subagents a review sends off, which is most of its token cost. */
-export const REVIEW_STRENGTHS = ['single', 'standard', 'thorough'] as const;
+/**
+ * How a round is reviewed: the overview deck, the line-by-line read-through, or both with the deck first. The agent
+ * builds only what was chosen.
+ */
+export const TECHNIQUES = ['deck', 'readthrough', 'both'] as const;
+export type Technique = (typeof TECHNIQUES)[number];
+export const TECHNIQUE_TITLES: Record<Technique, string> = {
+    deck: 'Overview deck',
+    readthrough: 'Line-by-line read-through',
+    both: 'Both, the deck first'
+};
+export const TECHNIQUE_DETAILS: Record<Technique, string> = {
+    deck: 'A walkthrough of the change: why, how, what it might impact and the trade-offs.',
+    readthrough: 'Every changed line, one concept per page, in reading order.',
+    both: 'The walkthrough first, then the read-through.'
+};
+
+/** Whether a technique has the deck. A round whose technique is not chosen yet builds the deck, as before. */
+export function hasDeck(technique: Technique | undefined): boolean {
+    return technique !== 'readthrough';
+}
+
+/** Whether a technique has the read-through. */
+export function hasReadthrough(technique: Technique | undefined): boolean {
+    return technique === 'readthrough' || technique === 'both';
+}
+
+/** How many `planroom-reviewer` subagents a review sends off, which is most of its token cost; `none` sends none. */
+export const REVIEW_STRENGTHS = ['none', 'single', 'standard', 'thorough'] as const;
 export type ReviewStrength = (typeof REVIEW_STRENGTHS)[number];
 export const REVIEW_STRENGTH_DETAILS: Record<ReviewStrength, string> = {
+    none: 'No AI review: only what you find yourself.',
     single: 'One reviewer covers every dimension and checks its own findings.',
     standard: 'One reviewer covers every dimension, then a verifier tries to refute what it found.',
     thorough: 'One reviewer per dimension, then a verifier. Uses the most tokens.'
@@ -292,10 +328,37 @@ export const reviewerSettings = z.object({
 });
 export type ReviewerSettings = z.infer<typeof reviewerSettings>;
 
+/** The reviewer subagents as preferences: the strength is unset until the reviewer first picks one. */
+const reviewerPreference = reviewerSettings.extend({ strength: z.enum(REVIEW_STRENGTHS).optional() });
+export type ReviewerPreference = z.infer<typeof reviewerPreference>;
+
+/** The strength a round's start card offers: the reviewer's last choice, else none for a read-through and standard for the deck. */
+export function startingStrength(preference: Pick<ReviewerPreference, 'strength'>, technique: Technique): ReviewStrength {
+    return preference.strength ?? (hasReadthrough(technique) ? 'none' : 'standard');
+}
+
+/** Which way the read-through shows each piece: the agent's pick per piece, or always as it is now, or always as a diff. */
+export const CODE_VIEWS = ['auto', 'now', 'diff'] as const;
+export type CodeView = (typeof CODE_VIEWS)[number];
+export const CODE_VIEW_TITLES: Record<CodeView, string> = { auto: 'Auto', now: 'As it is now', diff: 'As a diff' };
+
+/** How a test case shows on the test pages. */
+export const TEST_VIEWS = ['title', 'pseudo', 'code'] as const;
+export type TestView = (typeof TEST_VIEWS)[number];
+export const TEST_VIEW_TITLES: Record<TestView, string> = { title: 'Title', pseudo: 'Pseudo code', code: 'Real code' };
+
+/** The read-through's settings: the starting code view, how tests show, and whether pieces tick themselves. */
+export const readthroughSettings = z.object({
+    view: z.enum(CODE_VIEWS).default('auto'),
+    tests: z.enum(TEST_VIEWS).default('pseudo'),
+    autoTick: z.boolean().default(true)
+});
+export type ReadthroughSettings = z.infer<typeof readthroughSettings>;
+
 /**
- * The reviewer's preferences, saved per machine: which your-take kinds the agent uses and how often, the reviewer
- * subagents each round offers to start, and which review views show. Every field has its default, so a partial or
- * older file still reads.
+ * The reviewer's preferences, saved per machine: which your-take kinds the agent uses and how often, the technique and
+ * reviewer subagents each round offers to start, which review views show, and the read-through's settings. Every
+ * field has its default, so a partial or older file still reads.
  */
 const on = z.boolean().default(true);
 export const reviewPreferences = z.object({
@@ -303,10 +366,13 @@ export const reviewPreferences = z.object({
         .object({ predict: on, prosCons: on, risk: on, check: on })
         .default({ predict: true, prosCons: true, risk: true, check: true }),
     density: z.enum(DENSITIES).default('normal'),
-    reviewers: reviewerSettings.default({ strength: 'standard', model: 'sonnet', effort: 'high' }),
+    reviewers: reviewerPreference.default({ model: 'sonnet', effort: 'high' }),
     views: z
         .object({ pins: on, diff: on, charts: on, heatmap: on, matrix: on })
-        .default({ pins: true, diff: true, charts: true, heatmap: true, matrix: true })
+        .default({ pins: true, diff: true, charts: true, heatmap: true, matrix: true }),
+    /** The technique the start card offers: the last one chosen, the deck the first time. */
+    technique: z.enum(TECHNIQUES).default('deck'),
+    readthrough: readthroughSettings.default({ view: 'auto', tests: 'pseudo', autoTick: true })
 });
 export type ReviewPreferences = z.infer<typeof reviewPreferences>;
 
@@ -315,13 +381,26 @@ export const DEFAULT_PREFERENCES: ReviewPreferences = reviewPreferences.parse({}
 
 // ---------------------------------------------------------------- the reviewer's own comments
 
-/** A comment the reviewer writes on a line, a file or, with no anchor, the pull request as a whole. */
+/**
+ * A comment the reviewer writes on a line, a range of lines, a file or, with no anchor, the pull request as a whole.
+ * One written on a read-through page names it; one on the example of a repeated edit names the repeat, and covers
+ * every place of it unless `onlyHere`.
+ */
 export const noteContent = z.object({
     anchor: codeAnchor.optional(),
     text: z.string().trim().min(1).max(8000),
-    task: z.boolean().optional()
+    task: z.boolean().optional(),
+    page: recordId.optional(),
+    repeat: z.object({ key: z.string().min(1).max(40), onlyHere: z.boolean() }).optional()
 });
-export const noteRecord = noteContent.extend({ id: z.string(), round: z.number().int().min(1), at: z.string() });
+/** The code a comment sits on, read by the server from the reviewed commit: quoted off the diff and in the task file. */
+const quotedCode = z.array(z.string()).max(MAX_QUOTED_LINES);
+export const noteRecord = noteContent.extend({
+    id: z.string(),
+    round: z.number().int().min(1),
+    code: quotedCode.optional(),
+    at: z.string()
+});
 export type NoteRecord = z.infer<typeof noteRecord>;
 
 // ---------------------------------------------------------------- rounds
@@ -389,6 +468,12 @@ export const roundRecord = z.object({
         .optional(),
     /** The reviewer subagents the reviewer chose for this round, and when they started them. */
     reviewers: reviewerSettings.extend({ at: z.string() }).optional(),
+    /** How the reviewer chose to review this round, as they started it. */
+    technique: z.enum(TECHNIQUES).optional(),
+    /** The round's diff line by line, built by the server: what the read-through must cover and Bitbucket shows. */
+    index: lineIndex.optional(),
+    /** When the agent's layout of the read-through was accepted, which opens it. */
+    readthrough: z.object({ openedAt: z.string() }).optional(),
     /** When the first part of the deck, Why to What it might impact, was published. */
     publishedAt: z.string().optional(),
     /** The reviewer's questions and concerns on the impact map, saved as they write them and sent once. */
@@ -502,11 +587,14 @@ export function roundItems(parts: Pick<ReviewParts, 'items'>, round: number): It
 /** Where a review round stands; the tabs unlock along it. */
 export type ReviewStage = 'building' | 'walkthrough' | 'triage' | 'preview' | 'posted' | 'next-round';
 
-/** The stage of `round`: posted, previewing, triaging once the walkthrough is done, reading once the deck is out, else building. */
+/**
+ * The stage of `round`: posted, previewing, triaging once the walkthrough is done, reading once the deck is out, else
+ * building. A round with no deck skips the walkthrough: it triages once its read-through opens.
+ */
 export function roundStage(parts: Pick<ReviewParts, 'slides'>, round: RoundRecord): ReviewStage {
     if (round.postedAt) return 'posted';
     if (round.previewing) return 'preview';
-    if (round.walkthrough) return 'triage';
+    if (round.walkthrough || (!hasDeck(round.technique) && round.readthrough)) return 'triage';
     if (round.publishedAt) return 'walkthrough';
     if (round.n > 1 && deckSlides(parts, round.n).length === 0) return 'next-round';
     return 'building';
@@ -517,9 +605,12 @@ export function reviewStage(parts: Pick<ReviewParts, 'review' | 'slides'>): Revi
     return parts.review ? roundStage(parts, currentRound(parts.review)) : 'building';
 }
 
-/** Whether findings may show: once the reviewer finished or skipped the round's walkthrough. */
-export function findingsUnlocked(round: Pick<RoundRecord, 'walkthrough'>): boolean {
-    return round.walkthrough !== undefined;
+/**
+ * Whether findings may show: once the reviewer finished or skipped the round's walkthrough, and at once for a round
+ * with no deck to finish.
+ */
+export function findingsUnlocked(round: Pick<RoundRecord, 'walkthrough' | 'technique'>): boolean {
+    return round.walkthrough !== undefined || !hasDeck(round.technique);
 }
 
 /** Findings of the round, follow-ups included, the reviewer has not reacted to yet. */
@@ -568,13 +659,18 @@ export interface DerivedComment {
     key: string;
     source: 'agree' | 'reword' | 'note' | 'summary';
     itemId?: string;
-    /** Where it sits; the summary sits on the PR as a whole. */
+    /** What it is about: the file and lines it was written on. The summary sits on the PR as a whole. */
     anchor?: CodeAnchor;
+    /**
+     * Where Bitbucket gets it: the anchor, or the file alone for lines its diff does not show. A range is sent on its
+     * last line.
+     */
+    placed?: CodeAnchor;
     /** A follow-up's earlier comment, by its key in the round's `earlier`. */
     replyTo?: string;
-    /** The words before any sign-off. */
+    /** The words before any sign-off, as the reviewer or the agent wrote them. */
     text: string;
-    /** What is posted: the text, and the sign-off while signed. */
+    /** What is posted: the text, placed by the rules for ranges, lines off the diff and repeats, and the sign-off while signed. */
     body: string;
     /** The share of words that are the reviewer's own; null for a comment the reviewer wrote from scratch. */
     yours: number | null;
@@ -582,6 +678,10 @@ export interface DerivedComment {
     /** The sign-off cannot come off: an agreed draft, or one at most half the reviewer's. */
     locked: boolean;
     task: boolean;
+    /** The code it sits on, from the reviewed commit. */
+    code?: string[];
+    /** The read-through page it was written on. */
+    page?: string;
 }
 
 /** The body Post sends for `text`, signed or not. */
@@ -607,10 +707,60 @@ function position(comment: DerivedComment): [number, string, number, string] {
     return [0, comment.anchor.file, comment.anchor.start ?? 0, comment.key];
 }
 
+/** A fenced code block of `lines`, fenced longer than any run of backticks inside it. */
+function fenced(lines: readonly string[]): string {
+    const longest = Math.max(2, ...lines.map((line) => Math.max(0, ...(line.match(/`+/g) ?? []).map((run) => run.length))));
+    const fence = '`'.repeat(longest + 1);
+    return `${fence}\n${lines.join('\n')}\n${fence}`;
+}
+
+/**
+ * Where a comment on `anchor` lands and what opens its text. A range is sent on its last line and opens with its
+ * lines, "Lines 12-18". A line Bitbucket's diff does not show, inside a hunk with three lines of context, becomes a
+ * comment on the file that quotes its line number and code.
+ * ponytail: the rules are the conservative ones; if a scratch PR shows Bitbucket takes a span, send it instead.
+ */
+function placement(
+    index: LineIndex | undefined,
+    anchor: CodeAnchor | undefined,
+    code: readonly string[] | undefined
+): { placed?: CodeAnchor; opening: string } {
+    if (!anchor || anchor.start === undefined) return { ...(anchor ? { placed: anchor } : {}), opening: '' };
+    const end = anchor.end ?? anchor.start;
+    const range = end === anchor.start ? `${anchor.start}` : `${anchor.start}-${end}`;
+    if (index && !shownOnDiff(index, anchor.file, anchor.side, end)) {
+        const quote = code?.length ? `\n\n${fenced(code)}` : '';
+        return {
+            placed: { file: anchor.file, side: anchor.side },
+            opening: `On ${end === anchor.start ? 'line' : 'lines'} ${range}${anchor.side === 'old' ? ' of the old file' : ''}:${quote}\n\n`
+        };
+    }
+    return { placed: anchor, opening: end === anchor.start ? '' : `Lines ${range}:\n\n` };
+}
+
+/** The list a comment on a repeat's example ends with: every other place of the repeat. */
+function repeatList(index: LineIndex | undefined, note: NoteRecord): string {
+    if (!note.repeat || note.repeat.onlyHere || !note.anchor) return '';
+    const { anchor } = note;
+    const lines = anchor.start === undefined ? undefined : `${anchor.start}-${anchor.end ?? anchor.start}`;
+    const repeat = repeatOf(index, {
+        repeat: note.repeat.key,
+        file: anchor.file,
+        ...(anchor.side === 'old' ? { oldLines: lines } : { lines })
+    });
+    if (!repeat) return '';
+    const others = repeat.group.places.filter((_, at) => at !== repeat.example);
+    return others.length
+        ? `\n\nThe same change is also at:\n\n${others.map((place) => `- ${describePlace(place)}`).join('\n')}`
+        : '';
+}
+
 /**
  * Every comment a round would post, from its three sources: a reaction to a finding (Agree takes the agent's draft,
- * Reword the reviewer's text, Reject nothing), a comment the reviewer wrote, and the summary, which comes last. Agent
- * text ends with the sign-off while it is at most half the reviewer's own, or when the reviewer has not taken it off.
+ * Reword the reviewer's text, Reject nothing), a comment the reviewer wrote, and the summary, which comes last. Each is
+ * placed by the rules for ranges and lines off the diff, and a comment on a repeat's example lists the other places.
+ * Agent text ends with the sign-off while it is at most half the reviewer's own, or when the reviewer has not taken it
+ * off.
  */
 export function deriveComments(parts: ReviewParts, roundNumber: number): DerivedComment[] {
     const round = parts.review?.rounds.find((candidate) => candidate.n === roundNumber);
@@ -619,11 +769,14 @@ export function deriveComments(parts: ReviewParts, roundNumber: number): Derived
     for (const item of roundItems(parts, roundNumber)) {
         const reaction = parts.reactions[item.id];
         if (!reaction || reaction.verdict === 'reject') continue;
+        const { placed, opening } = placement(round.index, item.anchor, item.code);
         const base = {
             key: `item:${item.id}`,
             itemId: item.id,
             ...(item.anchor ? { anchor: item.anchor } : {}),
+            ...(placed ? { placed } : {}),
             ...(item.replyTo ? { replyTo: item.replyTo } : {}),
+            ...(item.code ? { code: item.code } : {}),
             task: reaction.task ?? item.severity === 'blocker'
         };
         if (reaction.verdict === 'agree') {
@@ -631,7 +784,7 @@ export function deriveComments(parts: ReviewParts, roundNumber: number): Derived
                 ...base,
                 source: 'agree',
                 text: item.draft,
-                body: commentBody(item.draft, true),
+                body: commentBody(`${opening}${item.draft}`, true),
                 yours: 0,
                 signed: true,
                 locked: true
@@ -639,16 +792,20 @@ export function deriveComments(parts: ReviewParts, roundNumber: number): Derived
         } else {
             const text = reaction.text?.trim() || item.draft;
             const sign = signOff(item.draft, text, reaction.unsigned);
-            comments.push({ ...base, source: 'reword', text, body: commentBody(text, sign.signed), ...sign });
+            comments.push({ ...base, source: 'reword', text, body: commentBody(`${opening}${text}`, sign.signed), ...sign });
         }
     }
     for (const note of Object.values(parts.notes).filter((candidate) => candidate.round === roundNumber)) {
+        const { placed, opening } = placement(round.index, note.anchor, note.code);
         comments.push({
             key: `note:${note.id}`,
             source: 'note',
             anchor: note.anchor,
+            ...(placed ? { placed } : {}),
+            ...(note.code ? { code: note.code } : {}),
+            ...(note.page ? { page: note.page } : {}),
             text: note.text,
-            body: commentBody(note.text, false),
+            body: commentBody(`${opening}${note.text}${repeatList(round.index, note)}`, false),
             yours: null,
             signed: false,
             locked: false,
@@ -681,14 +838,98 @@ export function deriveComments(parts: ReviewParts, roundNumber: number): Derived
 /** The comments as one Markdown document, for a local branch's Copy as Markdown: each under where it sits, the summary last. */
 export function commentsMarkdown(title: string, comments: readonly DerivedComment[]): string {
     const sections = comments.map((comment) => {
-        const heading = comment.anchor
-            ? describeCodeAnchor(comment.anchor)
+        const heading = comment.placed
+            ? describeCodeAnchor(comment.placed)
             : comment.key === 'summary'
               ? 'Summary'
               : 'On the pull request';
         return `### ${heading}\n\n${comment.body}${comment.task ? '\n\n_Task_' : ''}`;
     });
     return `## Review: ${title}\n\n${sections.join('\n\n')}\n`;
+}
+
+// ---------------------------------------------------------------- handing the comments to an agent
+
+/** Where an anchor is, in words: "src/send.ts lines 15-16", "src/send.ts (old) line 4" or the file alone. */
+function whereInWords(anchor: CodeAnchor): string {
+    if (anchor.start === undefined) return anchor.file;
+    const end = anchor.end ?? anchor.start;
+    const lines = end === anchor.start ? `line ${anchor.start}` : `lines ${anchor.start}-${end}`;
+    return `${anchor.file}${anchor.side === 'old' ? ' (old)' : ''} ${lines}`;
+}
+
+/** What Hand to agent wrote, and the prompt to paste into a Claude session. */
+export interface Handoff {
+    file: string;
+    prompt: string;
+}
+
+/** A name search's matches in the reviewed commit, and whether there were more than it returns. */
+export interface SearchResult {
+    round: number;
+    query: string;
+    matches: { file: string; line: number; text: string }[];
+    truncated: boolean;
+}
+
+/** The task file's name for round `n`, in the review's folder. */
+export function handoffFile(n: number): string {
+    return `handoff-round-${n}.md`;
+}
+
+/** The branch a review's fixes go on: the PR's source branch, or the local branch reviewed. */
+export function reviewBranch(review: Pick<ReviewRecord, 'target' | 'source'>): string {
+    return review.target.kind === 'branch' ? review.target.branch : (review.source ?? 'the PR branch');
+}
+
+/**
+ * The one-line prompt Hand to agent copies, for any Claude session: read the task file and make its changes in the
+ * reviewer's own checkout, at the reviewed commit, asking about questions rather than guessing.
+ */
+export function handoffPrompt(path: string, branch: string, commit: string): string {
+    return (
+        `Read ${path} and make the changes it lists in your own checkout of ${branch}: first check it is at commit ${commit} ` +
+        'and stop and ask me if it is not, then make each change, and ask me about any comment that is a question rather than a request.'
+    );
+}
+
+/**
+ * The task file Hand to agent writes, from the same derivation the preview renders: the branch and commit reviewed,
+ * how to work, then each comment with its file, lines, the code it sits on and the page it came from, its text exactly
+ * as previewed, and for a finding the reviewer agreed with, its suggested fix.
+ */
+export function handoffMarkdown(parts: ReviewParts & { pages: Record<string, PageRecord> }, roundNumber: number): string {
+    const review = parts.review;
+    const round = review?.rounds.find((candidate) => candidate.n === roundNumber);
+    if (!review || !round) return '';
+    const what = review.target.kind === 'pr' ? `PR ${review.target.number}, ${review.title}` : `branch ${review.title}`;
+    const branch = reviewBranch(review);
+    const lines = [
+        `# Review fixes: ${what}`,
+        '',
+        `Branch \`${branch}\`, reviewed at commit \`${round.head}\`.`,
+        `Work in your own checkout of that branch. First check \`git rev-parse HEAD\` is \`${round.head}\`; if it is not, stop and ask the reviewer.`,
+        "Make each change below and tick it. A comment that asks a question needs the reviewer's answer, not a code change: ask them."
+    ];
+    deriveComments(parts, roundNumber).forEach((comment, at) => {
+        const item = comment.itemId ? parts.items[comment.itemId] : undefined;
+        const page = comment.page ? parts.pages[pageKey(roundNumber, comment.page)]?.title : undefined;
+        const where = comment.anchor
+            ? whereInWords(comment.anchor)
+            : comment.key === 'summary'
+              ? 'The summary'
+              : 'The pull request';
+        const finding = comment.source === 'agree' ? 'AI finding you agreed with: ' : 'AI finding you reworded: ';
+        const heading = `${item ? finding : ''}${where}${page ? ` (page: ${page})` : ''}`;
+        lines.push('', `## ${at + 1}. ${heading}`, '');
+        // A comment off the diff already quotes its code in its body.
+        const offDiff = comment.anchor?.start !== undefined && comment.placed?.start === undefined;
+        if (comment.code?.length && !offDiff) lines.push(fenced(comment.code), '');
+        lines.push(comment.body);
+        if (item?.suggestion) lines.push('', 'Suggested fix:', '', item.suggestion);
+        lines.push('', '- [ ] done');
+    });
+    return `${lines.join('\n')}\n`;
 }
 
 // ---------------------------------------------------------------- pros and cons

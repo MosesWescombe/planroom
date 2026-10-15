@@ -102,6 +102,11 @@ h3 {
     margin: 0;
 }
 
+/* A long word in a heading, like a file path in a dialog title, breaks rather than overflowing. */
+:is(h1, h2, h3, h4, h5, h6) {
+    overflow-wrap: anywhere;
+}
+
 p {
     margin: 0;
 }
@@ -3296,6 +3301,7 @@ button.rail-strip-item {
 
 /* As wide as the longest line, so line backgrounds run the full width when scrolled. */
 .code-rows {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: max-content;
@@ -3325,6 +3331,7 @@ button.rail-strip-item {
 /* Stays put on horizontal scroll. */
 .code-gutter {
     position: sticky;
+    z-index: 2;
     left: 0;
     display: flex;
     align-items: center;
@@ -4791,6 +4798,11 @@ button.rail-strip-item {
     background: var(--accent);
     border-color: var(--accent);
     color: var(--on-accent);
+}
+
+.rail-strip-item[aria-current="step"] .strip-section {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .doc-inner {
@@ -6404,6 +6416,16 @@ button.nav-item {
     align-self: flex-start;
 }
 
+/* A finding opened over the read-through: the dialog is its card, and its badges clear the close button. */
+.dialog-finding .finding {
+    padding: 0;
+    border: 0;
+}
+
+.dialog-finding .finding-meta {
+    padding-right: 40px;
+}
+
 /* A comment's editor: one Markdown editor that renders every part but the one being typed in. */
 .comment-editor {
     display: flex;
@@ -6501,6 +6523,14 @@ button.nav-item {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.review-files > summary {
+    cursor: pointer;
+}
+
+.review-files > summary > h2 {
+    display: inline;
 }
 
 .review-folder > summary {
@@ -7148,4 +7178,487 @@ button.nav-item {
 .file-tree-file:hover,
 .file-tree-file[aria-current="true"] {
     background: var(--raised);
+}
+
+/* The read-through: the code as it is now, line selection, and pages of pieces. */
+.code-line.is-gone {
+    background: var(--sunken);
+}
+
+.gone-toggle {
+    padding: 0 6px;
+    border: 1px dashed var(--agent-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--agent-text);
+    font: inherit;
+}
+
+.code-line.is-selected,
+.code-line.is-selected .code-gutter {
+    background: var(--accent-soft);
+}
+
+/* Only the code takes a selection: the gutter, the screen-reader words and the controls stay out of it. */
+.code-line {
+    user-select: none;
+}
+
+.line-code,
+.was-popover {
+    user-select: text;
+}
+
+/* The code a question on a read-through page is about, as it reads in the viewer. */
+.composer-quote.is-code,
+.thread-quote.is-code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+/* The drawn caret, since read-only text shows none; it passes under the gutter when the code scrolls sideways. */
+.code-caret {
+    position: absolute;
+    z-index: 1;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--ink);
+    pointer-events: none;
+}
+
+/* The outline sits inside, since the viewer clips what overflows it. */
+.code-lines:focus-visible {
+    outline-offset: -2px;
+}
+
+.was-toggle {
+    width: 8px;
+    height: 8px;
+    margin-left: 4px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.was-toggle[aria-expanded="true"],
+.was-toggle:hover {
+    opacity: 1;
+}
+
+.code-line {
+    position: relative;
+}
+
+.was-popover {
+    position: absolute;
+    z-index: 5;
+    top: 100%;
+    left: 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 240px;
+    max-width: 640px;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    font-family: var(--font-mono);
+    white-space: pre;
+}
+
+.was-line {
+    color: var(--agent-text);
+}
+
+.code-name {
+    cursor: pointer;
+}
+
+.code-name:hover {
+    text-decoration: underline;
+}
+
+.read-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.read-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 220px;
+}
+
+.read-progress progress {
+    width: 100%;
+    height: 6px;
+    accent-color: var(--accent);
+}
+
+.name-search .field-input {
+    width: 180px;
+}
+
+.read-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.piece {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+/* The read mark on a piece, a page, a rail heading or a rail row: a small filled tick. */
+.read-mark {
+    width: 16px;
+    height: 16px;
+}
+
+.nav-heading:has(.read-mark),
+.nav-heading:has(.mark-all) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* The tests heading's Mark all read, at its end in plain case. */
+.nav-heading .mark-all {
+    margin-left: auto;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.page-read {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent-text);
+}
+
+/* The page head is a column, so its read badge and button would stretch to the full width. */
+.page-read,
+.page-read-button {
+    align-self: flex-start;
+}
+
+/* Pinned to the top of the page while its piece scrolls; it takes over the piece's top padding, so the code passes
+   under a bar that spans the piece. Above the code gutter and caret, below popovers. */
+.piece-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: -12px -12px 0;
+    padding: 12px;
+    border-radius: 11px 11px 0 0;
+    background: var(--paper);
+}
+
+/* A piece's fold button: a chevron down while open, right while folded to its header. */
+.piece-fold svg {
+    transition: transform 0.15s;
+}
+
+.piece-fold[aria-expanded="false"] svg {
+    transform: rotate(-90deg);
+}
+
+/* Everything under a piece's header, laid out as the piece was before; hidden while folded, still mounted. */
+.piece-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.piece-body[hidden] {
+    display: none;
+}
+
+/* A piece's place or a test's title, with its fold chevron and read mark kept beside it when a long path wraps. */
+.piece-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.piece-where {
+    font-size: 13px;
+}
+
+.read-tick {
+    font-size: 13px;
+}
+
+.piece-note,
+.page-addition {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    font-family: var(--font-ui);
+    white-space: normal;
+}
+
+.page-addition {
+    border-color: var(--accent-soft);
+}
+
+.page-addition .chip {
+    align-self: flex-start;
+}
+
+/* A question on code lines, folded to a row under the last of them; it opens in a dialog. */
+.line-thread {
+    font-family: var(--font-ui);
+    white-space: normal;
+}
+
+.repeat-places ul,
+.housekeeping,
+.search-matches {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 18px;
+}
+
+.repeat-places li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.repeat-places li > .code-viewer {
+    flex-basis: 100%;
+}
+
+.related summary {
+    cursor: pointer;
+}
+
+.pseudo-code {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--sunken);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+.page-coming {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.page-threads {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.page-threads .button-link {
+    align-self: flex-start;
+}
+
+.rail-switch {
+    margin-bottom: 8px;
+}
+
+.rail-switch [aria-selected="true"] {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+/* The rail by file: a folder tree, chains of single folders merged, each file with the numbers of its pages. */
+.rail-root {
+    padding: 0 8px 6px;
+}
+
+.rail-files {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.rail-folder .rail-files {
+    margin-left: 12px;
+    border-left: 1px solid var(--line);
+}
+
+.rail-folder > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    color: var(--ink-2);
+    font-size: 13px;
+    list-style: none;
+    cursor: pointer;
+}
+
+.rail-folder > summary::-webkit-details-marker {
+    display: none;
+}
+
+.rail-folder > summary:hover {
+    background: var(--raised);
+}
+
+.rail-folder > summary svg {
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+
+.rail-folder:not([open]) > summary svg {
+    transform: rotate(-90deg);
+}
+
+.rail-folder-name,
+.rail-file-name {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+/* A rail title on one line, cut with an ellipsis. While its row (or, outside a row, the title) is hovered or focused
+   the cut lifts, so the title scrolls sideways: RailTitle slides it, and a wheel, trackpad or touch scrolls it by hand.
+   Once the cut returns there is nothing to scroll, so the title is back at its start. */
+.rail-title {
+    display: block;
+    overflow: auto hidden;
+    scrollbar-width: none;
+    white-space: nowrap;
+}
+
+.rail-title-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: top;
+}
+
+:is(.nav-item, .rail-file, .rail-folder > summary):is(:hover, :focus-visible) .rail-title-text,
+.rail-title:hover .rail-title-text {
+    max-width: none;
+}
+
+/* A touch screen hovers nothing before a swipe, so there the cut stays lifted for the title to swipe sideways. */
+@media (hover: none) {
+    .rail-title-text {
+        max-width: none;
+    }
+}
+
+.rail-file {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px 3px 8px;
+    font-size: 13px;
+}
+
+.page-number {
+    min-width: 24px;
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.page-number:hover {
+    background: var(--raised);
+}
+
+.page-number[aria-current="step"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+.page-number.is-read {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.page-number.is-read[aria-current="step"] {
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* The page on show as a number to type over, between Previous and Next. */
+.page-jump {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.page-jump input {
+    width: 7ch;
+    padding: 4px 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: center;
+}
+
+.search-where {
+    margin-right: 8px;
+    color: var(--muted);
+}
+
+.search-text {
+    white-space: pre;
+}
+
+.technique-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.handoff {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    /* Takes the submit bar's free space, so it sits beside the bar's own button on the right. */
+    margin-left: auto;
+}
+
+.moved-from code {
+    font-size: 12px;
 }

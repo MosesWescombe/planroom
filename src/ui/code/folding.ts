@@ -14,6 +14,24 @@ export function indentLevel(text: string): number | undefined {
 }
 
 /**
+ * How many of `lines`, a header first, make up its block by indentation: the lines indented deeper than the header, and
+ * any closing line at its level, such as `}` or `): void {`, which carries on when it opens another bracket.
+ */
+export function blockLength(lines: readonly string[]): number {
+    const head = indentLevel(lines[0] ?? '') ?? 0;
+    let length = 1;
+    for (let at = 1; at < lines.length; at += 1) {
+        const text = lines[at]!;
+        const level = indentLevel(text);
+        if (level === undefined) continue;
+        if (level <= head && !/^\s*[)\]}]/.test(text)) break;
+        length = at + 1;
+        if (level <= head && !/[([{]\s*$/.test(text)) break;
+    }
+    return length;
+}
+
+/**
  * Indentation folding, the way editors fold code with no grammar to hand: a line opens a fold over
  * the lines after it that are indented deeper, so a function, a block or an object folds under its
  * header while the closing bracket stays in view. Blank lines inside a fold go with it; blank lines

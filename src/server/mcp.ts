@@ -19,6 +19,7 @@ import {
 } from '../shared/derive.js';
 import { emitBatch, type LoggedEvent, type LoggedEventType } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
+import { roundPages } from '../shared/readthrough.js';
 import { currentRound, deckSlides, deriveComments, reviewStage, roundItems, slideShown } from '../shared/review.js';
 import { type PlanFormat, type SessionKind, StateFileError } from '../shared/state.js';
 import { askInput, DEFAULT_WAIT_SEC, openInput, reviewInput, stateInput, waitInput } from '../shared/tools.js';
@@ -79,11 +80,13 @@ const REVIEW_TOOL: Tool = {
     description:
         'Open or resume a Planroom Review of a Bitbucket Cloud PR (a link or a number of the origin repo) or a local branch (nothing is ' +
         'posted for a branch). The server fetches the PR, adds a temporary git worktree at its head under .planroom/reviews/<id>/worktree, ' +
-        'and opens the review page. Returns { url, reviewId, resumed, stage, round, pr, files, worktree, diff, preferences, postable, cursor, repoRoot }: ' +
+        'and opens the review page. Returns { url, reviewId, resumed, stage, round, pr, files, worktree, diff, index, preferences, postable, cursor, repoRoot }: ' +
         'print the url, read the code in `worktree` (never in your working directory), and planroom_wait from `cursor`. `diff` is the ' +
-        'commit range under review: run `git diff <base> <head>` in the worktree. `preferences` say which your-take cards to use and how ' +
-        'many. Start no reviewer subagent before the reviewer starts the round from the page: `reviewers.start` names how many, ' +
-        'at what model and effort, and `reviewers` returns it once they have. A posted review whose PR head has moved resumes as the next round, whose `earlier` comments you follow up.',
+        'commit range under review: run `git diff <base> <head>` in the worktree. `index` is the diff line by line, for a read-through: ' +
+        "each file's hunks, its Housekeeping reason or spacing-only hunks and whether it is a test, plus repeated edits and moved blocks as hints. " +
+        '`preferences` say which your-take cards to use and how many, and the read-through settings. Build nothing and start no reviewer ' +
+        'subagent before the reviewer starts the round from the page: `reviewers.start` names the `technique` (deck, readthrough or both) ' +
+        'and how many reviewers, at what model and effort, and `technique` and `reviewers` return it once they have. A posted review whose PR head has moved resumes as the next round, whose `earlier` comments you follow up.',
     inputSchema: inputSchema(reviewInput)
 };
 
@@ -94,7 +97,7 @@ const SESSION_TOOLS: Tool[] = [
         description:
             'Apply a batch of agent events to the open page, atomically: question.upsert/close/merge, understanding.update, ' +
             'doc.section.upsert, doc.block.upsert, comment.reply (markdown `text`, optionally with diagram, table or other `blocks`), comment.edit (rewrite your reply in place), suggestion.decline, proposal.trace, proposal.ready; ' +
-            'in a review, slide.upsert, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft and earlier.label. Each session kind refuses the events of the others. ' +
+            'in a review, slide.upsert, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft, earlier.label, and for the read-through read.outline, read.page.upsert and read.page.add. Each session kind refuses the events of the others. ' +
             'A malformed batch applies nothing and lists every problem by path. A block whose config fails its type is still stored, ' +
             'shown as an error card, and listed in blockProblems: fix it in place by re-sending it, never by adding a new one. `summary` labels the write-up revision. `doing` tells the user what you are on next, ' +
             'e.g. "researching how alarms are indexed", until your next planroom_wait. `subagents` lists what each subagent you are waiting on is doing, ' +
@@ -460,7 +463,9 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             worktree: live.worktreeDir,
             diff: { base: round.base, head: round.head },
             ...(round.n > 1 ? { earlier: round.earlier } : {}),
+            ...(round.technique ? { technique: round.technique } : {}),
             ...(round.reviewers ? { reviewers: round.reviewers } : {}),
+            index: round.index,
             preferences: live.reviewPreferences,
             postable: live.postable
         };
@@ -576,6 +581,17 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
                         reaction: state.reactions[item.id]?.verdict ?? null
                     })),
                     comments: deriveComments(state, round.n).map(({ key, body, task }) => ({ key, body, task })),
+                    readthrough: {
+                        opened: Boolean(round.readthrough),
+                        pages: roundPages(state, round.n).map((page) => ({
+                            id: page.id,
+                            kind: page.kind,
+                            title: page.title,
+                            ...(page.group ? { group: page.group } : {}),
+                            pieces: page.pieces.length,
+                            written: Boolean(page.content)
+                        }))
+                    },
                     state
                 };
             }

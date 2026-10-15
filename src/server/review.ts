@@ -9,6 +9,7 @@ import {
 import { REVIEW_ROOT } from '../shared/state.js';
 import { type BitbucketAccess, bitbucketRepo, type PullRequestRef, parseTarget } from './bitbucket.js';
 import { RejectedError } from './draft.js';
+import { buildLineIndex } from './lineIndex.js';
 import {
     changedFiles,
     changedLines,
@@ -149,6 +150,7 @@ export async function freshReview(repoRoot: string, resolved: ResolvedTarget, no
                 base,
                 head,
                 files: await changedFiles(repoRoot, base, head),
+                index: await buildLineIndex(repoRoot, base, head),
                 startedAt: now,
                 summary: {},
                 posts: {},
@@ -206,6 +208,7 @@ export async function nextRound(
         base: previous.head,
         head,
         files: await changedFiles(repoRoot, previous.head, head),
+        index: await buildLineIndex(repoRoot, previous.head, head),
         startedAt: now,
         summary: {},
         posts: {},

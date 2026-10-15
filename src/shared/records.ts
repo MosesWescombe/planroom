@@ -58,13 +58,27 @@ export type SectionRecord = z.infer<typeof sectionRecord>;
 /**
  * A comment anchor: the W3C Web Annotation TextPositionSelector plus
  * TextQuoteSelector over the plain text of one `data-anchor-target` element.
- * Without both selectors it anchors to the whole target, e.g. a question.
+ * Without both selectors it anchors to the whole target, e.g. a question. A
+ * question on a read-through page (`page:<id>`) carries the lines selected and
+ * the code highlighted in them, which can start and end partway through a line.
  */
 export const anchor = z
     .object({
         target: z.string().min(1).max(300),
         position: z.object({ start: z.number().int().min(0), end: z.number().int().min(0) }).optional(),
-        quote: z.object({ exact: z.string().min(1).max(2000), prefix: z.string().max(64), suffix: z.string().max(64) }).optional()
+        quote: z
+            .object({ exact: z.string().min(1).max(2000), prefix: z.string().max(64), suffix: z.string().max(64) })
+            .optional(),
+        lines: z
+            .object({
+                file: z.string().min(1).max(400),
+                side: z.enum(['new', 'old']),
+                start: z.number().int().min(1),
+                end: z.number().int().min(1),
+                text: z.string().min(1).max(2000).optional()
+            })
+            .refine((lines) => lines.end >= lines.start, { message: 'ends before it starts', path: ['end'] })
+            .optional()
     })
     .refine((value) => !value.position === !value.quote, {
         message: 'position and quote go together',

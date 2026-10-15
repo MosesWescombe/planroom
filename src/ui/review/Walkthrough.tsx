@@ -8,7 +8,12 @@ import {
     impactMapOf,
     type ReviewerSettings,
     type RoundRecord,
-    shownSlides
+    shownSlides,
+    startingStrength,
+    TECHNIQUE_DETAILS,
+    TECHNIQUE_TITLES,
+    TECHNIQUES,
+    type Technique
 } from '../../shared/review';
 import { BlockView } from '../blocks/Block';
 import { sendImpact } from '../blocks/impact';
@@ -77,32 +82,57 @@ function Slide({ id, number, total }: { id: string; number: number; total: numbe
 }
 
 /**
- * Until the reviewer starts the round's review: how many reviewer subagents the agent sends off and at what model and
- * effort, offered from Settings. The agent starts none before this.
+ * Until the reviewer starts the round: how to review it, the deck, the read-through or both, and how many reviewer
+ * subagents the agent sends off and at what model and effort, each offered from their last choice. The strength
+ * follows the technique until they pick one here: none with the read-through, standard for the deck alone. The agent
+ * builds nothing and starts no reviewer before this.
  */
-function StartReview({ round }: { round: RoundRecord }) {
-    const preferred = useSelector((view) => view.preferences?.reviewers, deepEqual);
+export function StartReview({ round }: { round: RoundRecord }) {
+    const preferences = useSelector((view) => view.preferences, deepEqual) ?? DEFAULT_PREFERENCES;
+    const [technique, setTechnique] = useState<Technique>();
     const [choice, setChoice] = useState<ReviewerSettings>();
     const current = useIsCurrentRound(round);
     const readOnly = useReadOnly();
-    const { send } = useActions();
+    const { send, setTab } = useActions();
     const [busy, track] = useBusy();
     if (!current || readOnly || round.reviewers) return null;
-    const reviewers = choice ?? preferred ?? DEFAULT_PREFERENCES.reviewers;
+    const picked = technique ?? preferences.technique;
+    const reviewers = choice ?? { ...preferences.reviewers, strength: startingStrength(preferences.reviewers, picked) };
+    const start = () =>
+        quietly(
+            track(send({ type: 'reviewers.start', technique: picked, reviewers })).then(() =>
+                setTab(picked === 'readthrough' ? 'readthrough' : 'walkthrough')
+            )
+        );
     return (
         <section className="start-review" aria-labelledby="start-review-title">
             <h2 id="start-review-title">Start the review</h2>
             <p className="small muted">
-                Choose the agents that review this change. Claude reads it meanwhile, and starts them when you press Start. Set
-                the defaults in Settings.
+                Choose how to review this change and whether agents review it too. Claude reads it meanwhile, and starts when you
+                press Start. Your choices are kept for next time.
             </p>
+            <fieldset className="technique-choice">
+                <legend className="small strong">How to review</legend>
+                {TECHNIQUES.map((option) => (
+                    <label key={option} className="toggle-row">
+                        <span>
+                            {TECHNIQUE_TITLES[option]}
+                            <span className="small muted">{TECHNIQUE_DETAILS[option]}</span>
+                        </span>
+                        <input
+                            type="radio"
+                            name="technique"
+                            value={option}
+                            checked={picked === option}
+                            disabled={option === 'readthrough' && Boolean(round.publishedAt)}
+                            onChange={() => setTechnique(option)}
+                        />
+                    </label>
+                ))}
+            </fieldset>
+            <span className="small strong">AI review</span>
             <ReviewerFields value={reviewers} onChange={setChoice} />
-            <button
-                type="button"
-                className="button-primary"
-                disabled={busy}
-                onClick={() => quietly(track(send({ type: 'reviewers.start', reviewers })))}
-            >
+            <button type="button" className="button-primary" disabled={busy} onClick={start}>
                 Start review
             </button>
         </section>
@@ -307,7 +337,9 @@ function Deck({ round }: { round: RoundRecord }) {
     }, [go, move, index, overview]);
 
     const done = round.walkthrough;
-    const finish = () => quietly(track(send({ type: 'walkthrough.done', how: 'finished' })).then(() => setTab('findings')));
+    // With both, the read-through follows the deck.
+    const next = round.technique === 'both' ? 'readthrough' : 'findings';
+    const finish = () => quietly(track(send({ type: 'walkthrough.done', how: 'finished' })).then(() => setTab(next)));
     const skip = () =>
         quietly(
             track(
@@ -369,8 +401,8 @@ function Deck({ round }: { round: RoundRecord }) {
                                 <span className="small muted">
                                     <CheckIcon /> Walkthrough {done.how}.
                                 </span>
-                                <button type="button" className="button-link" onClick={() => setTab('findings')}>
-                                    See the findings
+                                <button type="button" className="button-link" onClick={() => setTab(next)}>
+                                    {next === 'readthrough' ? 'On to the read-through' : 'See the findings'}
                                 </button>
                             </>
                         ) : (

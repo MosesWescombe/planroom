@@ -65,7 +65,8 @@ describe('reading the change', () => {
             { path: 'src/old.ts', status: 'removed', additions: 0, deletions: 1 },
             { path: 'src/retry.ts', status: 'modified', additions: 1, deletions: 1 }
         ]);
-        expect(await filePatch(repo.dir, base, head, 'src/retry.ts')).toContain('+    return 2;');
+        expect(await filePatch(repo.dir, base, head, ['src/retry.ts'])).toContain('+    return 2;');
+        expect(await filePatch(repo.dir, base, head, ['src/moved.ts', 'src/move.ts'])).toContain('rename from src/move.ts');
     });
 
     it('names the lines a later commit changed, by their numbers before it, and the ones it deleted outright', async () => {

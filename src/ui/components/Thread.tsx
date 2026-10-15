@@ -88,6 +88,7 @@ export const Thread = memo(function Thread({ id }: { id: string }) {
                             {thread.anchor.quote.exact}
                         </p>
                     )}
+                    {thread.anchor.lines?.text && <p className="thread-quote is-code">{thread.anchor.lines.text}</p>}
                     <div className="thread-meta">
                         {thread.intent && <span className="chip">{INTENT[thread.intent]}</span>}
                         {anchorState === 'detached' && (

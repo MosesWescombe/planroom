@@ -11,6 +11,7 @@ import {
     reviewPreferences,
     roundStage,
     SIGN_OFF_MARKDOWN,
+    startingStrength,
     yoursShare
 } from './review.js';
 
@@ -168,12 +169,14 @@ describe('pros and cons', () => {
 });
 
 describe('preferences', () => {
-    it('defaults every take and view on at a normal density with standard reviewers, and fills what an older file lacks', () => {
+    it('defaults every take and view on at a normal density, the deck, no strength chosen yet and the read-through settings, and fills what an older file lacks', () => {
         expect(DEFAULT_PREFERENCES).toEqual({
             takes: { predict: true, prosCons: true, risk: true, check: true },
             density: 'normal',
-            reviewers: { strength: 'standard', model: 'sonnet', effort: 'high' },
-            views: { pins: true, diff: true, charts: true, heatmap: true, matrix: true }
+            reviewers: { model: 'sonnet', effort: 'high' },
+            views: { pins: true, diff: true, charts: true, heatmap: true, matrix: true },
+            technique: 'deck',
+            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true }
         });
         expect(reviewPreferences.parse({ takes: { risk: false } }).takes).toEqual({
             predict: true,
@@ -186,5 +189,17 @@ describe('preferences', () => {
             model: 'sonnet',
             effort: 'high'
         });
+        expect(reviewPreferences.parse({ readthrough: { autoTick: false } }).readthrough).toEqual({
+            view: 'auto',
+            tests: 'pseudo',
+            autoTick: false
+        });
+    });
+
+    it('starts the strength at none with a read-through and standard for the deck alone, until the reviewer picks one', () => {
+        expect(startingStrength({}, 'deck')).toBe('standard');
+        expect(startingStrength({}, 'readthrough')).toBe('none');
+        expect(startingStrength({}, 'both')).toBe('none');
+        expect(startingStrength({ strength: 'thorough' }, 'readthrough')).toBe('thorough');
     });
 });

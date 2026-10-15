@@ -78,4 +78,17 @@ describe('planroom install', () => {
             ['mcp', 'remove', 'planroom-review', '--scope', 'user']
         ]);
     });
+
+    it('links every agent the package ships, the page writer among them, and uninstall removes it', async () => {
+        const dir = await tempRepo();
+        const target = { pkgRoot: join(import.meta.dirname, '..', '..'), configDir: join(dir, 'claude'), node: '/usr/bin/node' };
+        const claude: ClaudeCli = () => ({ status: 0, output: '' });
+        install(target, claude);
+        const writer = join(target.configDir, 'agents', 'planroom-page-writer.md');
+        expect(await readlink(writer)).toBe(join(target.pkgRoot, 'agents', 'planroom-page-writer.md'));
+        for (const agent of ['planroom-reviewer.md', 'planroom-illustrator.md'])
+            expect(await readlink(join(target.configDir, 'agents', agent))).toBe(join(target.pkgRoot, 'agents', agent));
+        uninstall(target, claude);
+        await expect(readlink(writer)).rejects.toThrow();
+    });
 });

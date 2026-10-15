@@ -1,5 +1,6 @@
 import upperFirst from 'lodash/upperFirst';
 import { memo, useRef, useState } from 'react';
+import { describeAnchor } from '../../shared/anchors';
 import { openComments, RESOLVED, type ThreadScope, threadScope } from '../../shared/derive';
 import type { ActivityEntry, AgentStatus } from '../../shared/view';
 import { plural, relativeTime } from '../format';
@@ -206,13 +207,19 @@ const PanelThread = memo(function PanelThread({ id, scope }: { id: string; scope
         return {
             target: anchor?.target.replace(/^question:/, ''),
             quote: anchor?.quote?.exact,
-            question: question && `${question.id} · ${question.title}`
+            question: question && `${question.id} · ${question.title}`,
+            lines: anchor?.lines && describeAnchor(anchor)
         };
     }, deepEqual);
     const { target } = on;
     return (
         <>
-            <ThreadRow id={id} heading={on.quote ?? on.question} elementId={`thread-${id}`} onOpen={() => setOpen(true)} />
+            <ThreadRow
+                id={id}
+                heading={on.quote ?? on.question ?? on.lines}
+                elementId={`thread-${id}`}
+                onOpen={() => setOpen(true)}
+            />
             {open && (
                 <ThreadDialog
                     id={id}

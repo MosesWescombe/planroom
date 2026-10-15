@@ -22,6 +22,7 @@ import { App } from '../App';
 import { BlockView } from '../blocks/Block';
 import { type BlobLoader, buildHtml } from '../exportHtml';
 import { setPrinting } from '../hooks';
+import { setSendKey } from '../sendKey';
 
 const FLOW = {
     nodes: [
@@ -172,7 +173,10 @@ function reducedMotion() {
     }));
 }
 
-afterEach(() => setPrinting(false));
+afterEach(() => {
+    setPrinting(false);
+    setSendKey('shift-enter');
+});
 
 /** Replaces the text of the comment editor `box`, as typing it would. */
 function typeInto(box: HTMLElement, text: string) {
@@ -224,7 +228,9 @@ describe('the walkthrough while it builds', () => {
         await userEvent.selectOptions(card.getByRole('combobox', { name: /Strength/ }), 'single');
         await userEvent.selectOptions(card.getByRole('combobox', { name: 'Effort' }), 'low');
         await userEvent.click(card.getByRole('button', { name: 'Start review' }));
-        expect(posted).toEqual([{ type: 'reviewers.start', reviewers: { strength: 'single', model: 'opus', effort: 'low' } }]);
+        expect(posted).toEqual([
+            { type: 'reviewers.start', technique: 'deck', reviewers: { strength: 'single', model: 'opus', effort: 'low' } }
+        ]);
     });
 
     it('hides the start card once the round has started its reviewers', () => {
@@ -572,6 +578,7 @@ describe('the findings', () => {
         );
         expect(screen.getByText(/found nothing to raise/)).toBeInTheDocument();
         expect(document.querySelectorAll('.review-file').length).toBeGreaterThan(0);
+        expect(document.querySelector('.review-files')).not.toHaveAttribute('open');
     });
 
     it.each([
@@ -741,6 +748,35 @@ describe('the comments', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Add comment' }));
         expect(posted).toEqual([{ type: 'note.save', text: 'Overall fine' }]);
     });
+
+    it('sends a comment on the chosen send key, as every other message box does', async () => {
+        await comments({ items: [] });
+        await userEvent.click(screen.getByRole('button', { name: 'Add a comment of your own' }));
+        const box = screen.getByRole('textbox', { name: 'Your comment' });
+        box.focus();
+        // Nothing to send yet, so the disabled Add comment button holds it back.
+        await userEvent.keyboard('{Shift>}{Enter}{/Shift}');
+        typeInto(box, 'Overall fine');
+        await userEvent.keyboard('{Enter}');
+        expect(posted).toEqual([]);
+        typeInto(box, 'Overall fine');
+        await userEvent.keyboard('{Shift>}{Enter}{/Shift}');
+        expect(posted).toEqual([{ type: 'note.save', text: 'Overall fine' }]);
+    });
+
+    it('sends a comment on Enter once that is the send key', async () => {
+        setSendKey('enter');
+        await comments({ items: [] });
+        await userEvent.click(screen.getByRole('button', { name: 'Add a comment of your own' }));
+        const box = screen.getByRole('textbox', { name: 'Your comment' });
+        box.focus();
+        typeInto(box, 'Overall fine');
+        await userEvent.keyboard('{Shift>}{Enter}{/Shift}');
+        expect(posted).toEqual([]);
+        typeInto(box, 'Overall fine');
+        await userEvent.keyboard('{Enter}');
+        expect(posted).toEqual([{ type: 'note.save', text: 'Overall fine' }]);
+    });
 });
 
 describe('the html block', () => {
@@ -836,7 +872,8 @@ describe('settings', () => {
         render(<App store={storeWith(reviewView({ round: PUBLISHED }))} />);
         await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
         const section = within(screen.getByRole('group', { name: 'Review' }));
-        expect(section.getByText(/then a verifier tries to refute/)).toBeInTheDocument();
+        expect(section.getByRole('combobox', { name: /Strength/ })).toHaveValue('');
+        expect(section.getByText('None for a read-through, standard for the deck.')).toBeInTheDocument();
         await userEvent.selectOptions(section.getByRole('combobox', { name: /Strength/ }), 'single');
         expect(posted).toEqual([
             {

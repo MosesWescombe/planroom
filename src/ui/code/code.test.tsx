@@ -6,7 +6,7 @@ import { makeView, renderWith, storeWith } from '../../test/harness';
 import { BlockView } from '../blocks/Block';
 import { Attachments } from '../components/Attachments';
 import { CodeViewer, parsePatch } from './CodeViewer';
-import { foldRanges, indentLevel } from './folding';
+import { blockLength, foldRanges, indentLevel } from './folding';
 import { guessLanguage, highlightLines, looksLikeCode } from './highlight';
 
 const TS = [
@@ -43,6 +43,13 @@ describe('folding', () => {
         expect(indentLevel('\tx')).toBe(4);
         expect(indentLevel('  \tx')).toBe(4);
         expect(indentLevel('   ')).toBeUndefined();
+    });
+
+    it('measures a block from its header to its closing line', () => {
+        expect(blockLength(TS.split('\n'))).toBe(9);
+        expect(blockLength(['const limit = 60;', 'const burst = 5;'])).toBe(1);
+        expect(blockLength(['function take(', '    key: string', '): boolean {', '    return true;', '}', 'x();'])).toBe(5);
+        expect(blockLength(['def take(key):', '    return True', '', 'limit = 60'])).toBe(2);
     });
 
     it('folds a diff hunk under its header', () => {

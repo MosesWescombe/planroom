@@ -1,11 +1,11 @@
-import { isValidElement, type ReactNode } from 'react';
+import { Fragment, isValidElement, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { linkChildren } from './LinkedText';
 
 /** The markdown subset a `text` block may use. Anything else is unwrapped to its text. */
 const PROSE = ['p', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'a', 'br', 'blockquote'];
 
-/** Everything else the proposal's markdown files use (react-markdown has no tables without a plugin). */
+/** Everything else the proposal's markdown files use. */
 const DOCUMENT = [...PROSE, 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'hr'];
 
 /** What a table cell may use: inline marks inside plain paragraphs. */
@@ -53,53 +53,6 @@ const components = {
     )
 };
 
-/**
- * Markdown rendered as React elements. Raw HTML in the source is escaped and shown
- * as text, never parsed; links open outside the page; `Q-<n>` becomes a question link.
- */
-export function Markdown({ source, document = false }: { source: string; document?: boolean }) {
-    return (
-        <ReactMarkdown allowedElements={document ? DOCUMENT : PROSE} unwrapDisallowed components={components}>
-            {source}
-        </ReactMarkdown>
-    );
-}
-
-/** Markdown for a table cell: **bold**, *italic*, `code`, links and `Q-<n>`, with any block syntax left as text. */
-export function InlineMarkdown({ source }: { source: string }) {
-    return (
-        <ReactMarkdown allowedElements={INLINE} unwrapDisallowed remarkPlugins={[inlineOnly]} components={components}>
-            {source}
-        </ReactMarkdown>
-    );
-}
-
-/** What a title may use: inline marks with no paragraph or link, so it sits inside a heading or a button. */
-const TITLE = { allowedElements: ['strong', 'em', 'code'], unwrapDisallowed: true, remarkPlugins: [inlineOnly] };
-
-/** Markdown for a heading or a nav label: **bold**, *italic* and `code`, with links and block syntax left as text. */
-export function TitleMarkdown({ source }: { source: string }) {
-    return <ReactMarkdown {...TITLE}>{source}</ReactMarkdown>;
-}
-
-/** The text a rendered tree shows. */
-function textOf(node: ReactNode): string {
-    if (typeof node === 'string' || typeof node === 'number') return String(node);
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    return isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
-}
-
-/**
- * A title as plain text, for a label that shows text only (a chart's legend, a pin): the text TitleMarkdown shows,
- * from the same parse, with its marks dropped.
- */
-export function plainTitle(source: string): string {
-    return textOf(ReactMarkdown({ ...TITLE, children: source }));
-}
-
-/** What a Bitbucket comment renders, as Bitbucket's Python-Markdown does: no raw HTML, task lists or suggestion blocks. */
-const BITBUCKET = [...DOCUMENT];
-
 /** A pipe table's separator row, `| --- | :-: |`. */
 const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 
@@ -141,45 +94,98 @@ function splitTables(source: string): ({ table: string[][] } | { text: string })
     return parts;
 }
 
+/** A pipe table, each cell's inline Markdown rendered. */
+function PipeTable({ rows }: { rows: string[][] }) {
+    return (
+        <div className="table-wrap">
+            <table className="data-table">
+                <thead>
+                    <tr>
+                        {rows[0]!.map((cell, column) => (
+                            <th key={column}>
+                                <InlineMarkdown source={cell} />
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.slice(1).map((row, rowIndex) => (
+                        <tr key={rowIndex}>
+                            {row.map((cell, column) => (
+                                <td key={column}>
+                                    <InlineMarkdown source={cell} />
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+/** `source` with its pipe tables rendered as tables (react-markdown has none without a plugin), the rest by `render`. */
+function withTables(source: string, render: (text: string) => ReactNode) {
+    return splitTables(source).map((part, index) => (
+        <Fragment key={index}>{'table' in part ? <PipeTable rows={part.table} /> : render(part.text)}</Fragment>
+    ));
+}
+
+/**
+ * Markdown rendered as React elements. Raw HTML in the source is escaped and shown
+ * as text, never parsed; links open outside the page; `Q-<n>` becomes a question link; pipe tables become tables.
+ */
+export function Markdown({ source, document = false }: { source: string; document?: boolean }) {
+    return withTables(source, (text) => (
+        <ReactMarkdown allowedElements={document ? DOCUMENT : PROSE} unwrapDisallowed components={components}>
+            {text}
+        </ReactMarkdown>
+    ));
+}
+
+/** Markdown for a table cell: **bold**, *italic*, `code`, links and `Q-<n>`, with any block syntax left as text. */
+export function InlineMarkdown({ source }: { source: string }) {
+    return (
+        <ReactMarkdown allowedElements={INLINE} unwrapDisallowed remarkPlugins={[inlineOnly]} components={components}>
+            {source}
+        </ReactMarkdown>
+    );
+}
+
+/** What a title may use: inline marks with no paragraph or link, so it sits inside a heading or a button. */
+const TITLE = { allowedElements: ['strong', 'em', 'code'], unwrapDisallowed: true, remarkPlugins: [inlineOnly] };
+
+/** Markdown for a heading or a nav label: **bold**, *italic* and `code`, with links and block syntax left as text. */
+export function TitleMarkdown({ source }: { source: string }) {
+    return <ReactMarkdown {...TITLE}>{source}</ReactMarkdown>;
+}
+
+/** The text a rendered tree shows. */
+function textOf(node: ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(textOf).join('');
+    return isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
+}
+
+/**
+ * A title as plain text, for a label that shows text only (a chart's legend, a pin): the text TitleMarkdown shows,
+ * from the same parse, with its marks dropped.
+ */
+export function plainTitle(source: string): string {
+    return textOf(ReactMarkdown({ ...TITLE, children: source }));
+}
+
+/** What a Bitbucket comment renders, as Bitbucket's Python-Markdown does: no raw HTML, task lists or suggestion blocks. */
+const BITBUCKET = [...DOCUMENT];
+
 /**
  * A comment as Bitbucket will show it: fenced code, tables, emphasis, lists, links and headings, with raw HTML shown as
  * literal text and a task list or suggestion block left as the plain text and code Bitbucket makes of them.
  */
 export function BitbucketMarkdown({ source }: { source: string }) {
-    return (
-        <>
-            {splitTables(source).map((part, index) =>
-                'table' in part ? (
-                    <div key={index} className="table-wrap">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    {part.table[0]!.map((cell, column) => (
-                                        <th key={column}>
-                                            <InlineMarkdown source={cell} />
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {part.table.slice(1).map((row, rowIndex) => (
-                                    <tr key={rowIndex}>
-                                        {row.map((cell, column) => (
-                                            <td key={column}>
-                                                <InlineMarkdown source={cell} />
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
-                    <ReactMarkdown key={index} allowedElements={BITBUCKET} unwrapDisallowed components={{ a: components.a }}>
-                        {part.text}
-                    </ReactMarkdown>
-                )
-            )}
-        </>
-    );
+    return withTables(source, (text) => (
+        <ReactMarkdown allowedElements={BITBUCKET} unwrapDisallowed components={{ a: components.a }}>
+            {text}
+        </ReactMarkdown>
+    ));
 }

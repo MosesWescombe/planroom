@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AgentEvent } from '../shared/events.js';
 import type { SectionItem } from '../shared/records.js';
 import { currentRound, deriveComments, reviewStage, shownSlides } from '../shared/review.js';
-import { connect, defined, fakeBitbucket, gitRepo, rejection, reviewHostWith, tempRepo } from '../test/serverHelpers.js';
+import { connect, defined, gitRepo, rejection, reviewHostWith, reviewServer, tempRepo } from '../test/serverHelpers.js';
 import { httpBitbucket } from './bitbucket.js';
 import { git } from './worktree.js';
 
@@ -122,17 +122,6 @@ function issue(id = 'I-1', start = 2): AgentEvent {
             draft: 'Can two retries outlast the caller timeout?\n\n```ts\nreturn 1;\n```'
         }
     };
-}
-
-/** A review server over `repoRoot`, its fake Bitbucket and its preferences file. */
-async function reviewServer(repoRoot: string, options: { problem?: string; prefs?: string } = {}) {
-    const fake = fakeBitbucket();
-    const prefs = options.prefs ?? join(await tempRepo(), 'planroom', 'review.json');
-    const server = await connect({ kind: 'review', repoRoot, reviewHost: reviewHostWith(fake, prefs, options.problem) });
-    const emit = (events: AgentEvent[]) => server.call('planroom_emit', { events });
-    const session = () => defined(server.planroom.session, 'the review session');
-    const page = (request: Record<string, unknown>) => session().handlePage(request);
-    return { ...server, fake, prefs, emit, session, page };
 }
 
 /** A local-branch review, opened. */
@@ -583,7 +572,7 @@ describe('posting', () => {
         expect(branch.fake.calls).toEqual([]);
     });
 
-    it('never lets the token reach the page, the agent, a log or the review folder', async () => {
+    it('never lets the token reach the page, the agent, a log or the review folder, the task file included', async () => {
         const SECRET = 'ATATT-not-a-real-token-5f1e';
         const setup = await prRepo();
         const requests: { url: string; auth: string | null }[] = [];
@@ -615,12 +604,22 @@ describe('posting', () => {
         await session.handlePage({ type: 'comments.open' });
         await session.handlePage({ type: 'comments.post' });
         await session.settled();
+        const handoff = await session.handlePage({ type: 'comments.handoff' });
+        // The agreed finding goes to the task file with its suggested fix.
+        const task = await readFile(defined(handoff.handoff).file, 'utf8');
+        expect(task).toContain('## 1. AI finding you agreed with: src/retry.ts line 2\n\n```\n    return 2;\n```');
+        expect(task).toContain('Suggested fix:\n\nRetry once.');
         const state = await server.call('planroom_state');
 
         expect(
             requests.every((request) => request.auth === `Basic ${Buffer.from(`dev@example.com:${SECRET}`).toString('base64')}`)
         ).toBe(true);
-        const seen = [JSON.stringify(opened.body), JSON.stringify(state.body), JSON.stringify(session.view())];
+        const seen = [
+            JSON.stringify(opened.body),
+            JSON.stringify(state.body),
+            JSON.stringify(session.view()),
+            JSON.stringify(handoff)
+        ];
         const folder = join(setup.dir, '.planroom', 'reviews', 'pr-412');
         for (const name of await readdir(folder, { recursive: true }))
             if (!String(name).startsWith('worktree'))
@@ -764,10 +763,14 @@ describe('starting the reviewers', () => {
         await page({ type: 'reviewers.start', reviewers });
         expect((await rejection(page({ type: 'reviewers.start', reviewers }))).message).toMatch(/already started/);
         const { body } = await call('planroom_wait', { after: 0, timeoutSec: 1 });
-        expect(body.events).toEqual([expect.objectContaining({ type: 'reviewers.start', round: 1, reviewers })]);
+        expect(body.events).toEqual([
+            expect.objectContaining({ type: 'reviewers.start', round: 1, technique: 'deck', reviewers })
+        ]);
         const state = (await call('planroom_state')).body;
         expect(state.reviewers).toMatchObject(reviewers);
-        expect(state.preferences.reviewers).toEqual({ strength: 'standard', model: 'sonnet', effort: 'high' });
+        expect(state.technique).toBe('deck');
+        // The choice is the next round's default.
+        expect(state.preferences).toMatchObject({ technique: 'deck', reviewers });
     });
 });
 
@@ -779,7 +782,9 @@ describe('preferences', () => {
             takes: { predict: true, prosCons: true, risk: false, check: true },
             density: 'light',
             reviewers: { strength: 'single', model: 'haiku', effort: 'low' },
-            views: { pins: true, diff: true, charts: true, heatmap: false, matrix: true }
+            views: { pins: true, diff: true, charts: true, heatmap: false, matrix: true },
+            technique: 'both',
+            readthrough: { view: 'diff', tests: 'title', autoTick: false }
         };
         await first.page({ type: 'preferences.set', preferences });
         expect(JSON.parse(await readFile(prefs, 'utf8'))).toEqual(preferences);

@@ -7,14 +7,27 @@ import type { ChangedFile } from '../shared/review.js';
  * under the review's folder, so the agent reads the change's code without touching the reviewer's working copy.
  */
 
-/** A git command that failed, with what it printed. */
-export class GitError extends Error {}
+/** A git command that failed, with what it printed and its exit code. */
+export class GitError extends Error {
+    constructor(
+        message: string,
+        readonly exitCode?: number
+    ) {
+        super(message);
+    }
+}
 
 /** Run git in `cwd` and resolve with its stdout. */
 export function git(cwd: string, args: readonly string[]): Promise<string> {
     return new Promise((resolve, reject) => {
         execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
-            if (error) reject(new GitError(`git ${args[0]} failed: ${(stderr || error.message).trim()}`));
+            if (error)
+                reject(
+                    new GitError(
+                        `git ${args[0]} failed: ${(stderr || error.message).trim()}`,
+                        typeof error.code === 'number' ? error.code : undefined
+                    )
+                );
             else resolve(stdout);
         });
     });
@@ -65,20 +78,16 @@ export async function fetchBranch(repoRoot: string, branch: string): Promise<voi
 
 const STATUS: Record<string, ChangedFile['status']> = { A: 'added', D: 'removed', R: 'renamed', C: 'added' };
 
-/** Every file changed from `base` to `head`, by path, renames followed, with its added and removed line counts. */
-export async function changedFiles(repoRoot: string, base: string, head: string): Promise<ChangedFile[]> {
+/** A changed file by name and status; `typechange` when it changed type, e.g. a file to a symlink. */
+export type NamedFile = Pick<ChangedFile, 'path' | 'status' | 'from'> & { typechange?: true };
+
+/**
+ * Every file changed from `base` to `head`, renames followed, in git's diff order, which its patches follow too: one
+ * patch per file, but two for a type change, which git diffs as a deletion then an addition.
+ */
+export async function nameStatus(repoRoot: string, base: string, head: string): Promise<NamedFile[]> {
     const names = (await git(repoRoot, ['diff', '-M', '--name-status', '-z', base, head])).split('\0');
-    const counts = (await git(repoRoot, ['diff', '-M', '--numstat', '-z', base, head])).split('\0');
-    const lines = new Map<string, { additions: number; deletions: number }>();
-    for (let index = 0; index < counts.length; index += 1) {
-        const [added = '', deleted = '', path = ''] = (counts[index] ?? '').split('\t');
-        if (!added) continue;
-        // A rename's paths follow in the next two fields: old, then new.
-        const file = path || counts[(index += 2)] || '';
-        // A binary file counts as "-".
-        lines.set(file, { additions: Number(added) || 0, deletions: Number(deleted) || 0 });
-    }
-    const files: ChangedFile[] = [];
+    const files: NamedFile[] = [];
     for (let index = 0; index < names.length - 1; index += 1) {
         const code = names[index] ?? '';
         if (!code) continue;
@@ -89,15 +98,47 @@ export async function changedFiles(repoRoot: string, base: string, head: string)
             path,
             status: STATUS[code[0] ?? ''] ?? 'modified',
             ...(from && code.startsWith('R') ? { from } : {}),
-            ...(lines.get(path) ?? { additions: 0, deletions: 0 })
+            ...(code === 'T' ? { typechange: true as const } : {})
         });
     }
-    return files.sort((a, b) => a.path.localeCompare(b.path));
+    return files;
 }
 
-/** The unified diff from `base` to `head`, of one file or all of them. */
-export function filePatch(repoRoot: string, base: string, head: string, file?: string): Promise<string> {
-    return git(repoRoot, ['diff', '-M', '--no-color', '--no-ext-diff', base, head, ...(file ? ['--', file] : [])]);
+/** Every file changed from `base` to `head`, by path, renames followed, with its added and removed line counts. */
+export async function changedFiles(repoRoot: string, base: string, head: string): Promise<ChangedFile[]> {
+    const counts = (await git(repoRoot, ['diff', '-M', '--numstat', '-z', base, head])).split('\0');
+    const lines = new Map<string, { additions: number; deletions: number }>();
+    for (let index = 0; index < counts.length; index += 1) {
+        const [added = '', deleted = '', path = ''] = (counts[index] ?? '').split('\t');
+        if (!added) continue;
+        // A rename's paths follow in the next two fields: old, then new.
+        const file = path || counts[(index += 2)] || '';
+        // A binary file counts as "-".
+        lines.set(file, { additions: Number(added) || 0, deletions: Number(deleted) || 0 });
+    }
+    return (await nameStatus(repoRoot, base, head))
+        .map(({ typechange: _, ...file }) => ({ ...file, ...(lines.get(file.path) ?? { additions: 0, deletions: 0 }) }))
+        .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** The unified diff from `base` to `head`, of the files at `paths` or all of them; `full` gives every line as context. */
+export function filePatch(
+    repoRoot: string,
+    base: string,
+    head: string,
+    paths?: readonly string[],
+    full = false
+): Promise<string> {
+    return git(repoRoot, [
+        'diff',
+        '-M',
+        '--no-color',
+        '--no-ext-diff',
+        ...(full ? ['--unified=1000000000'] : []),
+        base,
+        head,
+        ...(paths ? ['--', ...paths] : [])
+    ]);
 }
 
 /** A file's lines at `commit`, or undefined when it does not exist there. */

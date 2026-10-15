@@ -1,4 +1,3 @@
-import clamp from 'lodash/clamp';
 import { useEffect, useRef, useState } from 'react';
 import { describeAnchor, resolveAnchor } from '../../shared/anchors';
 import type { CommentIntent, ThreadRecord } from '../../shared/records';
@@ -10,7 +9,7 @@ import { useStore } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 import { type AnchorState, setAnchorStates } from './anchorStatus';
 import { closeComposer, openComposer, useComposition } from './composer';
-import { captureSelection, rangeFromOffsets, type SelectionAnchor, targetSelector } from './selection';
+import { captureSelection, place, rangeFromOffsets, type SelectionAnchor, targetSelector } from './selection';
 
 const INTENTS: { intent: CommentIntent; toolbar: string; composer: string }[] = [
     { intent: 'question', toolbar: 'Comment', composer: 'Question' },
@@ -97,17 +96,6 @@ function usePendingHighlight(composition: ReturnType<typeof useComposition>): vo
     }, [composition]);
 }
 
-/** Where to float a box `width` wide by a selection: above it, or below it, kept inside the window. */
-function place(
-    at: { top: number; left: number; bottom: number } | undefined,
-    width: number,
-    below: boolean
-): React.CSSProperties {
-    if (!at) return {};
-    const left = clamp(at.left, 12, window.innerWidth - width - 12);
-    return below ? { top: Math.min(at.bottom + 8, window.innerHeight - 320), left } : { top: Math.max(8, at.top - 46), left };
-}
-
 /** The comment box for the open composition: its quote, intent, text and pastes, and sending it to the agent. */
 function Composer() {
     const composition = useComposition();
@@ -145,8 +133,10 @@ function Composer() {
     };
     return (
         <div className="composer" role="dialog" aria-label="Comment" style={place(composition.at, 360, true)}>
-            <blockquote className="composer-quote">
-                {composition.anchor.quote?.exact ?? `Comment on ${describeAnchor(composition.anchor)}`}
+            <blockquote className={`composer-quote${composition.anchor.lines?.text ? ' is-code' : ''}`}>
+                {composition.anchor.quote?.exact ??
+                    composition.anchor.lines?.text ??
+                    `Comment on ${describeAnchor(composition.anchor)}`}
             </blockquote>
             <div role="radiogroup" aria-label="Comment type" className="chip-row">
                 {INTENTS.map((option) => (

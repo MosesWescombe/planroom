@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { blockEnvelope, recordId, TAKE_KINDS } from './blocks.js';
 import { answer, contextBlock, questionContent, questionId } from './questions.js';
+import { outlinePage, pageContent } from './readthrough.js';
 import { anchor, attachment, commentIntent, outstanding, sectionContent, touched, validationIssue } from './records.js';
 import {
     chapter,
@@ -10,6 +11,7 @@ import {
     reviewerSettings,
     reviewPreferences,
     slideContent,
+    TECHNIQUES,
     takeAnswer,
     verdict
 } from './review.js';
@@ -114,7 +116,31 @@ export const agentEvent = z.discriminatedUnion('type', [
         label: z.enum(EARLIER_LABELS),
         note: z.string().trim().max(2000).optional(),
         code: z.string().max(20000).optional()
-    })
+    }),
+    /**
+     * Lay out the round's read-through: its pages and the pieces of code on each. Refused, naming the lines, until
+     * every added and removed line is in some piece; accepted, it opens the read-through with every page coming.
+     */
+    z.object({ type: z.literal('read.outline'), pages: z.array(outlinePage).min(1).max(200) }),
+    /** Write one laid-out page's words, which puts it up for the reviewer. */
+    z.object({ type: z.literal('read.page.upsert'), page: pageContent }),
+    /**
+     * Add to a page because the reviewer asked in its thread: words, blocks or both, under one of its pieces or at its
+     * end. It never changes what the page showed, and unticks the piece it sits under.
+     */
+    z
+        .object({
+            type: z.literal('read.page.add'),
+            page: recordId,
+            threadId: z.string().min(1),
+            piece: recordId.optional(),
+            text: z.string().trim().min(1).max(8000).optional(),
+            blocks: z.array(contextBlock).max(6).optional()
+        })
+        .refine((add) => add.text !== undefined || add.blocks !== undefined, {
+            message: 'send `text`, `blocks` or both',
+            path: ['text']
+        })
 ]);
 export type AgentEvent = z.infer<typeof agentEvent>;
 export type AgentEventType = AgentEvent['type'];
@@ -129,7 +155,10 @@ const REVIEW_ONLY_AGENT_EVENTS: readonly AgentEventType[] = [
     'item.upsert',
     'item.withdraw',
     'summary.draft',
-    'earlier.label'
+    'earlier.label',
+    'read.outline',
+    'read.page.upsert',
+    'read.page.add'
 ];
 
 /** The agent events an ask takes: its question and info cards, and replies. The rest belong to a plan's phases. */
@@ -234,8 +263,24 @@ export const pageRequest = z.discriminatedUnion('type', [
     z.object({ type: z.literal('ask.done') }),
     /** Answer a `yourTake` card, which then reveals the agent's view. */
     z.object({ type: z.literal('take.answer'), blockId: recordId, answer: takeAnswer }),
-    /** Start the round's reviewer subagents, as many as the strength says and at this model and effort. */
-    z.object({ type: z.literal('reviewers.start'), reviewers: reviewerSettings }),
+    /**
+     * Start the round: how to review it, and its reviewer subagents, as many as the strength says and at this model and
+     * effort. Both are remembered as the next round's defaults.
+     */
+    z.object({ type: z.literal('reviewers.start'), technique: z.enum(TECHNIQUES).default('deck'), reviewers: reviewerSettings }),
+    /**
+     * Tick a read-through piece read or not, a differing place of a repeat opened (`place`, by its index), or the
+     * Housekeeping page opened (`piece: "housekeeping"`). Saved with the review; the agent is not told.
+     */
+    z.object({
+        type: z.literal('read.tick'),
+        piece: recordId,
+        place: z.number().int().min(0).optional(),
+        read: z.boolean(),
+        how: z.enum(['manual', 'auto'])
+    }),
+    /** Write the round's comments to a task file for an agent to work through, and hand back the prompt to copy. */
+    z.object({ type: z.literal('comments.handoff') }),
     /** Finish or skip the round's walkthrough, which unlocks its findings. */
     z.object({ type: z.literal('walkthrough.done'), how: z.enum(['finished', 'skipped']) }),
     /** Save the reviewer's questions and concerns on the impact map, all of them, as they write them. */
@@ -318,7 +363,9 @@ const REVIEW_ONLY_PAGE_REQUESTS: readonly PageRequestType[] = [
     'comments.open',
     'comments.post',
     'earlier.confirm',
-    'preferences.set'
+    'preferences.set',
+    'read.tick',
+    'comments.handoff'
 ];
 
 /** The page requests an ask takes: answers, suggestions, comments, messages and sending the answers. */
@@ -467,8 +514,16 @@ export const loggedEvent = z.discriminatedUnion('type', [
         /** The answer in words. */
         summary: z.string()
     }),
-    /** The reviewer started the round's review: start the `planroom-reviewer` subagents it names, at its model and effort. */
-    logged.extend({ type: z.literal('reviewers.start'), round: z.number().int(), reviewers: reviewerSettings }),
+    /**
+     * The reviewer started the round: build what `technique` names (the deck, the read-through, or the deck then the
+     * read-through), and start the `planroom-reviewer` subagents it names, at its model and effort; none at `none`.
+     */
+    logged.extend({
+        type: z.literal('reviewers.start'),
+        round: z.number().int(),
+        technique: z.enum(TECHNIQUES),
+        reviewers: reviewerSettings
+    }),
     /** The reviewer finished or skipped the walkthrough: the findings are showing. */
     logged.extend({ type: z.literal('walkthrough.done'), how: z.enum(['finished', 'skipped']), round: z.number().int() }),
     /**

@@ -1,6 +1,7 @@
 import isEqual from 'lodash/isEqual.js';
 import type { Issue } from '../shared/issues.js';
 import type { QuestionRecord } from '../shared/questions.js';
+import type { PageRecord, TickRecord } from '../shared/readthrough.js';
 import type { BlockRecord, SectionContent, SectionRecord, SuggestionRecord, ThreadRecord } from '../shared/records.js';
 import type {
     ItemRecord,
@@ -223,6 +224,34 @@ export class Draft {
         this.state.notes = this.own('notes', this.state.notes);
         delete this.state.notes[id];
         this.patches.set(`notes:${id}`, { field: 'notes', id, value: null });
+    }
+
+    /** Store a read-through page by its `<round>:<id>` key and record its page patch. */
+    putPage(key: string, record: PageRecord): void {
+        this.state.pages = this.own('pages', this.state.pages);
+        this.state.pages[key] = record;
+        this.patches.set(`pages:${key}`, { field: 'pages', id: key, value: record });
+    }
+
+    /** Remove a read-through page, and send the page the patch that deletes it. */
+    removePage(key: string): void {
+        this.state.pages = this.own('pages', this.state.pages);
+        delete this.state.pages[key];
+        this.patches.set(`pages:${key}`, { field: 'pages', id: key, value: null });
+    }
+
+    /** Store a read tick and record its page patch. */
+    putTick(key: string, record: TickRecord): void {
+        this.state.ticks = this.own('ticks', this.state.ticks);
+        this.state.ticks[key] = record;
+        this.patches.set(`ticks:${key}`, { field: 'ticks', id: key, value: record });
+    }
+
+    /** Remove a read tick, and send the page the patch that deletes it. */
+    removeTick(key: string): void {
+        this.state.ticks = this.own('ticks', this.state.ticks);
+        delete this.state.ticks[key];
+        this.patches.set(`ticks:${key}`, { field: 'ticks', id: key, value: null });
     }
 
     /** Replace the review record and record the page patch. */

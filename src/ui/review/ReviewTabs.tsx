@@ -1,14 +1,30 @@
-import { currentRound, deckSlides, findingsUnlocked, type ReviewStage, reviewStage, roundItems } from '../../shared/review';
+import { useEffect } from 'react';
+import { readProgress } from '../../shared/readthrough';
+import {
+    currentRound,
+    deckSlides,
+    findingsUnlocked,
+    hasDeck,
+    hasReadthrough,
+    type ReviewStage,
+    reviewStage,
+    roundItems,
+    type Technique
+} from '../../shared/review';
 import { CheckIcon, LockIcon } from '../components/icons';
 import { plural } from '../format';
 import { deepEqual, useSelector } from '../store';
 import { type Tab, useActions, useUiState } from '../ui';
 import { useShownRound } from './hooks';
 
-/** The tab a review stage opens on. */
-export function tabForStage(stage: ReviewStage): Tab {
-    if (stage === 'triage') return 'findings';
+/**
+ * The tab a review stage opens on, by the round's technique: the read-through for a round read through alone, and
+ * after the deck for both.
+ */
+export function tabForStage(stage: ReviewStage, technique?: Technique): Tab {
     if (stage === 'preview' || stage === 'posted') return 'comments';
+    if (technique === 'readthrough') return 'readthrough';
+    if (stage === 'triage') return technique === 'both' ? 'readthrough' : 'findings';
     return 'walkthrough';
 }
 
@@ -50,8 +66,9 @@ function RoundSwitcher() {
 }
 
 /**
- * A review's three tabs in the top row: the Walkthrough, then the Review, locked until the walkthrough is finished or
- * skipped, then the Comments to post. Each says where it stands.
+ * A review's tabs in the top row, by the round's technique: the Walkthrough, the Read-through or both, then the Review,
+ * locked until the walkthrough is finished or skipped, then the Comments to post. With no deck, Review and Comments
+ * are open at once. Each says where it stands.
  */
 export function ReviewTabs() {
     const round = useShownRound();
@@ -62,10 +79,11 @@ export function ReviewTabs() {
         const unlocked = findingsUnlocked(round);
         const drafted = deckSlides(view, round.n).length;
         const posted = Boolean(round.postedAt);
-        return [
+        const none = round.reviewers?.strength === 'none';
+        const read = readProgress(view, round.index, round.n).lines;
+        const tabs: Omit<TabInfo, 'number'>[] = [
             {
                 id: 'walkthrough',
-                number: 1,
                 title: 'Walkthrough',
                 subtitle:
                     stage === 'next-round'
@@ -78,25 +96,36 @@ export function ReviewTabs() {
                               ? `${round.walkthrough.how === 'finished' ? 'Finished' : 'Skipped'} · ${plural(drafted, 'slide')}`
                               : plural(drafted, 'slide'),
                 unlocked: true,
-                done: unlocked
+                done: Boolean(round.walkthrough)
+            },
+            {
+                id: 'readthrough',
+                title: 'Read-through',
+                subtitle: !round.readthrough
+                    ? round.technique === 'both' && !round.publishedAt
+                        ? 'After the walkthrough'
+                        : 'Agent is laying out the pages'
+                    : `${read.read} of ${plural(read.total, 'line')} read`,
+                unlocked: true,
+                done: Boolean(round.readthrough) && read.total > 0 && read.read === read.total
             },
             {
                 id: 'findings',
-                number: 2,
                 title: 'Review',
                 subtitle: unlocked
                     ? items.length
                         ? `${reacted} of ${plural(items.length, 'finding')} reacted to`
-                        : round.progress?.reviewedAt
-                          ? 'No findings'
-                          : 'Agent is reviewing'
+                        : none
+                          ? 'No AI review'
+                          : round.progress?.reviewedAt
+                            ? 'No findings'
+                            : 'Agent is reviewing'
                     : 'After the walkthrough',
                 unlocked,
-                done: unlocked && (items.length > 0 ? reacted === items.length : Boolean(round.progress?.reviewedAt))
+                done: unlocked && (items.length > 0 ? reacted === items.length : none || Boolean(round.progress?.reviewedAt))
             },
             {
                 id: 'comments',
-                number: 3,
                 title: 'Comments',
                 subtitle: posted
                     ? 'Posted'
@@ -109,9 +138,22 @@ export function ReviewTabs() {
                 done: posted
             }
         ];
+        return tabs
+            .filter(
+                (tab) =>
+                    (tab.id !== 'walkthrough' || hasDeck(round.technique)) &&
+                    (tab.id !== 'readthrough' || hasReadthrough(round.technique))
+            )
+            .map((tab, index) => ({ ...tab, number: index + 1 }));
     }, deepEqual);
     const { tab } = useUiState();
     const { setTab } = useActions();
+    // A technique chosen elsewhere can take the tab on show away: move to the one that replaces it.
+    const technique = round.technique;
+    useEffect(() => {
+        if (tab === 'walkthrough' && !hasDeck(technique)) setTab('readthrough');
+        if (tab === 'readthrough' && !hasReadthrough(technique)) setTab('walkthrough');
+    }, [tab, technique, setTab]);
     return (
         <nav className="phase-tabs" aria-label="Review">
             {info.map((item) => (

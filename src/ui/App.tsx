@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import { pagePhase } from '../shared/derive';
-import { reviewStage } from '../shared/review';
+import { currentRound, reviewStage } from '../shared/review';
 import { PlanBrowser } from './components/PlanSwitcher';
 import { Shell, tabForPhase } from './components/Shell';
 import { tabForStage } from './review/ReviewTabs';
@@ -26,7 +26,14 @@ export function App({ store }: { store: ViewStore }) {
                     <PlanBrowser />
                 </UiProvider>
             ) : changeId && view ? (
-                <UiProvider initialTab={view.kind === 'review' ? tabForStage(reviewStage(view)) : tabForPhase(pagePhase(view))}>
+                <UiProvider
+                    inUrl={view.kind === 'review'}
+                    initialTab={
+                        view.kind === 'review'
+                            ? tabForStage(reviewStage(view), view.review ? currentRound(view.review).technique : undefined)
+                            : tabForPhase(pagePhase(view))
+                    }
+                >
                     <Shell />
                 </UiProvider>
             ) : (

@@ -257,16 +257,56 @@ const Finding = memo(function Finding({ id }: { id: string }) {
     );
 });
 
-/** Whether `row` is the line a finding's comment sits under: the last line of its range, on its side. */
-function onRow(item: ItemRecord, row: CodeRow): boolean {
-    const { anchor } = item;
+/** Whether `row` is the line a comment on `anchor` sits under: the last line of its range, on its side. */
+export function underRow(anchor: CodeAnchor | undefined, row: CodeRow): boolean {
     if (!anchor?.start) return false;
     const line = anchor.end ?? anchor.start;
-    return anchor.side === 'old' ? row.kind !== 'add' && row.oldNumber === line : row.kind !== 'remove' && row.number === line;
+    return anchor.side === 'old'
+        ? row.kind !== 'add' && row.kind !== 'gone' && row.oldNumber === line
+        : row.kind !== 'remove' && row.kind !== 'gone' && row.number === line;
+}
+
+/** The findings on `file` whose comment sits under `row`. */
+export function findingsOnRow(items: readonly ItemRecord[], file: string, row: CodeRow): ItemRecord[] {
+    return items.filter((item) => item.anchor?.file === file && underRow(item.anchor, row));
 }
 
 /** Scroll a finding's card into the middle of the view once it renders. */
 const scrollToCard = (node: HTMLElement | null) => node?.scrollIntoView?.({ block: 'center' });
+
+/**
+ * Findings as cards under a line, each opening its finding: over the page when `inPlace`, so the reader stays where
+ * they are, else in the Review tab. The `focus` finding's card is scrolled to once it renders.
+ */
+export function FindingCards({ items, focus, inPlace }: { items: ItemRecord[]; focus?: string; inPlace?: boolean }) {
+    const { goTo } = useActions();
+    const [open, setOpen] = useState<string>();
+    const shown = items.find((item) => item.id === open);
+    return (
+        <>
+            {items.map((item) => (
+                <button
+                    key={item.id}
+                    ref={item.id === focus ? scrollToCard : undefined}
+                    type="button"
+                    className="diff-card"
+                    onClick={() => (inPlace ? setOpen(item.id) : goTo(`item:${item.id}`))}
+                >
+                    <span className="badge badge-kind">{KIND_NAMES[item.kind]}</span>
+                    {item.severity && <span className={`badge severity-${item.severity}`}>{item.severity}</span>}
+                    <span className="strong">
+                        <TitleMarkdown source={item.title} />
+                    </span>
+                </button>
+            ))}
+            {shown && (
+                <Modal label={plainTitle(shown.title)} onClose={() => setOpen(undefined)} className="dialog-wide dialog-finding">
+                    <Finding id={shown.id} />
+                </Modal>
+            )}
+        </>
+    );
+}
 
 /**
  * A changed file's diff, fetched when opened, with the findings on it as cards under their lines. The `focus` finding's
@@ -275,7 +315,6 @@ const scrollToCard = (node: HTMLElement | null) => node?.scrollIntoView?.({ bloc
 function FileDiff({ round, path, items, focus }: { round: number; path: string; items: ItemRecord[]; focus?: string }) {
     const [patch, setPatch] = useState<string>();
     const [error, setError] = useState<string>();
-    const { goTo } = useActions();
     useEffect(() => {
         let live = true;
         fetchDiff(round, path).then(
@@ -297,24 +336,8 @@ function FileDiff({ round, path, items, focus }: { round: number; path: string; 
             title={path}
             label={`Diff of ${path}`}
             notes={(row) => {
-                const here = items.filter((item) => item.anchor?.file === path && onRow(item, row));
-                return here.length
-                    ? here.map((item) => (
-                          <button
-                              key={item.id}
-                              ref={item.id === focus ? scrollToCard : undefined}
-                              type="button"
-                              className="diff-card"
-                              onClick={() => goTo(`item:${item.id}`)}
-                          >
-                              <span className="badge badge-kind">{KIND_NAMES[item.kind]}</span>
-                              {item.severity && <span className={`badge severity-${item.severity}`}>{item.severity}</span>}
-                              <span className="strong">
-                                  <TitleMarkdown source={item.title} />
-                              </span>
-                          </button>
-                      ))
-                    : null;
+                const here = findingsOnRow(items, path, row);
+                return here.length ? <FindingCards items={here} {...(focus ? { focus } : {})} /> : null;
             }}
         />
     );
@@ -368,17 +391,19 @@ function FolderEntry({
     );
 }
 
-/** The changed files as a tree of collapsible folders from their common root, each file's diff opened on demand. */
+/** The changed files, folded until opened, as a tree of collapsible folders from their common root, each file's diff opened on demand. */
 function Files({ round, items }: { round: RoundRecord; items: ItemRecord[] }) {
     const paths = round.files.map((file) => file.path);
     const root = commonRoot(paths);
     const byPath = new Map(round.files.map((file) => [file.path, file]));
     return (
-        <section className="review-files" aria-label="The diff">
-            <h2 className="eyebrow">The diff, with the findings beside their lines</h2>
+        <details className="review-files" aria-label="The diff">
+            <summary>
+                <h2 className="eyebrow">The diff, with the findings beside their lines</h2>
+            </summary>
             {root.length > 0 && <div className="mono small muted">{root.join('/')}/</div>}
             <FolderEntry folder={buildTree(paths, root)} round={round.n} byPath={byPath} items={items} />
-        </section>
+        </details>
     );
 }
 
@@ -485,10 +510,10 @@ function FindingList({ round }: { round: RoundRecord }) {
                 </span>
             </div>
             <ol className="contents">
-                {entries.map((entry) => (
+                {entries.map((entry, index) => (
                     <li key={entry.id}>
                         <button type="button" className="nav-item" onClick={() => goTo(`item:${entry.id}`)}>
-                            <span className="mono muted contents-number">{entry.id}</span>
+                            <span className="mono muted contents-number">{index + 1}</span>
                             <span className="nav-name">
                                 <TitleMarkdown source={entry.title} />
                             </span>
@@ -574,7 +599,12 @@ export function Findings() {
                                 </p>
                             </header>
                             {items.length === 0 ? (
-                                round.progress?.reviewedAt ? (
+                                round.reviewers?.strength === 'none' ? (
+                                    <p className="muted">
+                                        No AI review was run for this round: you chose none when you started it. Your own comments
+                                        are in the Comments tab.
+                                    </p>
+                                ) : round.progress?.reviewedAt ? (
                                     <p className="muted">
                                         The review is done and found nothing to raise. The diff is below if you want to look
                                         yourself.

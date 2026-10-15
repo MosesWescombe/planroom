@@ -2,6 +2,8 @@ import upperFirst from 'lodash/upperFirst';
 import { type ReactNode, useState } from 'react';
 import { TAKE_KINDS } from '../../shared/blocks';
 import {
+    CODE_VIEW_TITLES,
+    CODE_VIEWS,
     DENSITIES,
     REVIEW_STRENGTH_DETAILS,
     REVIEW_STRENGTHS,
@@ -9,9 +11,13 @@ import {
     REVIEW_VIEWS,
     REVIEWER_EFFORTS,
     REVIEWER_MODELS,
-    type ReviewerSettings,
+    type ReviewerPreference,
     type ReviewPreferences,
-    TAKE_TITLES
+    TAKE_TITLES,
+    TECHNIQUE_TITLES,
+    TECHNIQUES,
+    TEST_VIEW_TITLES,
+    TEST_VIEWS
 } from '../../shared/review';
 import { type PageWidth, usePageWidth } from '../pageWidth';
 import { type SendKey, setSendKey, useSendKey } from '../sendKey';
@@ -70,32 +76,37 @@ function WidthField() {
     );
 }
 
-/** A row of the Review section that picks one of a fixed list of choices. */
+/**
+ * A row of the Review section that picks one of a fixed list of choices, named by `titles` or capitalised. `unset`
+ * names an extra choice of none.
+ */
 function ChoiceRow<T extends string>({
     label,
     choices,
+    titles,
     value,
+    unset,
     onChange
 }: {
     label: ReactNode;
     choices: readonly T[];
-    value: T;
-    onChange: (value: T) => void;
+    titles?: Record<T, string>;
+    value: T | undefined;
+    unset?: string;
+    onChange: (value: T | undefined) => void;
 }) {
     return (
         <label className="toggle-row">
             <span>{label}</span>
             <select
                 className="field-select"
-                value={value}
-                onChange={(event) => {
-                    const next = choices.find((choice) => choice === event.target.value);
-                    if (next) onChange(next);
-                }}
+                value={value ?? ''}
+                onChange={(event) => onChange(choices.find((choice) => choice === event.target.value))}
             >
+                {unset && <option value="">{unset}</option>}
                 {choices.map((choice) => (
                     <option key={choice} value={choice}>
-                        {upperFirst(choice)}
+                        {titles?.[choice] ?? upperFirst(choice)}
                     </option>
                 ))}
             </select>
@@ -103,32 +114,50 @@ function ChoiceRow<T extends string>({
     );
 }
 
-/** The reviewer subagents' strength, model and effort, in Settings and on the card that starts a round's review. */
-export function ReviewerFields({ value, onChange }: { value: ReviewerSettings; onChange: (value: ReviewerSettings) => void }) {
+/**
+ * The reviewer subagents' strength, model and effort, in Settings and on the card that starts a round's review. In
+ * Settings the strength can be left to how the reviewer reviews, which `unset` names.
+ */
+export function ReviewerFields<T extends ReviewerPreference>({
+    value,
+    unset,
+    onChange
+}: {
+    value: T;
+    unset?: string;
+    onChange: (value: T) => void;
+}) {
     return (
         <>
             <ChoiceRow
                 label={
                     <>
                         Strength
-                        <span className="small muted">{REVIEW_STRENGTH_DETAILS[value.strength]}</span>
+                        <span className="small muted">
+                            {value.strength
+                                ? REVIEW_STRENGTH_DETAILS[value.strength]
+                                : 'None for a read-through, standard for the deck.'}
+                        </span>
                     </>
                 }
                 choices={REVIEW_STRENGTHS}
                 value={value.strength}
-                onChange={(strength) => onChange({ ...value, strength })}
+                {...(unset ? { unset } : {})}
+                onChange={(strength) => {
+                    if (strength || unset) onChange({ ...value, strength });
+                }}
             />
             <ChoiceRow
                 label="Model"
                 choices={REVIEWER_MODELS}
                 value={value.model}
-                onChange={(model) => onChange({ ...value, model })}
+                onChange={(model) => model && onChange({ ...value, model })}
             />
             <ChoiceRow
                 label="Effort"
                 choices={REVIEWER_EFFORTS}
                 value={value.effort}
-                onChange={(effort) => onChange({ ...value, effort })}
+                onChange={(effort) => effort && onChange({ ...value, effort })}
             />
         </>
     );
@@ -136,8 +165,8 @@ export function ReviewerFields({ value, onChange }: { value: ReviewerSettings; o
 
 /**
  * A review's preferences, saved on this machine for every review: which your-take cards the agent writes and how many,
- * which apply to slides it has not written yet; the reviewer subagents each round's start card offers; and which views
- * of the findings show, which apply at once.
+ * which apply to slides it has not written yet; the technique and reviewer subagents each round's start card offers;
+ * which views of the findings show; and the read-through's code view, tests and auto-tick, which apply at once.
  */
 function ReviewSection() {
     const preferences = useSelector((view) => view.preferences, deepEqual);
@@ -167,11 +196,52 @@ function ReviewSection() {
                 label="How many cards"
                 choices={DENSITIES}
                 value={preferences.density}
-                onChange={(density) => save({ ...preferences, density })}
+                onChange={(density) => density && save({ ...preferences, density })}
             />
-            <span className="small strong">Review agents</span>
-            <span className="small muted">What each round offers when you start its review.</span>
-            <ReviewerFields value={preferences.reviewers} onChange={(reviewers) => save({ ...preferences, reviewers })} />
+            <span className="small strong">Starting a round</span>
+            <span className="small muted">What each round offers when you start it; your last choice is kept.</span>
+            <ChoiceRow
+                label="How to review"
+                choices={TECHNIQUES}
+                titles={TECHNIQUE_TITLES}
+                value={preferences.technique}
+                onChange={(technique) => technique && save({ ...preferences, technique })}
+            />
+            <ReviewerFields
+                value={preferences.reviewers}
+                unset="By how you review"
+                onChange={(reviewers) => save({ ...preferences, reviewers })}
+            />
+            <span className="small strong">Read-through</span>
+            <ChoiceRow
+                label="Code view"
+                choices={CODE_VIEWS}
+                titles={CODE_VIEW_TITLES}
+                value={preferences.readthrough.view}
+                onChange={(view) => view && save({ ...preferences, readthrough: { ...preferences.readthrough, view } })}
+            />
+            <ChoiceRow
+                label="Tests shown as"
+                choices={TEST_VIEWS}
+                titles={TEST_VIEW_TITLES}
+                value={preferences.readthrough.tests}
+                onChange={(tests) => tests && save({ ...preferences, readthrough: { ...preferences.readthrough, tests } })}
+            />
+            <label className="toggle-row">
+                <span>
+                    Auto-tick
+                    <span className="small muted">
+                        A piece ticks itself after 10 seconds on screen, or when you comment on it.
+                    </span>
+                </span>
+                <input
+                    type="checkbox"
+                    checked={preferences.readthrough.autoTick}
+                    onChange={(event) =>
+                        save({ ...preferences, readthrough: { ...preferences.readthrough, autoTick: event.target.checked } })
+                    }
+                />
+            </label>
             <span className="small strong">Views of the findings</span>
             {REVIEW_VIEWS.map((view) => (
                 <label key={view} className="toggle-row">

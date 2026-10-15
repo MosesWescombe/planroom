@@ -36,6 +36,17 @@ export function buildTree(paths: string[], root: string[]): Folder {
     return top;
 }
 
+/** `folder` with each chain of folders that hold only one folder merged into one, `a/b/c`, as VS Code's compact folders. */
+export function compactFolders(folder: Folder): Folder {
+    let { name, folders, files } = folder;
+    while (folders.length === 1 && files.length === 0) {
+        const [only] = folders as [Folder];
+        name = `${name}/${only.name}`;
+        ({ folders, files } = only);
+    }
+    return { name, folders: folders.map(compactFolders), files };
+}
+
 function FolderList({ folder, value, onPick }: { folder: Folder; value: string; onPick: (path: string) => void }) {
     return (
         <ul className="file-tree-list">

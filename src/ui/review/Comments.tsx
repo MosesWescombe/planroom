@@ -63,7 +63,7 @@ function CommentCard({ comment, round, editable }: { comment: DerivedComment; ro
     return (
         <BitbucketComment
             round={round.n}
-            anchor={comment.anchor}
+            anchor={comment.placed}
             body={comment.body}
             id={`comment-${comment.key}`}
             summary={comment.key === 'summary'}
@@ -412,6 +412,43 @@ function Earlier({ round, editable }: { round: RoundRecord; editable: boolean })
 type Choice = 'reanchor' | 'drop' | 'anyway';
 
 /**
+ * Hand to agent: write the round's comments to a task file in the review's folder, from the same derivation as the
+ * preview, and copy the one-line prompt that has any Claude session make the changes. It sends nothing anywhere.
+ */
+function HandToAgent({ comments }: { comments: DerivedComment[] }) {
+    const { send } = useActions();
+    const [busy, track] = useBusy();
+    const [handed, setHanded] = useState<{ file: string; copied: boolean }>();
+    const hand = () =>
+        quietly(
+            track(send({ type: 'comments.handoff' })).then(async ({ handoff }) => {
+                if (!handoff) return;
+                // `navigator.clipboard` is missing outside a secure context, so reach it inside the promise.
+                const copied = await Promise.resolve()
+                    .then(() => navigator.clipboard.writeText(handoff.prompt))
+                    .then(
+                        () => true,
+                        () => false
+                    );
+                setHanded({ file: handoff.file, copied });
+            })
+        );
+    return (
+        <div className="handoff">
+            <button type="button" className="button-secondary" disabled={busy || comments.length === 0} onClick={hand}>
+                Hand to agent
+            </button>
+            {handed && (
+                <span className="small" role="status">
+                    {handed.copied ? 'Prompt copied: paste it into any Claude session. ' : 'Wrote the task file; copy its path. '}
+                    <code>{handed.file}</code>
+                </span>
+            )}
+        </div>
+    );
+}
+
+/**
  * Post, and how it went: the head check's choices, "posted 6 of 7" with the failures to retry, or the link to finish
  * the review in Bitbucket. Off while credentials are missing, with what to set. A local branch copies the comments as
  * Markdown instead, which sends nothing anywhere.
@@ -438,6 +475,7 @@ function PostBar({ round, comments, ready }: { round: RoundRecord; comments: Der
                     <span className="submit-title">A local branch has no pull request</span>
                     <span className="submit-detail">Copy the comments as Markdown; nothing is sent anywhere.</span>
                 </div>
+                <HandToAgent comments={comments} />
                 <button type="button" className="button-inverse" disabled={comments.length === 0} onClick={() => void copy()}>
                     {copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Copy failed' : 'Copy as Markdown'}
                 </button>
@@ -461,6 +499,7 @@ function PostBar({ round, comments, ready }: { round: RoundRecord; comments: Der
                             : 'Bitbucket drafts could not be used, so the comments were published, the summary last.'}
                     </span>
                 </div>
+                <HandToAgent comments={comments} />
                 {review.link && (
                     <a className="button-inverse" href={review.link} target="_blank" rel="noopener noreferrer">
                         Open in Bitbucket
@@ -547,6 +586,7 @@ function PostBar({ round, comments, ready }: { round: RoundRecord; comments: Der
                                 : 'They are published at once, the summary last.'}
                 </span>
             </div>
+            <HandToAgent comments={comments} />
             <button
                 type="button"
                 className="button-inverse"
@@ -627,7 +667,8 @@ export function CommentsTab() {
                         <h1>What you will post</h1>
                         <p className="lede">
                             Each comment as Bitbucket will show it. Agent text ends with "{SIGN_OFF}" until more than half of it
-                            is yours; only what you agreed with, reworded or wrote yourself is here.
+                            is yours; only what you agreed with, reworded or wrote yourself is here. Post them, hand them to an
+                            agent to make the changes, or both.
                         </p>
                     </header>
                     {!unlocked && <p className="muted">The comments come once you have finished or skipped the walkthrough.</p>}

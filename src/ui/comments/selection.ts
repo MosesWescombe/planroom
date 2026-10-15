@@ -1,8 +1,9 @@
+import clamp from 'lodash/clamp';
 import { captureAnchor } from '../../shared/anchors';
 import type { Anchor } from '../../shared/records';
 
 /** The longest quote an anchor keeps. */
-const MAX_QUOTE = 2000;
+export const MAX_QUOTE = 2000;
 
 /** The attribute that marks a commentable element, holding its anchor target. */
 export const TARGET_ATTRIBUTE = 'data-anchor-target';
@@ -51,9 +52,30 @@ export function rangeFromOffsets(root: Element, start: number, end: number): Ran
     return null;
 }
 
+/** Where a selection sits in the window. */
+export interface SelectionBox {
+    top: number;
+    left: number;
+    bottom: number;
+}
+
+/** Where `range` sits in the window, or where `fallback` does where ranges have no layout. */
+export function boxOf(range: Range, fallback: Element): SelectionBox {
+    const box =
+        typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : fallback.getBoundingClientRect();
+    return { top: box.top, left: box.left, bottom: box.bottom };
+}
+
+/** Where to float a box `width` wide by a selection: above it, or below it, kept inside the window. */
+export function place(at: SelectionBox | undefined, width: number, below: boolean): React.CSSProperties {
+    if (!at) return {};
+    const left = clamp(at.left, 12, window.innerWidth - width - 12);
+    return below ? { top: Math.min(at.bottom + 8, window.innerHeight - 320), left } : { top: Math.max(8, at.top - 46), left };
+}
+
 export interface SelectionAnchor {
     anchor: Anchor;
-    rect: { top: number; left: number; bottom: number };
+    rect: SelectionBox;
 }
 
 /**
@@ -74,11 +96,8 @@ export function captureSelection(selection: Selection | null = window.getSelecti
     while (end > start && /\s/.test(text[end - 1] ?? '')) end -= 1;
     if (end <= start) return undefined;
     end = Math.min(end, start + MAX_QUOTE);
-    // Place the toolbar by the selection; fall back to the element where ranges have no layout.
-    const box =
-        typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : target.getBoundingClientRect();
     return {
         anchor: captureAnchor(target.getAttribute(TARGET_ATTRIBUTE)!, text, start, end),
-        rect: { top: box.top, left: box.left, bottom: box.bottom }
+        rect: boxOf(range, target)
     };
 }

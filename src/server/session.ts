@@ -4,15 +4,30 @@ import { checkCommand, currentPhase } from '../shared/derive.js';
 import { type LoggedEvent, type NewLoggedEvent, pageRequest } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
 import type { ValidationRecord } from '../shared/records.js';
-import { currentRound, type ReviewPreferences, reviewStage } from '../shared/review.js';
+import {
+    type CodeAnchor,
+    currentRound,
+    type Handoff,
+    handoffFile,
+    handoffMarkdown,
+    handoffPrompt,
+    MAX_QUOTED_LINES,
+    type ReviewPreferences,
+    reviewBranch,
+    reviewPreferences,
+    reviewStage,
+    type SearchResult
+} from '../shared/review.js';
 import { type Revision, revisionMeta } from '../shared/revisions.js';
 import { emptyState, type PlanFormat, planDir, planFormat, type SessionState } from '../shared/state.js';
 import type { ActivityEntry, AgentStatus, Patch, ProposalView, View } from '../shared/view.js';
 import { applyAgentBatch, type BatchResult, parseBatch } from './agentApply.js';
 import { checkMarkdownPlan, scanChangeFolder, watchChangeFolder } from './changeFolder.js';
+import { declares } from './declarations.js';
 import { type ChannelNotifier, EventDelivery, type WaitResult } from './delivery.js';
 import { Draft, RejectedError } from './draft.js';
 import { writeAtomic } from './fsutil.js';
+import { buildLineIndex } from './lineIndex.js';
 import { acquireLock, releaseLock, releaseLockSync, updateLock } from './lock.js';
 import type { OpenSpecRunner } from './openspec.js';
 import { applyPageRequest } from './pageApply.js';
@@ -21,7 +36,10 @@ import { readPreferences, writePreferences } from './preferences.js';
 import { freshReview, nextRound, type ResolvedTarget, type ReviewHost } from './review.js';
 import { askDir, ignoreInGit, LOCAL_FILES, planroomDir, reviewDir, SessionStore } from './store.js';
 import { describeWork, followsAgent, PHASE_WORK, REVIEW_WORK, type Work } from './work.js';
-import { ensureWorktree, filePatch, removeWorktree } from './worktree.js';
+import { ensureWorktree, fileAt, filePatch, GitError, git, removeWorktree } from './worktree.js';
+
+/** The most matches a name search returns. */
+export const MAX_SEARCH_MATCHES = 200;
 
 /** kebab-case: lowercase letters and digits in words joined by single hyphens. */
 export const CHANGE_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -103,7 +121,16 @@ export function formatFor(repoRoot: string, changeId: string, requested: PlanFor
 /** The fields a page view adds to the persisted state, which the server works out live. */
 export type LiveFields = Pick<
     View,
-    'agent' | 'activity' | 'revisions' | 'proposal' | 'validating' | 'viewOnly' | 'elsewhere' | 'preferences' | 'postable'
+    | 'agent'
+    | 'activity'
+    | 'revisions'
+    | 'proposal'
+    | 'validating'
+    | 'viewOnly'
+    | 'elsewhere'
+    | 'preferences'
+    | 'postable'
+    | 'worktreeDir'
 >;
 
 /** A plan's page view: the page's fields of its persisted state, plus the live ones. */
@@ -132,7 +159,9 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         items,
         reactions,
         takes,
-        notes
+        notes,
+        pages,
+        ticks
     } = state;
     return {
         changeId,
@@ -159,6 +188,8 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         reactions,
         takes,
         notes,
+        pages,
+        ticks,
         ...live
     };
 }
@@ -403,6 +434,11 @@ export class Session {
                     each.n === round.n ? { ...each, posting: { state: 'partial' as const, at: draft.now } } : each
                 );
             }
+            // A review opened before the read-through existed has no line index yet.
+            if (!round.index) {
+                const index = await buildLineIndex(this.repoRoot, round.base, round.head);
+                summary.rounds = summary.rounds.map((each) => (each.n === round.n ? { ...each, index } : each));
+            }
             if (round.postedAt && resolved.head !== round.head) {
                 const next = await nextRound(this.repoRoot, review, resolved.head, host.access, draft.now);
                 summary.rounds = [...summary.rounds, next];
@@ -427,15 +463,82 @@ export class Session {
         return { ready, ...(problem ? { problem } : {}) };
     }
 
-    /** One round's diff, of one file or all of them, from its base to its head. */
-    async reviewDiff(roundNumber: number | undefined, file?: string): Promise<{ round: number; patch: string }> {
+    /** The round `n` names, or the current one, refused when there is none. */
+    private reviewRound(n: number | undefined) {
         const review = this.state.review;
-        const round =
-            roundNumber === undefined ? review && currentRound(review) : review?.rounds.find((r) => r.n === roundNumber);
+        const round = n === undefined ? review && currentRound(review) : review?.rounds.find((candidate) => candidate.n === n);
         if (!round) throw new RejectedError([{ path: 'round', message: 'There is no such round' }], 404);
-        if (file !== undefined && !round.files.some((changed) => changed.path === file || changed.from === file))
+        return round;
+    }
+
+    /**
+     * One round's diff, of one file or all of them, from its base to its head. `full` gives a file's diff with every
+     * line of it as context, for the read-through to show a piece as it is now or as a diff.
+     */
+    async reviewDiff(roundNumber: number | undefined, file?: string, full = false): Promise<{ round: number; patch: string }> {
+        const round = this.reviewRound(roundNumber);
+        const changed = file === undefined ? undefined : round.files.find((each) => each.path === file || each.from === file);
+        if (file !== undefined && !changed)
             throw new RejectedError([{ path: 'file', message: `${file} is not in round ${round.n}'s diff` }], 404);
-        return { round: round.n, patch: await filePatch(this.repoRoot, round.base, round.head, file) };
+        // A renamed file needs both its paths, or git cannot pair them and diffs it as a new file.
+        const paths = changed ? [changed.path, ...(changed.from ? [changed.from] : [])] : undefined;
+        return { round: round.n, patch: await filePatch(this.repoRoot, round.base, round.head, paths, full) };
+    }
+
+    /**
+     * Every whole-word match of `query` in the round's reviewed commit, as a plain-text search of tracked files with
+     * `git grep -n -w -F`, or with `definition` only the matches on lines that declare it, at most
+     * `MAX_SEARCH_MATCHES` of them.
+     */
+    async reviewSearch(roundNumber: number | undefined, query: string, definition = false): Promise<SearchResult> {
+        const round = this.reviewRound(roundNumber);
+        const name = query.trim();
+        if (!name || name.length > 200 || /[\n\r]/.test(name))
+            throw new RejectedError([{ path: 'q', message: 'search for one name of at most 200 characters' }], 400);
+        // ponytail: reads every match before cutting to the first 200; stream git grep and stop at 201 if a very common
+        // name ever overflows the output buffer.
+        let out = '';
+        try {
+            out = await git(this.repoRoot, ['grep', '-n', '-w', '-F', '-I', '-z', '--full-name', '-e', name, round.head, '--']);
+        } catch (error) {
+            // git grep exits 1 when nothing matches.
+            if (!(error instanceof GitError && error.exitCode === 1)) throw error;
+        }
+        const prefix = `${round.head}:`;
+        const found = out.split('\n').flatMap((entry) => {
+            const [path = '', line = '', ...text] = entry.split('\0');
+            return path.startsWith(prefix)
+                ? [{ file: path.slice(prefix.length), line: Number(line), text: text.join('\0') }]
+                : [];
+        });
+        const matches = definition ? found.filter((match) => declares(match.text, name)) : found;
+        return {
+            round: round.n,
+            query: name,
+            matches: matches.slice(0, MAX_SEARCH_MATCHES),
+            truncated: matches.length > MAX_SEARCH_MATCHES
+        };
+    }
+
+    /** The code `anchor` names in the current round, from its head or, on the old side, its base; cut to what a comment quotes. */
+    private async codeAt(anchor: CodeAnchor | undefined): Promise<string[] | undefined> {
+        const review = this.state.review;
+        if (!review || anchor?.start === undefined) return undefined;
+        const round = currentRound(review);
+        const old = anchor.side === 'old';
+        const file = old ? (round.files.find((changed) => changed.path === anchor.file)?.from ?? anchor.file) : anchor.file;
+        const lines = await fileAt(this.repoRoot, old ? round.base : round.head, file);
+        const end = Math.min(anchor.end ?? anchor.start, anchor.start + MAX_QUOTED_LINES - 1);
+        return lines?.slice(anchor.start - 1, end);
+    }
+
+    /** Write round `n`'s task file into the review's folder, from the same derivation the preview renders. */
+    private async writeHandoff(n: number): Promise<Handoff> {
+        const review = this.state.review!;
+        const round = review.rounds.find((candidate) => candidate.n === n)!;
+        const file = join(this.changeDir, handoffFile(n));
+        await writeAtomic(file, handoffMarkdown(this.state, n));
+        return { file, prompt: handoffPrompt(file, reviewBranch(review), round.head) };
     }
 
     /** Record the page URL in the lock, so a second session's error can name it. */
@@ -457,8 +560,16 @@ export class Session {
         this.delivery.touch();
         return this.exclusive(async () => {
             const { events, summary, doing, subagents } = parseBatch(input);
+            const quoted = new Map<string, string[]>();
+            await Promise.all(
+                events.map(async (event) => {
+                    if (event.type !== 'item.upsert') return;
+                    const code = await this.codeAt(event.item.anchor).catch(() => undefined);
+                    if (code) quoted.set(event.item.id, code);
+                })
+            );
             const draft = new Draft(this.state, this.nowIso());
-            const { result, revision, editing, validate } = applyAgentBatch(draft, events, summary, this.preferences);
+            const { result, revision, editing, validate } = applyAgentBatch(draft, events, summary, this.preferences, quoted);
             if (revision) await this.store.saveRevision(revision);
             await this.store.saveState(draft.state);
             this.commit(draft, revision);
@@ -516,18 +627,20 @@ export class Session {
      * Handle one page request. Accepted requests are persisted (snapshot, then log)
      * before this resolves, and the logged event's `seq` is the acknowledgement.
      */
-    handlePage(input: unknown): Promise<{ seq?: number }> {
+    handlePage(input: unknown): Promise<{ seq?: number; handoff?: Handoff }> {
         return this.exclusive(async () => {
             const parsed = pageRequest.safeParse(input);
             if (!parsed.success) throw new RejectedError(toIssues(parsed.error), 400);
             if (parsed.data.type === 'comments.post' && this.host && !this.host.access.ready)
                 throw new RejectedError([{ path: 'type', message: this.host.access.problem ?? 'Posting is not set up' }], 409);
+            const code = parsed.data.type === 'note.save' ? await this.codeAt(parsed.data.anchor) : undefined;
             const draft = new Draft(this.state, this.nowIso());
-            const outcome = applyPageRequest(draft, parsed.data, this.revisions);
+            const outcome = applyPageRequest(draft, parsed.data, this.revisions, code ? { code } : {});
             if (outcome.preferences && this.host) {
-                await writePreferences(this.host.preferencesFile, outcome.preferences);
-                this.preferences = outcome.preferences;
-                this.broadcast([{ field: 'preferences', value: outcome.preferences }]);
+                const preferences = reviewPreferences.parse({ ...this.preferences, ...outcome.preferences });
+                await writePreferences(this.host.preferencesFile, preferences);
+                this.preferences = preferences;
+                this.broadcast([{ field: 'preferences', value: preferences }]);
             }
             let sent = outcome.event;
             if (sent?.type === 'ask.done') sent = { ...sent, ...(await this.writeOutput(draft.state.output, sent.context)) };
@@ -540,7 +653,8 @@ export class Session {
             if (event) this.delivery.publish(event);
             if (outcome.validate) this.startValidation('rerun');
             if (outcome.post) this.startPosting(outcome.post);
-            return event ? { seq: event.seq } : {};
+            const handoff = outcome.handoff === undefined ? undefined : await this.writeHandoff(outcome.handoff);
+            return { ...(event ? { seq: event.seq } : {}), ...(handoff ? { handoff } : {}) };
         });
     }
 
@@ -764,7 +878,8 @@ export class Session {
             proposal: this.proposal,
             validating: this.validations > 0,
             ...(this.preferences ? { preferences: this.preferences } : {}),
-            ...(this.postable ? { postable: this.postable } : {})
+            ...(this.postable ? { postable: this.postable } : {}),
+            ...(this.worktreeDir ? { worktreeDir: this.worktreeDir } : {})
         });
     }
 

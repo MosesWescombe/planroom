@@ -446,7 +446,12 @@ export type ThreadScope = 'interrogate' | 'writeup' | 'proposal' | 'review' | 'm
 export function threadScope(thread: Pick<ThreadRecord, 'kind' | 'anchor'>, kind: SessionKind = 'plan'): ThreadScope {
     if (thread.kind === 'message' || !thread.anchor) return 'message';
     const target = thread.anchor.target;
-    if (target.startsWith('slide:') || target.startsWith('item:') || (kind === 'review' && target.startsWith('block:')))
+    if (
+        target.startsWith('slide:') ||
+        target.startsWith('page:') ||
+        target.startsWith('item:') ||
+        (kind === 'review' && target.startsWith('block:'))
+    )
         return 'review';
     if (target.startsWith('file:')) return 'proposal';
     if (target.startsWith('section:') || target.startsWith('block:')) return 'writeup';

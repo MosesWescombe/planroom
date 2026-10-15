@@ -7,7 +7,7 @@ Claude can also put any series of questions on a simpler page of question cards,
 take the answers back as context, and walk you through someone else's pull request before you review it.
 
 One package holds the `planroom` command, the page, three MCP servers with a skill each (`planroom` for planning,
-`planroom-ask` for questions, `planroom-review` for reviews) and four subagents.
+`planroom-ask` for questions, `planroom-review` for reviews) and five subagents.
 
 ## Why Planroom
 
@@ -96,6 +96,9 @@ Ask Claude to review a pull request ("review PR 412", or its link) or a local br
 from a checkout of the repo. It reads the change from a temporary git worktree at the PR's head, under
 `.planroom/reviews/<id>/worktree`, so your working copy is never touched, and removes it when the review ends.
 
+As the page opens it asks how to review: the overview deck, the line-by-line read-through, or both with the deck first,
+and whether agents review the change too. Your choice is kept as the next review's default.
+
 1. **Walkthrough.** Claude builds a deck of 6 to 15 slides in four chapters (Why, How it works, What it might impact,
    Trade-offs) from diagrams, step-throughs, analogies and pictures it draws as SVG itself. You see its progress while
    it builds, then the deck up to What it might impact at once. Move with the arrow keys, the chapter bar or the
@@ -108,19 +111,35 @@ from a checkout of the repo. It reads the change from a temporary git worktree a
 
    ![What it might impact: six areas the change reaches around it, one carrying the reviewer's concern](docs/screenshots/review-impact.png)
 
-2. **Review.** Reviewer subagents, then a verify pass that drops what it cannot confirm. Claude starts none until you
-   start the review from the page as it opens, choosing the strength (one reviewer that checks itself, one reviewer and
-   a verifier, or one per dimension and a verifier) and the agents' model and effort. The findings stay hidden until
-   you finish the walkthrough or skip to them. Agree, reword or reject each one, or argue in its thread first. They
+2. **Read-through.** Every changed line, one concept to a page in the order a reader needs, then the test pages, then
+   a Housekeeping page for lock, generated and binary files and changes to spacing only. The server will not open it
+   until every added and removed line is on a page. Each page opens with a plain summary, then each piece of code as it
+   is now (changed line numbers marked, what a line was in a popover, a marker where lines were removed) or as a diff.
+   A repeated edit shows one example and a line for each other place, flagging any that differs; moved code shows
+   once, from where to where. Tests show as a title, pseudo code or the real code. Click a name to see everywhere it
+   appears in the reviewed commit. Tick what you have read, or let a piece tick itself after 10 seconds on screen; the
+   side list shows how far you are on each page, and By file lists the pages each file is on. Click a line number or
+   drag across several to comment, or to ask Claude about them; its answer can add code to the page, marked as asked.
+   Pages appear as they are written, so you start on the first while the rest are on their way.
+
+3. **Review.** Reviewer subagents, then a verify pass that drops what it cannot confirm. Claude starts none until you
+   start the review from the page as it opens, choosing the strength (none, one reviewer that checks itself, one
+   reviewer and a verifier, or one per dimension and a verifier) and the agents' model and effort. None is the default
+   with the read-through. The findings stay hidden until you finish the walkthrough or skip to them, and with the
+   read-through alone they show at once, under their lines on its pages too. Agree, reword or reject each one, or argue in its thread first. They
    show as cards, beside their lines in the diff, as pins on the deck's diagrams, as charts, a file heat map and a risk
    matrix.
 
    ![The Review tab: eight verified findings, all reacted to, by severity, kind, likelihood and impact, and by file](docs/screenshots/review-findings.png)
 
-3. **Comments.** Every comment as Bitbucket will show it. Text Claude drafted ends with "- Claude" until more than half
-   of it is your own words. Post creates them as Bitbucket drafts, the summary last, with a task on each you toggle; you
-   finish the review in Bitbucket. Post checks the PR has not moved under your comments first, and a retry sends only
-   what failed. A local branch copies the comments as Markdown instead and makes no network call.
+4. **Comments.** Every comment as Bitbucket will show it. Text Claude drafted ends with "- Claude" until more than half
+   of it is your own words. A comment on several lines goes on the last of them, opening with "Lines 12-18"; one on a
+   line Bitbucket's diff does not show goes on the file, quoting the line; one on a repeated edit's example lists the
+   other places, unless you ticked "only here". Post creates them as Bitbucket drafts, the summary last, with a task on
+   each you toggle; you finish the review in Bitbucket. Post checks the PR has not moved under your comments first, and
+   a retry sends only what failed. A local branch copies the comments as Markdown instead and makes no network call.
+   Hand to agent, for a PR or a branch, writes the comments to `.planroom/reviews/<id>/handoff-round-<n>.md` and copies
+   a one-line prompt to paste into any Claude session, which then makes the changes in your own checkout.
 
    ![The Comments tab: each agreed finding as Bitbucket will show it, signed "- Claude", with its task toggle](docs/screenshots/review-comments.png)
 
@@ -134,11 +153,13 @@ if reading the PR is refused, in the environment Claude Code starts in. It signs
 which must be the token's Atlassian account. Only the Planroom server reads them: they never reach the page, Claude, a log or a file. Without
 them a public PR still opens, and Post stays off saying what to set.
 
-**Preferences.** Settings has a Review section: which your-take cards Claude uses and how many, the reviewer agents
-each review offers to start, and which views of the findings show. They are saved for every review in
+**Preferences.** Settings has a Review section: which your-take cards Claude uses and how many, how to review and the
+reviewer agents each review offers to start, which views of the findings show, and the read-through's code view (Auto,
+as it is now or as a diff), how tests show and auto-tick. They are saved for every review in
 `$XDG_CONFIG_HOME/planroom/review.json` (by default `~/.config/planroom/review.json`).
 
-Export saves the walkthrough as a PDF, one slide to a page, or as one HTML file with the pictures inlined.
+Export saves the walkthrough as a PDF, one slide to a page, or as one HTML file with the pictures inlined. The
+read-through has no export yet.
 
 ## Develop
 

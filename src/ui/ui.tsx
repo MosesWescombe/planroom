@@ -1,16 +1,19 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { type PageInput, postEvent, RequestError } from './api';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { type Handoff, type PageInput, postEvent, RequestError } from './api';
 import { readSetting, writeSetting } from './local';
 import { useStore } from './store';
 
-/** A plan's four phase tabs, or a review's three: the walkthrough deck, its findings and the comments to post. */
-export type Tab = 'interrogate' | 'directions' | 'writeup' | 'proposal' | 'walkthrough' | 'findings' | 'comments';
+/**
+ * A plan's four phase tabs, or a review's: the walkthrough deck, the read-through, its findings and the comments to
+ * post.
+ */
+export type Tab = 'interrogate' | 'directions' | 'writeup' | 'proposal' | 'walkthrough' | 'readthrough' | 'findings' | 'comments';
 export type PanelTab = 'review' | 'activity' | 'comments';
 export type Drawer = 'nav' | 'panel' | undefined;
 
 /**
  * A record the page can navigate to: `Q-12`, `section:s4`, `block:b1`, `thread:C-1`, `file:specs/x/spec.md`, and in a
- * review `slide:why-1` and `item:I-3`.
+ * review `slide:why-1`, `page:retry-limit` and `item:I-3`.
  */
 export type Target = string;
 
@@ -33,6 +36,8 @@ export interface UiState {
     slide: string | undefined;
     /** A review's round on show; undefined for the current one. */
     round: number | undefined;
+    /** A review's read-through page on show, by id; undefined for the first. */
+    page: string | undefined;
 }
 
 /** Stable actions. Components that only act (cards, blocks) use these and never re-render for UI state. */
@@ -47,8 +52,9 @@ export interface UiActions {
     setFile: (file: string | undefined) => void;
     setSlide: (slide: string | undefined) => void;
     setRound: (round: number | undefined) => void;
+    setPage: (page: string | undefined) => void;
     /** Send a page event; a refusal is shown as a notice and rethrown for the caller. */
-    send: (request: PageInput) => Promise<{ seq?: number }>;
+    send: (request: PageInput) => Promise<{ seq?: number; handoff?: Handoff }>;
     notify: (text: string) => void;
     dismiss: (id: number) => void;
 }
@@ -72,6 +78,33 @@ export function useActions(): UiActions {
 
 const PANEL_KEY = 'planroom:panel-collapsed';
 
+/** Where a review is: its tab, and the slide, read-through page and round on show. Its address holds it. */
+type Place = Pick<UiState, 'tab' | 'slide' | 'page' | 'round'>;
+
+const REVIEW_TABS: readonly Tab[] = ['walkthrough', 'readthrough', 'findings', 'comments'];
+
+/** The place a review's address `hash` names, as far as it names one: `#tab=readthrough&page=retry-limit`. */
+export function placeFromHash(hash: string): Partial<Place> {
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const tab = REVIEW_TABS.find((known) => known === params.get('tab'));
+    const round = Number(params.get('round'));
+    return {
+        ...(tab ? { tab } : {}),
+        slide: params.get('slide') ?? undefined,
+        page: params.get('page') ?? undefined,
+        round: Number.isInteger(round) && round > 0 ? round : undefined
+    };
+}
+
+/** A review's address for `place`, the inverse of `placeFromHash`. */
+export function hashFor(place: Place): string {
+    const params = new URLSearchParams({ tab: place.tab });
+    if (place.round !== undefined) params.set('round', String(place.round));
+    if (place.slide) params.set('slide', place.slide);
+    if (place.page) params.set('page', place.page);
+    return `#${params}`;
+}
+
 /** The element id a target renders under. */
 export function elementIdFor(target: Target): string {
     if (/^Q-\d+$/.test(target)) return `q-${target}`;
@@ -86,6 +119,7 @@ function tabFor(target: Target): Tab | undefined {
     if (target.startsWith('section:') || target.startsWith('block:')) return 'writeup';
     if (target.startsWith('file:')) return 'proposal';
     if (target.startsWith('slide:')) return 'walkthrough';
+    if (target.startsWith('page:')) return 'readthrough';
     if (target.startsWith('item:')) return 'findings';
     return undefined;
 }
@@ -113,20 +147,48 @@ export function describeError(error: unknown): string {
 
 /**
  * Holds the UI state and its actions: the tab and direction, the panel and drawers, the open file and the notices. The
- * panel's collapsed state is remembered in this browser.
+ * panel's collapsed state is remembered in this browser. With `inUrl`, as for a review, the address holds the place on
+ * show, so a reload or a link opens it again and Back and Forward move between places.
  */
-export function UiProvider({ initialTab, children }: { initialTab: Tab; children: ReactNode }) {
+export function UiProvider({ initialTab, inUrl = false, children }: { initialTab: Tab; inUrl?: boolean; children: ReactNode }) {
     const store = useStore();
-    const [tab, setTab] = useState<Tab>(initialTab);
+    const [opened] = useState<Partial<Place>>(() => (inUrl ? placeFromHash(window.location.hash) : {}));
+    const [tab, setTab] = useState<Tab>(opened.tab ?? initialTab);
     const [direction, setDirection] = useState<string | undefined>();
     const [panelCollapsed, setCollapsed] = useState(() => readSetting(PANEL_KEY) === '1');
     const [panelTab, setPanelTab] = useState<PanelTab>(initialTab === 'proposal' ? 'review' : 'activity');
     const [drawer, setDrawer] = useState<Drawer>();
     const [file, setFile] = useState<string | undefined>();
-    const [slide, setSlide] = useState<string | undefined>();
-    const [round, setRound] = useState<number | undefined>();
+    const [slide, setSlide] = useState(opened.slide);
+    const [round, setRound] = useState(opened.round);
+    const [page, setPage] = useState(opened.page);
     const [notices, setNotices] = useState<Notice[]>([]);
     const noticeId = useRef(0);
+
+    const settled = useRef(false);
+    useEffect(() => {
+        if (!inUrl) return;
+        const hash = hashFor({ tab, slide, page, round });
+        const first = !settled.current;
+        settled.current = true;
+        if (hash === window.location.hash) return;
+        // A move the reviewer made is a step Back can return from. What the page did by itself, opening, correcting a
+        // tab or following a new round, takes the place of the step it changed, so Back never lands on it again.
+        if (!first && (navigator.userActivation?.isActive ?? true)) window.history.pushState(null, '', hash);
+        else window.history.replaceState(null, '', hash);
+    }, [inUrl, tab, slide, page, round]);
+    useEffect(() => {
+        if (!inUrl) return undefined;
+        const restore = () => {
+            const place = placeFromHash(window.location.hash);
+            if (place.tab) setTab(place.tab);
+            setSlide(place.slide);
+            setPage(place.page);
+            setRound(place.round);
+        };
+        window.addEventListener('popstate', restore);
+        return () => window.removeEventListener('popstate', restore);
+    }, [inUrl]);
 
     const actions = useMemo<UiActions>(() => {
         const notify = (text: string) => {
@@ -148,6 +210,7 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
             setFile,
             setSlide,
             setRound,
+            setPage,
             notify,
             dismiss: (id) => setNotices((current) => current.filter((notice) => notice.id !== id)),
             goTo: (target) => {
@@ -171,6 +234,7 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
                         setRound(of === last ? undefined : of);
                         setSlide(id);
                     }
+                    if (target.startsWith('page:')) setPage(target.slice(5));
                     setDrawer(undefined);
                 }
                 reveal(elementIdFor(target));
@@ -187,8 +251,8 @@ export function UiProvider({ initialTab, children }: { initialTab: Tab; children
     }, [store]);
 
     const state = useMemo<UiState>(
-        () => ({ tab, direction, panelCollapsed, panelTab, drawer, file, notices, slide, round }),
-        [tab, direction, panelCollapsed, panelTab, drawer, file, notices, slide, round]
+        () => ({ tab, direction, panelCollapsed, panelTab, drawer, file, notices, slide, round, page }),
+        [tab, direction, panelCollapsed, panelTab, drawer, file, notices, slide, round, page]
     );
     return (
         <ActionsContext.Provider value={actions}>

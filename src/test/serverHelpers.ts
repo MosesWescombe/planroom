@@ -317,3 +317,14 @@ export async function connect(
     };
     return { repo, uiDir, cli, planroom, client, call, openBrowser, notifications };
 }
+
+/** A review server over `repoRoot`, its fake Bitbucket and its preferences file. */
+export async function reviewServer(repoRoot: string, options: { problem?: string; prefs?: string } = {}) {
+    const fake = fakeBitbucket();
+    const prefs = options.prefs ?? join(await tempRepo(), 'planroom', 'review.json');
+    const server = await connect({ kind: 'review', repoRoot, reviewHost: reviewHostWith(fake, prefs, options.problem) });
+    const emit = (events: AgentEvent[]) => server.call('planroom_emit', { events });
+    const session = () => defined(server.planroom.session, 'the review session');
+    const page = (request: Record<string, unknown>) => session().handlePage(request);
+    return { ...server, fake, prefs, emit, session, page };
+}

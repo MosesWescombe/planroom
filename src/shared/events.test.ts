@@ -48,7 +48,30 @@ const agentSamples: Record<AgentEventType, unknown> = {
     },
     'item.withdraw': { type: 'item.withdraw', id: 'I-2', reason: 'The caller handles it' },
     'summary.draft': { type: 'summary.draft', text: 'Looks good once the retry cap is fixed.' },
-    'earlier.label': { type: 'earlier.label', key: '1/item:I-1', label: 'addressed', note: 'Capped at two' }
+    'earlier.label': { type: 'earlier.label', key: '1/item:I-1', label: 'addressed', note: 'Capped at two' },
+    'read.outline': {
+        type: 'read.outline',
+        pages: [
+            {
+                id: 'retry-limit',
+                kind: 'concept',
+                title: 'The retry limit is a setting',
+                order: 1,
+                pieces: [{ id: 'send', file: 'src/send.ts', lines: '10-20', view: 'now' }]
+            }
+        ]
+    },
+    'read.page.upsert': {
+        type: 'read.page.upsert',
+        page: { id: 'retry-limit', summary: 'Retries now stop at the policy limit.', pieces: [{ id: 'send', note: 'The loop.' }] }
+    },
+    'read.page.add': {
+        type: 'read.page.add',
+        page: 'retry-limit',
+        threadId: 'C-1',
+        piece: 'send',
+        text: 'The caller locks first.'
+    }
 };
 
 const pageSamples: Record<PageRequestType, unknown> = {
@@ -78,7 +101,13 @@ const pageSamples: Record<PageRequestType, unknown> = {
     'walkthrough.done': { type: 'walkthrough.done', how: 'skipped' },
     'impact.save': { type: 'impact.save', concerns: { billing: ['Does the export retry?'] }, added: [] },
     'impact.send': { type: 'impact.send' },
-    'reviewers.start': { type: 'reviewers.start', reviewers: { strength: 'single', model: 'haiku', effort: 'low' } },
+    'reviewers.start': {
+        type: 'reviewers.start',
+        technique: 'readthrough',
+        reviewers: { strength: 'none', model: 'haiku', effort: 'low' }
+    },
+    'read.tick': { type: 'read.tick', piece: 'send', read: true, how: 'auto' },
+    'comments.handoff': { type: 'comments.handoff' },
     'item.react': { type: 'item.react', itemId: 'I-1', verdict: 'reject', reason: 'Handled in the caller' },
     'comment.choose': { type: 'comment.choose', key: 'item:I-1', task: true },
     'note.save': { type: 'note.save', anchor: { file: 'src/retry.ts', side: 'new', start: 12 }, text: 'Nice' },
@@ -163,6 +192,7 @@ const loggedSamples: Record<LoggedEventType, unknown> = {
         ...at,
         type: 'reviewers.start',
         round: 1,
+        technique: 'both',
         reviewers: { strength: 'thorough', model: 'opus', effort: 'medium' }
     },
     'preferences.change': {

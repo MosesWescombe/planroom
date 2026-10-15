@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import { readSetting, writeSetting } from './local';
 
@@ -44,16 +44,16 @@ export function useSendKey(): SendKey {
  * and an IME composing text never do.
  */
 export function isSendKey(event: KeyboardEvent, sendKey: SendKey): boolean {
-    if (event.key !== 'Enter' || event.repeat || event.nativeEvent.isComposing) return false;
+    if (event.key !== 'Enter' || event.repeat || event.isComposing) return false;
     if (event.metaKey || event.ctrlKey) return true;
     return sendKey === 'enter' ? !event.shiftKey : event.shiftKey;
 }
 
 /** A message box's keydown handler: sends on the chosen key and leaves every other key to the textarea. */
-export function useSendOnKey(): (event: KeyboardEvent, send: () => void) => void {
+export function useSendOnKey(): (event: ReactKeyboardEvent, send: () => void) => void {
     const sendKey = useSendKey();
     return (event, send) => {
-        if (!isSendKey(event, sendKey)) return;
+        if (!isSendKey(event.nativeEvent, sendKey)) return;
         event.preventDefault();
         send();
     };

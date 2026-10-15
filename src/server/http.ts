@@ -34,13 +34,15 @@ export interface CodeExcerpt {
 export interface ServedPlan {
     view(): View;
     subscribe(listener: (patches: Patch[]) => void): () => void;
-    handlePage(input: unknown): Promise<{ seq?: number }>;
+    handlePage(input: unknown): Promise<{ seq?: number; handoff?: { file: string; prompt: string } }>;
     revision(n: number): Revision | undefined;
     readonly store: { readonly assetsDir: string };
     /** Where code excerpts are read from, when not the repo: a review's worktree. */
     readonly codeRoot?: string;
-    /** A review round's diff, of one file or all of them. */
-    reviewDiff?(round: number | undefined, file?: string): Promise<{ round: number; patch: string }>;
+    /** A review round's diff, of one file or all of them, with every line as context when `full`. */
+    reviewDiff?(round: number | undefined, file?: string, full?: boolean): Promise<{ round: number; patch: string }>;
+    /** Every whole-word match of a name in a review round's commit. */
+    reviewSearch?(round: number | undefined, query: string, definition?: boolean): Promise<unknown>;
 }
 
 export interface PageServer {
@@ -302,7 +304,22 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         const round = req.query.round === undefined ? undefined : Number(req.query.round);
         const file = req.query.file === undefined ? undefined : String(req.query.file);
         try {
-            res.json(await plan.reviewDiff(round, file));
+            res.json(await plan.reviewDiff(round, file, req.query.full === '1'));
+        } catch (error) {
+            sendError(res, error);
+        }
+    });
+
+    /** Where a name appears in the review round's commit, a whole-word text search of tracked files, or with `definition=1` where it is declared. */
+    router.get('/api/review/search', needsPlan, async (req, res) => {
+        const plan = planOf(res);
+        if (!plan.reviewSearch) {
+            res.status(404).json({ error: 'this page is not a review' });
+            return;
+        }
+        const round = req.query.round === undefined ? undefined : Number(req.query.round);
+        try {
+            res.json(await plan.reviewSearch(round, String(req.query.q ?? ''), req.query.definition === '1'));
         } catch (error) {
             sendError(res, error);
         }

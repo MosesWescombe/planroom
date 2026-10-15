@@ -1,13 +1,13 @@
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import type { Anchor, CommentIntent } from '../../shared/records';
-import { targetSelector } from './selection';
+import { type SelectionBox, targetSelector } from './selection';
 
 /** The comment being composed: what it is anchored to, its intent, and where to show the composer. */
 export interface Composition {
     anchor: Anchor;
     intent: CommentIntent;
     /** Viewport position of the selection, for placing the composer next to it. */
-    at?: { top: number; left: number; bottom: number };
+    at?: SelectionBox;
 }
 
 let current: Composition | undefined;

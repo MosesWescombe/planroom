@@ -92,6 +92,8 @@ export interface View
         | 'reactions'
         | 'takes'
         | 'notes'
+        | 'pages'
+        | 'ticks'
     > {
     agent: AgentStatus;
     activity: ActivityEntry[];
@@ -107,6 +109,8 @@ export interface View
     preferences?: ReviewPreferences;
     /** Whether a review can post to Bitbucket, and if not, what to set up. The credentials themselves never reach the page. */
     postable?: { ready: boolean; problem?: string };
+    /** A review's worktree, as an absolute path, for links that open its files in an editor. */
+    worktreeDir?: string;
 }
 
 /** Where a plan stands: its page phase while it takes edits, or how the user ended it. */
@@ -144,7 +148,9 @@ export type MapField =
     | 'items'
     | 'reactions'
     | 'takes'
-    | 'notes';
+    | 'notes'
+    | 'pages'
+    | 'ticks';
 
 /** View fields replaced whole. */
 export type ScalarField = Exclude<keyof View, MapField | 'changeId' | 'kind' | 'format' | 'createdAt' | 'viewOnly' | 'elsewhere'>;
@@ -166,7 +172,9 @@ export const MAP_FIELDS: readonly MapField[] = [
     'items',
     'reactions',
     'takes',
-    'notes'
+    'notes',
+    'pages',
+    'ticks'
 ];
 
 /** Whether a patch replaces one record of a map field rather than a whole field. */

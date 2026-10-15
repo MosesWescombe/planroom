@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTree, commonRoot } from './FileTreeSelect';
+import { buildTree, commonRoot, compactFolders } from './FileTreeSelect';
 
 describe('FileTreeSelect', () => {
     const paths = ['src/ui/a.ts', 'src/ui/x/b.ts', 'src/ui/x/c.ts'];
@@ -14,5 +14,13 @@ describe('FileTreeSelect', () => {
         const tree = buildTree(paths, commonRoot(paths));
         expect(tree.files.map((file) => file.path)).toEqual(['src/ui/a.ts']);
         expect(tree.folders.map((folder) => [folder.name, folder.files.length])).toEqual([['x', 2]]);
+    });
+
+    it('merges folders that hold only one folder into one, down to the first that holds more', () => {
+        const deep = ['app/a.ts', 'app/controllers/devices/templates/b.ts', 'app/controllers/devices/templates/x/c.ts'];
+        const tree = compactFolders(buildTree(deep, commonRoot(deep)));
+        expect(tree.folders.map((folder) => folder.name)).toEqual(['controllers/devices/templates']);
+        expect(tree.folders[0]?.files.map((file) => file.name)).toEqual(['b.ts']);
+        expect(tree.folders[0]?.folders.map((folder) => folder.name)).toEqual(['x']);
     });
 });

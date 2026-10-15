@@ -21,6 +21,7 @@ import {
 } from '../shared/derive.js';
 import { type LoggedAttachment, type NewLoggedEvent, PAGE_REQUESTS, type PageRequest } from '../shared/events.js';
 import { answerProblem, describeAnswer, type QuestionRecord } from '../shared/questions.js';
+import { HOUSEKEEPING_PAGE, repeatOf, roundPages, tickKey } from '../shared/readthrough.js';
 import {
     type Attachment,
     type BlockRecord,
@@ -35,12 +36,14 @@ import {
     deriveComments,
     describeTake,
     findingsUnlocked,
+    handoffFile,
     impactMapOf,
     type ReviewPreferences,
     type RoundRecord,
     SIGN_OFF_LOCK,
     slideShown,
     TAKE_TITLES,
+    TECHNIQUE_TITLES,
     unreacted
 } from '../shared/review.js';
 import { type Revision, type RevisionChange, revisionMeta, undoBlocker } from '../shared/revisions.js';
@@ -56,8 +59,15 @@ export interface PageOutcome {
     validate?: boolean;
     /** Post the review's comments after committing, with the reviewer's choices for comments on lines that changed. */
     post?: Record<string, 'reanchor' | 'drop' | 'anyway'>;
-    /** Save these review preferences to this machine's `review.json`. */
-    preferences?: ReviewPreferences;
+    /** Save these review preferences to this machine's `review.json`, over the ones it holds. */
+    preferences?: Partial<ReviewPreferences>;
+    /** Write this round's task file for Hand to agent after committing. */
+    handoff?: number;
+}
+
+/** What the session read for a request before applying it: the code its anchor names, from the reviewed commit. */
+export interface PageContext {
+    code?: string[];
 }
 
 /** Log something the user did; the activity feed keeps these quiet. */
@@ -290,8 +300,11 @@ function backToTriage(draft: Draft, round: RoundRecord): void {
     if (round.previewing) draft.updateRound(round.n, (current) => ({ ...current, previewing: false }));
 }
 
-/** Apply a review's own page request: a take, the walkthrough, a reaction, the comments and their posting, preferences. */
-function applyReviewRequest(draft: Draft, request: PageRequest): PageOutcome {
+/**
+ * Apply a review's own page request: a take, starting the round, the walkthrough, a reaction, a read tick, the comments,
+ * posting them and handing them to an agent, preferences.
+ */
+function applyReviewRequest(draft: Draft, request: PageRequest, context: PageContext): PageOutcome {
     const { now, state } = draft;
     const round = workingRound(draft);
     switch (request.type) {
@@ -323,10 +336,19 @@ function applyReviewRequest(draft: Draft, request: PageRequest): PageOutcome {
         case 'reviewers.start': {
             notPosted(round);
             if (round.reviewers) reject('You already started the review for this round');
-            draft.updateRound(round.n, (current) => ({ ...current, reviewers: { ...request.reviewers, at: now } }));
-            const { strength, model, effort } = request.reviewers;
-            noteYours(draft, { title: 'You started the review', detail: `${strength}, ${model} at ${effort} effort` });
-            return { event: { type: 'reviewers.start', round: round.n, reviewers: request.reviewers } };
+            const { technique, reviewers } = request;
+            if (technique === 'readthrough' && round.publishedAt)
+                reject('The walkthrough is already out: choose the deck, or both', 'technique', 400);
+            draft.updateRound(round.n, (current) => ({ ...current, technique, reviewers: { ...reviewers, at: now } }));
+            const { strength, model, effort } = reviewers;
+            noteYours(draft, {
+                title: 'You started the review',
+                detail: `${TECHNIQUE_TITLES[technique]}; ${strength === 'none' ? 'no AI review' : `${strength}, ${model} at ${effort} effort`}`
+            });
+            return {
+                event: { type: 'reviewers.start', round: round.n, technique, reviewers },
+                preferences: { technique, reviewers }
+            };
         }
         case 'walkthrough.done': {
             if (!round.publishedAt) reject('The walkthrough is not published yet');
@@ -432,17 +454,26 @@ function applyReviewRequest(draft: Draft, request: PageRequest): PageOutcome {
             const files = new Set(round.files.flatMap((file) => [file.path, ...(file.from ? [file.from] : [])]));
             if (request.anchor && !files.has(request.anchor.file))
                 reject(`${request.anchor.file} is not in round ${round.n}'s diff`, 'anchor.file', 400);
+            if (request.page !== undefined && !roundPages(state, round.n).some((page) => page.id === request.page))
+                reject(`round ${round.n}'s read-through has no page ${request.page}`, 'page', 404);
+            if (request.repeat && !round.index?.repeats.some((group) => group.key === request.repeat?.key))
+                reject(`round ${round.n} has no repeated edit ${request.repeat.key}`, 'repeat.key', 404);
             const existing = request.id === undefined ? undefined : ownRecord(state.notes, request.id);
             if (request.id !== undefined && (!existing || existing.round !== round.n))
                 reject(`round ${round.n} has no comment ${request.id}`, 'id', 404);
             if (existing && round.posts[`note:${existing.id}`]?.id !== undefined) reject('That comment is already posted');
             const task = request.task ?? existing?.task;
+            const page = request.page ?? existing?.page;
+            const repeat = request.repeat ?? existing?.repeat;
             draft.putNote({
                 id: existing?.id ?? nextNoteId(draft),
                 round: round.n,
                 anchor: request.anchor,
                 text: request.text,
                 ...(task !== undefined ? { task } : {}),
+                ...(page !== undefined ? { page } : {}),
+                ...(repeat ? { repeat } : {}),
+                ...(context.code ? { code: context.code } : {}),
                 at: now
             });
             return {};
@@ -510,6 +541,34 @@ function applyReviewRequest(draft: Draft, request: PageRequest): PageOutcome {
             }));
             return {};
         }
+        case 'read.tick': {
+            if (!round.readthrough) reject('The read-through is not open yet');
+            const key = tickKey(round.n, request.piece, request.place);
+            if (request.piece === HOUSEKEEPING_PAGE) {
+                if (request.place !== undefined) reject('The Housekeeping page has no places', 'place', 400);
+            } else {
+                const piece =
+                    roundPages(state, round.n)
+                        .flatMap((page) => page.pieces)
+                        .find((candidate) => candidate.id === request.piece) ??
+                    reject(`round ${round.n}'s read-through has no piece ${request.piece}`, 'piece', 404);
+                if (request.place !== undefined) {
+                    const repeat = repeatOf(round.index, piece);
+                    if (!repeat || request.place === repeat.example || request.place >= repeat.group.places.length)
+                        reject(`piece ${piece.id} has no other place ${request.place}`, 'place', 400);
+                }
+            }
+            if (request.read === Boolean(state.ticks[key])) return {};
+            if (request.read) draft.putTick(key, { how: request.how, at: now });
+            else draft.removeTick(key);
+            return {};
+        }
+        case 'comments.handoff': {
+            if (!findingsUnlocked(round)) reject('Finish or skip the walkthrough first');
+            if (deriveComments(state, round.n).length === 0) reject('There is nothing to hand to an agent yet');
+            noteYours(draft, { title: 'You handed the comments to an agent', detail: handoffFile(round.n) });
+            return { handoff: round.n };
+        }
         case 'preferences.set':
             noteYours(draft, { title: 'You changed your review preferences' });
             return {
@@ -526,7 +585,12 @@ function applyReviewRequest(draft: Draft, request: PageRequest): PageOutcome {
  * fit the current state; the session then discards the draft and answers with the
  * error, and nothing is logged.
  */
-export function applyPageRequest(draft: Draft, request: PageRequest, revisions: readonly Revision[]): PageOutcome {
+export function applyPageRequest(
+    draft: Draft,
+    request: PageRequest,
+    revisions: readonly Revision[],
+    context: PageContext = {}
+): PageOutcome {
     const { now, state } = draft;
     if (!PAGE_REQUESTS[state.kind].has(request.type)) {
         if (state.kind === 'ask') reject(`An ask has no ${request.type}`, 'type', 400);
@@ -544,7 +608,7 @@ export function applyPageRequest(draft: Draft, request: PageRequest, revisions: 
                   : `You ${state.phases.ended.how} this session; it is read-only.`
         );
     if (state.kind === 'review' && request.type !== 'session.end' && !THREAD_REQUESTS.has(request.type))
-        return applyReviewRequest(draft, request);
+        return applyReviewRequest(draft, request, context);
 
     switch (request.type) {
         case 'answer.submit': {

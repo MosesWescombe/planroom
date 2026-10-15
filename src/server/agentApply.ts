@@ -21,12 +21,22 @@ import {
 import { AGENT_EVENTS, type AgentEvent, agentEventTypes, emitBatch } from '../shared/events.js';
 import { type Issue, toIssues } from '../shared/issues.js';
 import { type ContextBlock, isInfo, type QuestionRecord } from '../shared/questions.js';
+import {
+    describeLeftover,
+    HOUSEKEEPING_PAGE,
+    indexFileOf,
+    pageKey,
+    roundPages,
+    tickKey,
+    uncovered
+} from '../shared/readthrough.js';
 import { type BlockRecord, blockIdsOf, ownRecord, type ThreadRecord, type Touched } from '../shared/records.js';
 import {
     CHAPTER_TITLES,
     CHAPTERS,
     currentRound,
     deckSlides,
+    hasReadthrough,
     impactMapOf,
     type ReviewPreferences,
     type RoundRecord,
@@ -206,6 +216,15 @@ function sentBlocks(events: AgentEvent[]): { path: string; type: string; config:
                 return inline(`${at}.blocks`, event.blocks);
             case 'item.upsert':
                 return inline(`${at}.item.blocks`, event.item.blocks);
+            case 'read.page.upsert':
+                return [
+                    ...inline(`${at}.page.blocks`, event.page.blocks),
+                    ...event.page.pieces.flatMap((piece, position) =>
+                        inline(`${at}.page.pieces[${position}].blocks`, piece.blocks)
+                    )
+                ];
+            case 'read.page.add':
+                return inline(`${at}.blocks`, event.blocks);
             default:
                 return [];
         }
@@ -372,13 +391,17 @@ function applyReviewEvent(
                 | 'item.upsert'
                 | 'item.withdraw'
                 | 'summary.draft'
-                | 'earlier.label';
+                | 'earlier.label'
+                | 'read.outline'
+                | 'read.page.upsert'
+                | 'read.page.add';
         }
     >,
     index: number,
     fail: Fail,
     result: BatchResult,
-    batch: ReviewBatch
+    batch: ReviewBatch,
+    quoted: ReadonlyMap<string, string[]>
 ): void {
     const review = draft.state.review;
     if (!review) {
@@ -394,8 +417,15 @@ function applyReviewEvent(
         if (round.postedAt) fail(index, '.type', `round ${round.n} is posted; it takes no more ${event.type}`);
         return Boolean(round.postedAt);
     };
+    /** Whether the reviewer chose the read-through alone, refusing the deck event when they did. */
+    const noDeck = (): boolean => {
+        if (round.technique === 'readthrough')
+            fail(index, '.type', `the reviewer chose the read-through alone for round ${round.n}: write no deck`);
+        return round.technique === 'readthrough';
+    };
     switch (event.type) {
         case 'slide.upsert': {
+            if (noDeck()) return;
             const { slide } = event;
             const existing = draft.state.slides[slide.id];
             if (existing && existing.round !== round.n) {
@@ -440,6 +470,7 @@ function applyReviewEvent(
             return;
         }
         case 'deck.publish': {
+            if (noDeck()) return;
             if (round.tradeoffsAt) {
                 fail(index, '.type', `round ${round.n}'s deck is already published`);
                 return;
@@ -453,6 +484,10 @@ function applyReviewEvent(
             const { item } = event;
             const existing = draft.state.items[item.id];
             if (posted()) return;
+            if (round.reviewers?.strength === 'none' && item.kind !== 'followup') {
+                fail(index, '.item.kind', `the reviewer chose no AI review for round ${round.n}: send no findings`);
+                return;
+            }
             if (existing && existing.round !== round.n) {
                 fail(
                     index,
@@ -472,6 +507,8 @@ function applyReviewEvent(
             }
             batch.itemEvents.set(item.id, index);
             const content = JSON.parse(JSON.stringify(item));
+            const code = quoted.get(item.id);
+            if (code) content.code = code;
             const {
                 round: _round,
                 version: _version,
@@ -536,7 +573,168 @@ function applyReviewEvent(
             applied(event.key, changed);
             return;
         }
+        case 'read.outline':
+            layOutReadthrough(draft, round, event.pages, index, fail);
+            applied(`round ${round.n}`, true);
+            return;
+        case 'read.page.upsert': {
+            const { id, ...content } = event.page;
+            const key = pageKey(round.n, id);
+            const page = ownRecord(draft.state.pages, key);
+            if (!page) {
+                fail(index, '.page.id', `round ${round.n}'s read-through has no page ${id}; lay it out with read.outline first`);
+                return;
+            }
+            const pieces = new Set(page.pieces.map((piece) => piece.id));
+            content.pieces.forEach((piece, at) => {
+                if (!pieces.has(piece.id)) fail(index, `.page.pieces[${at}].id`, `page ${id} has no piece ${piece.id}`);
+            });
+            if (content.tests?.length && page.kind !== 'tests')
+                fail(index, '.page.tests', `page ${id} is a concept page; only a test page lists test cases`);
+            content.tests?.forEach((test, at) => {
+                if (!pieces.has(test.piece)) fail(index, `.page.tests[${at}].piece`, `page ${id} has no piece ${test.piece}`);
+            });
+            const changed = !isEqual(page.content, content);
+            if (changed) {
+                draft.putPage(key, { ...page, content, version: page.version + 1, updatedAt: now });
+                // A rewritten page is read again, the differing places of its repeats too.
+                if (page.content) {
+                    const own = new Set(page.pieces.map((piece) => tickKey(round.n, piece.id)));
+                    for (const tick of Object.keys(draft.state.ticks))
+                        if (own.has(tick.replace(/#\d+$/, ''))) draft.removeTick(tick);
+                }
+                if (!page.content) draft.note({ title: 'Wrote a read-through page', detail: page.title, ref: `page:${id}` });
+            }
+            reportInlineProblems(result, `page ${id} blocks`, content.blocks);
+            for (const piece of content.pieces) reportInlineProblems(result, `page ${id} piece ${piece.id} blocks`, piece.blocks);
+            applied(id, changed, draft.state.pages[key]?.version);
+            return;
+        }
+        case 'read.page.add': {
+            const key = pageKey(round.n, event.page);
+            const page = ownRecord(draft.state.pages, key);
+            if (!page) {
+                fail(index, '.page', `round ${round.n}'s read-through has no page ${event.page}`);
+                return;
+            }
+            const thread = ownRecord(draft.state.threads, event.threadId);
+            if (thread?.anchor?.target !== `page:${event.page}`) {
+                fail(index, '.threadId', `${event.threadId} is not a thread on page ${event.page}`);
+                return;
+            }
+            if (event.piece !== undefined && !page.pieces.some((piece) => piece.id === event.piece)) {
+                fail(index, '.piece', `page ${event.page} has no piece ${event.piece}`);
+                return;
+            }
+            const addition = {
+                thread: thread.id,
+                ...(event.piece !== undefined ? { piece: event.piece } : {}),
+                ...(event.text !== undefined ? { text: event.text } : {}),
+                ...(event.blocks ? { blocks: event.blocks } : {}),
+                at: now
+            };
+            draft.putPage(key, { ...page, added: [...page.added, addition], version: page.version + 1, updatedAt: now });
+            const tick = event.piece === undefined ? undefined : tickKey(round.n, event.piece);
+            if (tick && Object.hasOwn(draft.state.ticks, tick)) {
+                draft.removeTick(tick);
+                draft.note({
+                    title: 'Unticked a piece the agent added to',
+                    detail: page.title,
+                    ref: `page:${event.page}`,
+                    kind: 'attention'
+                });
+            }
+            reportInlineProblems(result, `page ${event.page} addition`, event.blocks);
+            applied(event.page, true, draft.state.pages[key]?.version);
+            return;
+        }
     }
+}
+
+/** Why the round cannot take a read-through layout now, if it cannot. */
+function outlineRefusal(draft: Draft, round: RoundRecord): string | undefined {
+    if (round.postedAt) return `round ${round.n} is posted; it takes no more read.outline`;
+    if (!hasReadthrough(round.technique))
+        return round.technique
+            ? `the reviewer chose the overview deck alone for round ${round.n}: there is no read-through`
+            : 'the reviewer has not chosen how to review yet: wait for reviewers.start';
+    if (round.technique === 'both' && !round.publishedAt)
+        return 'the reviewer chose the deck first: publish it, then lay out the read-through';
+    if (!round.index) return `round ${round.n} has no line index yet; reopen the review`;
+    if (roundPages(draft.state, round.n).some((page) => page.content))
+        return 'the read-through is open with pages written; add to a page with read.page.add instead';
+    return undefined;
+}
+
+/**
+ * Lay out the round's read-through, once the reviewer chose it and, for both, the deck is out. Refused, naming every
+ * changed line left over, until each added and removed line is in a piece or on Housekeeping, which the server fills
+ * by its own rules. A layout can be replaced until a page of it is written.
+ */
+function layOutReadthrough(
+    draft: Draft,
+    round: RoundRecord,
+    pages: Extract<AgentEvent, { type: 'read.outline' }>['pages'],
+    index: number,
+    fail: Fail
+): void {
+    const refusal = outlineRefusal(draft, round);
+    const lines = round.index;
+    if (refusal || !lines) {
+        fail(index, '.type', refusal ?? 'there is no line index');
+        return;
+    }
+    const existing = roundPages(draft.state, round.n);
+    const pageIds = new Set<string>();
+    const pieceIds = new Set<string>();
+    pages.forEach((page, at) => {
+        if (pageIds.has(page.id)) fail(index, `.pages[${at}].id`, `page ${page.id} is laid out twice`);
+        pageIds.add(page.id);
+        if (page.kind === 'concept' && page.group === undefined)
+            fail(index, `.pages[${at}].group`, `concept page ${page.id} needs a group: the area of the change it belongs to`);
+        if (page.kind === 'tests' && page.group !== undefined)
+            fail(index, `.pages[${at}].group`, `test page ${page.id} takes no group: the test pages are their own group`);
+        page.pieces.forEach((piece, position) => {
+            const path = `.pages[${at}].pieces[${position}]`;
+            if (pieceIds.has(piece.id) || piece.id === HOUSEKEEPING_PAGE)
+                fail(
+                    index,
+                    `${path}.id`,
+                    `piece id ${piece.id} is ${piece.id === HOUSEKEEPING_PAGE ? 'reserved' : 'already used'}`
+                );
+            pieceIds.add(piece.id);
+            for (const [file, at] of [
+                [piece.file, '.file'],
+                ...(piece.from ? [[piece.from.file, '.from.file'] as const] : [])
+            ] as const) {
+                const entry = indexFileOf(lines, file);
+                if (!entry) fail(index, `${path}${at}`, `${file} is not in round ${round.n}'s diff`);
+                else if (entry.housekeeping)
+                    fail(index, `${path}${at}`, `${file} is on the Housekeeping page, which the server lays out; leave it off`);
+            }
+            if (piece.repeat !== undefined && !lines.repeats.some((group) => group.key === piece.repeat))
+                fail(index, `${path}.repeat`, `round ${round.n} has no repeated edit ${piece.repeat}`);
+        });
+    });
+    const left = uncovered(
+        lines,
+        pages.flatMap((page) => page.pieces)
+    );
+    if (left.length) {
+        const named = left.slice(0, 20).map(describeLeftover).join('; ');
+        fail(
+            index,
+            '.pages',
+            `every added and removed line needs a page; on no page: ${named}${left.length > 20 ? `; and ${left.length - 20} more` : ''}`
+        );
+        return;
+    }
+    for (const page of existing) draft.removePage(pageKey(round.n, page.id));
+    const now = draft.now;
+    for (const page of pages)
+        draft.putPage(pageKey(round.n, page.id), { ...page, round: round.n, added: [], version: 1, updatedAt: now });
+    draft.updateRound(round.n, (current) => ({ ...current, readthrough: { openedAt: current.readthrough?.openedAt ?? now } }));
+    draft.note({ title: 'Opened the read-through', detail: `${pages.length} pages coming`, kind: 'question' });
 }
 
 /** The node ids a finding can pin to on a diagram block: flow and architecture node ids, sequence actors. */
@@ -614,6 +812,7 @@ function checkReviewIntegrity(draft: Draft, batch: ReviewBatch, fail: Fail): voi
 function reviewEditing(draft: Draft): string | undefined {
     const fields = new Set(draft.listPatches().map((patch) => patch.field));
     if (fields.has('slides') || fields.has('blocks')) return 'the deck';
+    if (fields.has('pages')) return 'the read-through';
     if (fields.has('items')) return 'the review';
     return undefined;
 }
@@ -627,7 +826,9 @@ export function applyAgentBatch(
     draft: Draft,
     events: AgentEvent[],
     summary: string | undefined,
-    preferences?: ReviewPreferences
+    preferences?: ReviewPreferences,
+    /** The code each finding's anchor names, by finding id, read by the session from the reviewed commit. */
+    quoted: ReadonlyMap<string, string[]> = new Map()
 ): { result: BatchResult; revision?: Revision; editing?: string; validate: boolean } {
     if (draft.state.phases.acceptedAt) {
         throw new RejectedError([
@@ -1015,7 +1216,10 @@ export function applyAgentBatch(
             case 'item.withdraw':
             case 'summary.draft':
             case 'earlier.label':
-                applyReviewEvent(draft, event, index, fail, result, { slideEvents, itemEvents });
+            case 'read.outline':
+            case 'read.page.upsert':
+            case 'read.page.add':
+                applyReviewEvent(draft, event, index, fail, result, { slideEvents, itemEvents }, quoted);
                 break;
             default:
                 break;

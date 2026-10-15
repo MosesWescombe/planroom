@@ -128,10 +128,17 @@ export async function postRound(context: PostingContext, choices: Record<string,
                 await context.change(record(comment.key, sent[comment.key]!));
                 continue;
             }
-            const anchor =
+            // Sent where the preview placed it: on its last line, or on the file for a line off the diff.
+            const reanchored =
                 choice === 'reanchor' && movedTo && comment.anchor
                     ? await reanchor(repoRoot, round.head, movedTo, comment.anchor)
-                    : comment.anchor;
+                    : undefined;
+            const anchor =
+                choice !== 'reanchor' || !movedTo || !comment.anchor
+                    ? comment.placed
+                    : comment.placed?.start === undefined && reanchored
+                      ? { file: reanchored.file, side: reanchored.side }
+                      : reanchored;
             const parent = comment.replyTo ? round.earlier[comment.replyTo]?.post.id : undefined;
             const inline = inlineOf(anchor);
             try {

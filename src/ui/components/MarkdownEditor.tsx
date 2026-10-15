@@ -1,9 +1,10 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxTree } from '@codemirror/language';
-import type { Range } from '@codemirror/state';
+import { Prec, type Range } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
+import { isSendKey, useSendKey } from '../sendKey';
 
 /** The class each styled Markdown element gets while it is rendered. */
 const STYLES: Record<string, string> = {
@@ -80,8 +81,24 @@ const livePreviewPlugin = ViewPlugin.fromClass(
 );
 
 /**
+ * Submit the form `editor` sits in through its default button, as Enter does in a form's text field, and nothing while
+ * that button is disabled. False when the editor is in no form, so the key types a new line.
+ */
+function submitForm(editor: EditorView): boolean {
+    const form = editor.contentDOM.closest('form');
+    if (!form) return false;
+    const button = Array.from(form.elements).find(
+        (element): element is HTMLButtonElement | HTMLInputElement =>
+            (element instanceof HTMLButtonElement || element instanceof HTMLInputElement) && element.type === 'submit'
+    );
+    if (!button?.disabled) form.requestSubmit(button);
+    return true;
+}
+
+/**
  * One Markdown editor with no preview beside it: text is shown rendered, and the part under the caret shows its
  * Markdown syntax so it can be edited, then renders again when the caret leaves. Labelled by the element `labelId`.
+ * The chosen send key submits the form it sits in, as in every other message box.
  */
 export function MarkdownEditor({
     id,
@@ -98,6 +115,9 @@ export function MarkdownEditor({
     const view = useRef<EditorView>(null);
     const changed = useRef(onChange);
     changed.current = onChange;
+    const chosen = useSendKey();
+    const sendKey = useRef(chosen);
+    sendKey.current = chosen;
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: the editor is built once; `value` is synced below
     useEffect(() => {
@@ -106,6 +126,11 @@ export function MarkdownEditor({
             doc: value,
             extensions: [
                 history(),
+                Prec.highest(
+                    EditorView.domEventHandlers({
+                        keydown: (event, editor) => isSendKey(event, sendKey.current) && submitForm(editor)
+                    })
+                ),
                 keymap.of([...defaultKeymap, ...historyKeymap]),
                 markdown(),
                 EditorView.lineWrapping,

@@ -7,6 +7,7 @@ import { Proposal } from '../proposal/Proposal';
 import { CommentsTab } from '../review/Comments';
 import { Findings } from '../review/Findings';
 import { ReviewPins } from '../review/hooks';
+import { Readthrough } from '../review/Readthrough';
 import { Walkthrough } from '../review/Walkthrough';
 import { useTrackSeen } from '../seen';
 import { useConnection, useSelector } from '../store';
@@ -44,16 +45,17 @@ function useFollowPhase(): void {
 /** When the author's push starts a new round, show its walkthrough from the start. */
 function useFollowRound(): void {
     const rounds = useSelector((view) => view.review?.rounds.length ?? 0);
-    const { setTab, setRound, setSlide } = useActions();
+    const { setTab, setRound, setSlide, setPage } = useActions();
     const previous = useRef(rounds);
     useEffect(() => {
         if (rounds > previous.current) {
             setTab('walkthrough');
             setRound(undefined);
             setSlide(undefined);
+            setPage(undefined);
         }
         previous.current = rounds;
-    }, [rounds, setTab, setRound, setSlide]);
+    }, [rounds, setTab, setRound, setSlide, setPage]);
 }
 
 /** Makes a read-only session editable again; the agent is told, and picks the plan up where it stands. */
@@ -174,6 +176,7 @@ export function Shell() {
                 {review && (
                     <ReviewPins>
                         {tab === 'walkthrough' && <Walkthrough />}
+                        {tab === 'readthrough' && <Readthrough />}
                         {tab === 'findings' && <Findings />}
                         {tab === 'comments' && <CommentsTab />}
                     </ReviewPins>

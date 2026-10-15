@@ -1,7 +1,10 @@
 import type { PageRequest } from '../shared/events';
 import type { Issue } from '../shared/issues';
+import type { Handoff, SearchResult } from '../shared/review';
 import type { Revision } from '../shared/revisions';
 import type { PlanListing, StreamMessage } from '../shared/view';
+
+export type { Handoff, SearchResult };
 
 /**
  * The page's calls to its own server. Every path is relative, so it stays under the
@@ -35,8 +38,8 @@ export type PageInput = PageRequest extends infer R
         : R
     : never;
 
-/** Post a page event. Resolves with the event's `seq` once it is persisted. */
-export async function postEvent(request: PageInput): Promise<{ seq?: number }> {
+/** Post a page event. Resolves with the event's `seq` once it is persisted, and for Hand to agent, what it wrote. */
+export async function postEvent(request: PageInput): Promise<{ seq?: number; handoff?: Handoff }> {
     const response = await fetch('api/events', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -65,18 +68,28 @@ export async function fetchExcerpt(file: string, lines: string): Promise<CodeExc
 /** One review round's diff of `file`, cached per round and file: a round's commits never change. */
 const diffs = new Map<string, Promise<string>>();
 
-/** Fetch a review round's unified diff of one file. A failed fetch is forgotten, so the next asks again. */
-export function fetchDiff(round: number, file: string): Promise<string> {
-    const key = JSON.stringify([round, file]);
+/**
+ * Fetch a review round's unified diff of one file; `full` gives every line of the file as context. A failed fetch is
+ * forgotten, so the next asks again.
+ */
+export function fetchDiff(round: number, file: string, full = false): Promise<string> {
+    const key = JSON.stringify([round, file, full]);
     let patch = diffs.get(key);
     if (!patch) {
-        patch = fetch(`api/review/diff?${new URLSearchParams({ round: String(round), file }).toString()}`)
+        const query = new URLSearchParams({ round: String(round), file, ...(full ? { full: '1' } : {}) });
+        patch = fetch(`api/review/diff?${query.toString()}`)
             .then((response) => json<{ patch: string }>(response))
             .then((body) => body.patch);
         patch.catch(() => diffs.delete(key));
         diffs.set(key, patch);
     }
     return patch;
+}
+
+/** Search a review round's commit for a name: every whole-word match, or with `definition` the lines that declare it. */
+export async function fetchSearch(round: number, query: string, definition = false): Promise<SearchResult> {
+    const params = new URLSearchParams({ round: String(round), q: query, ...(definition ? { definition: '1' } : {}) });
+    return json(await fetch(`api/review/search?${params.toString()}`));
 }
 
 /** Save a pasted image in the change's assets. Resolves with its asset name. */

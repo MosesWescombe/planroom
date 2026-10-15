@@ -64,7 +64,15 @@ export function resolveAnchor(text: string, anchor: Anchor): ResolvedAnchor | nu
     return null;
 }
 
-/** What a comment is on, for short labels: its quote cut to `max` characters, or the question id for a whole question. */
+/**
+ * What a comment is on, for short labels: its quote cut to `max` characters, the lines selected on a read-through
+ * page, or the question id for a whole question.
+ */
 export function describeAnchor(anchor: Anchor, max = 60): string {
-    return anchor.quote ? `"${anchor.quote.exact.slice(0, max)}"` : anchor.target.replace(/^question:/, '');
+    if (anchor.quote) return `"${anchor.quote.exact.slice(0, max)}"`;
+    if (anchor.lines) {
+        const { file, side, start, end } = anchor.lines;
+        return `${file}${side === 'old' ? ' (old)' : ''}:${start === end ? start : `${start}-${end}`}`;
+    }
+    return anchor.target.replace(/^question:/, '');
 }
