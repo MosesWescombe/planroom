@@ -1,0 +1,2896 @@
+{
+  "schemaVersion": 1,
+  "changeId": "add-review-readthrough",
+  "title": "Line-by-line guided PR read-through",
+  "kind": "plan",
+  "format": "openspec",
+  "createdAt": "2026-10-14T22:03:14.997Z",
+  "questions": {
+    "Q-1": {
+      "id": "Q-1",
+      "group": "align/purpose",
+      "title": "Whose changes will you mostly read through this way?",
+      "impact": "high",
+      "context": {
+        "why": "This decides who the comments are for. On a teammate's PR they are notes for the author. On your own branch, or one an AI agent wrote for you, they are a to-do list for whoever makes the fixes, which is where the hand-to-an-agent output earns its place."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "teammates",
+          "label": "Teammates' PRs I've been asked to review"
+        },
+        {
+          "id": "own",
+          "label": "My own branch, or one an AI agent wrote, before anyone else sees it"
+        },
+        {
+          "id": "both",
+          "label": "Both, about equally"
+        }
+      ],
+      "allowOther": true,
+      "topic": "Whose changes",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "both",
+        "version": 1,
+        "at": "2026-10-14T22:05:35.129Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:05:35.129Z"
+    },
+    "Q-2": {
+      "id": "Q-2",
+      "group": "align/purpose",
+      "title": "What makes the Bitbucket view hard to follow?",
+      "impact": "high",
+      "context": {
+        "why": "Each of these needs a different fix, so knowing which ones bite tells the read-through what to get right first."
+      },
+      "input": "multi",
+      "options": [
+        {
+          "id": "order",
+          "label": "Files come in alphabetical order, not the order the change makes sense in"
+        },
+        {
+          "id": "context",
+          "label": "I can't see the code a changed line calls, or what calls it"
+        },
+        {
+          "id": "bulk",
+          "label": "Repeated, mechanical edits bury the ones that matter"
+        },
+        {
+          "id": "why",
+          "label": "Nothing says why a line changed or what it is for"
+        },
+        {
+          "id": "track",
+          "label": "I lose track of what I've already read"
+        },
+        {
+          "id": "spread",
+          "label": "In a big file, one change is scattered across many places"
+        }
+      ],
+      "allowOther": true,
+      "topic": "Pain points",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choices": [
+          "order",
+          "context",
+          "bulk",
+          "why",
+          "track",
+          "spread"
+        ],
+        "text": "Sometimes it cuts more context than is required. For example a line in a method that only shows the nearby lines in the diff. Someimes the change diff is noisy, all i care about is what the method looks like now.",
+        "version": 1,
+        "at": "2026-10-14T22:06:54.906Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:06:54.906Z"
+    },
+    "Q-3": {
+      "id": "Q-3",
+      "group": "align/ai-role",
+      "title": "How much should the AI do while you read?",
+      "impact": "high",
+      "context": {
+        "why": "Today a Planroom Review always runs AI reviewers and shows what they found after the slide deck. A manual read-through could leave that out, keep it separate, or show each suspected problem on the line it is about, at the moment you read that line.",
+        "findings": [
+          "Before the AI review starts, the page already asks how strong a review to run (one reviewer, a checked one, or one per area such as security and performance)."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "guide-only",
+          "label": "Guide only: order, group and explain the change. Finding problems is my job.",
+          "tradeoff": "Purest manual review; you lose a second pair of eyes."
+        },
+        {
+          "id": "inline",
+          "label": "Guide, and show the AI's suspected problems on the lines they're about",
+          "detail": "You'd still be able to choose no AI review when you start, like choosing its strength today.",
+          "tradeoff": "Most useful where you are already looking; risks nudging what you notice.",
+          "recommended": true
+        },
+        {
+          "id": "separate",
+          "label": "Keep them apart: read every line first, then the AI's findings list as today",
+          "tradeoff": "No nudging while you read; you meet each problem away from its code."
+        }
+      ],
+      "topic": "AI's role",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "inline",
+        "note": "It should be built for guide first, ai for assistance only if asked",
+        "version": 1,
+        "at": "2026-10-14T22:07:42.350Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:07:42.350Z"
+    },
+    "Q-4": {
+      "id": "Q-4",
+      "group": "align/scope",
+      "title": "Every changed line shows up somewhere in the read-through, in full or inside a repeated-change summary, and the page keeps count of what you've read so nothing is skipped.",
+      "impact": "high",
+      "context": {
+        "why": "That is what makes it a line-by-line review rather than another summary. Generated files (lock files, snapshots, build output) would be listed but folded away."
+      },
+      "input": "assumption",
+      "topic": "Full coverage",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "note": "Test content can be compressed. There should be an option for title only, pseudo code or true code. Toggleable on each test but defaulted in configuration settings.",
+        "version": 1,
+        "at": "2026-10-14T22:09:01.206Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:09:01.206Z"
+    },
+    "Q-5": {
+      "id": "Q-5",
+      "group": "align/scope",
+      "title": "It opens the same two things Planroom Review opens today: a Bitbucket PR, or a local branch compared with the main branch.",
+      "impact": "medium",
+      "context": {
+        "why": "A local branch is how you would read an AI-written change before it becomes a PR. Nothing is posted for a branch; it can only go to an agent or be copied."
+      },
+      "input": "assumption",
+      "topic": "What it opens",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:09:11.328Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:09:11.328Z"
+    },
+    "Q-6": {
+      "id": "Q-6",
+      "group": "align/scope",
+      "title": "How big are the PRs you'd read through this way?",
+      "impact": "medium",
+      "context": {
+        "why": "Decides whether the whole read-through fits on one scrolling page or needs paging, and how long the AI can take to prepare it before you start reading."
+      },
+      "input": "chips",
+      "options": [
+        {
+          "id": "s",
+          "label": "Under 300 changed lines"
+        },
+        {
+          "id": "m",
+          "label": "300 to 1,500"
+        },
+        {
+          "id": "l",
+          "label": "1,500 to 5,000"
+        },
+        {
+          "id": "xl",
+          "label": "Bigger"
+        }
+      ],
+      "topic": "PR size",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "l",
+        "note": "They can be huge when including tests. Ideally each seperate concept is its own tab/page",
+        "version": 1,
+        "at": "2026-10-14T22:09:53.394Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:09:53.394Z"
+    },
+    "Q-7": {
+      "id": "Q-7",
+      "group": "align/output",
+      "title": "How do you choose where your comments go at the end?",
+      "impact": "high",
+      "context": {
+        "why": "You named two outputs: comments posted on the PR, or instructions for a local agent. They can be one choice for the whole review, or chosen comment by comment."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "both-buttons",
+          "label": "One list, two buttons: post them to the PR, hand them to an agent, or both",
+          "tradeoff": "Simple, and covers fixing a teammate's PR yourself while still telling them.",
+          "recommended": true
+        },
+        {
+          "id": "per-comment",
+          "label": "Route each comment: this one to the author, that one to my agent",
+          "tradeoff": "Most control; one more choice on every comment."
+        },
+        {
+          "id": "one-or-other",
+          "label": "Pick one destination for the whole review",
+          "tradeoff": "Simplest; can't do both."
+        }
+      ],
+      "allowOther": true,
+      "topic": "Output choice",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "both-buttons",
+        "version": 1,
+        "at": "2026-10-14T22:10:08.095Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:10:08.095Z"
+    },
+    "Q-8": {
+      "id": "Q-8",
+      "group": "align/output",
+      "title": "What should handing your comments to a local agent look like?",
+      "impact": "high",
+      "context": {
+        "why": "The agent needs each comment with its file, lines and the code around it, plus what you want changed. The question is how it reaches the agent."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "file",
+          "label": "A task file written into the review, plus a one-line prompt copied for you to paste into any Claude session",
+          "tradeoff": "Works with any agent, any time later, in whatever checkout you choose. One paste.",
+          "recommended": true
+        },
+        {
+          "id": "same-session",
+          "label": "The Claude session that ran the review goes on to make the fixes itself",
+          "tradeoff": "No copy and paste; ties the fixes to that session, and it needs somewhere to edit other than the review's temporary copy of the code."
+        },
+        {
+          "id": "clipboard",
+          "label": "Just copy a full prompt with every comment to the clipboard",
+          "tradeoff": "Nothing on disk; a long review makes a very long paste."
+        }
+      ],
+      "allowOther": true,
+      "topic": "Agent handoff",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "file",
+        "version": 1,
+        "at": "2026-10-14T22:10:29.201Z"
+      },
+      "createdAt": "2026-10-14T22:04:54.891Z",
+      "updatedAt": "2026-10-14T22:10:29.201Z"
+    },
+    "Q-9": {
+      "id": "Q-9",
+      "group": "align/today",
+      "title": "What Planroom Review already has that a read-through can build on",
+      "context": {
+        "why": "Most of the parts already exist. What is missing is the **guided order**, **clicking a line to comment**, **folding repeated edits**, **tracking what you've read**, and **an output for an agent**.",
+        "findings": [
+          "The Review tab already lists every changed file. Each one opens to its full diff, with the AI's findings shown as cards under the lines they are about.",
+          "That code view highlights syntax, folds functions and blocks, and switches between the combined diff and only the old or new side.",
+          "Writing your own comment today means opening a form, picking a file and typing a line number. You cannot click a line.",
+          "Comments are previewed as Bitbucket will show them and posted as drafts that you finish in Bitbucket. A comment covering several lines lands on its last line, because that is all Bitbucket is sent.",
+          "A local branch cannot be posted, so its comments are copied as Markdown, one section per comment with its file and lines. Nothing writes instructions for an agent yet.",
+          "Nothing records which lines or files you have read.",
+          "The server keeps only the list of changed files with their line counts; the page fetches a file's diff when you open it. Grouping lines into ideas would be new work for the AI."
+        ],
+        "refs": [
+          "src/ui/review/Findings.tsx:275",
+          "src/ui/code/CodeViewer.tsx:150",
+          "src/ui/review/Comments.tsx:253",
+          "src/server/posting.ts:36",
+          "src/shared/review.ts:682",
+          "src/server/worktree.ts:69",
+          "src/server/http.ts:296"
+        ]
+      },
+      "input": "info",
+      "status": "open",
+      "version": 1,
+      "contentVersion": 1,
+      "answer": null,
+      "createdAt": "2026-10-14T22:05:58.660Z",
+      "updatedAt": "2026-10-14T22:05:58.660Z"
+    },
+    "Q-10": {
+      "id": "Q-10",
+      "group": "explore/home",
+      "title": "The read-through is a new part of Planroom Review, not a separate tool.",
+      "impact": "high",
+      "context": {
+        "why": "Planroom Review already opens the PR or branch, keeps a private copy of the code to read, previews comments as Bitbucket shows them and posts them. A separate tool would have to rebuild all of that.",
+        "refs": [
+          "src/server/review.ts",
+          "src/ui/review/ReviewTabs.tsx",
+          "src/server/posting.ts"
+        ]
+      },
+      "input": "assumption",
+      "topic": "Where it lives",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "note": "It should be a question that lets the reviewer choose the technique. It could also be nice to choose both so that they get the architecture overview first, then do a line by line",
+        "version": 1,
+        "at": "2026-10-14T22:12:54.190Z"
+      },
+      "createdAt": "2026-10-14T22:11:46.370Z",
+      "updatedAt": "2026-10-14T22:12:54.190Z"
+    },
+    "Q-11": {
+      "id": "Q-11",
+      "group": "explore/approach",
+      "title": "Which ways of building the read-through should we look into?",
+      "impact": "high",
+      "context": {
+        "why": "The real fork is **who decides the reading order and the grouping**: the agent, which can group by idea and say why, or the server, which is instant and predictable but only knows files and text.",
+        "blocks": [
+          {
+            "type": "optionMatrix",
+            "config": {
+              "options": [
+                "A page per concept, by the agent",
+                "Smarter diff, ordered by the server",
+                "Deeper slide deck"
+              ],
+              "rows": [
+                {
+                  "criterion": "Reads in the order of ideas",
+                  "cells": [
+                    {
+                      "text": "Yes, one concept per page",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "File order, used code first",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "Yes",
+                      "verdict": "good"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Whole method as it is now",
+                  "cells": [
+                    {
+                      "text": "Yes, read from the code",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Yes, read from the code",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Pasted onto slides",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Repeated edits folded",
+                  "cells": [
+                    {
+                      "text": "Any repeated idea",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Only near-identical text",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "If the agent remembers",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Says why",
+                  "cells": [
+                    {
+                      "text": "Every page",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Only when asked",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "Every slide",
+                      "verdict": "good"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Ask about a line, agent adds to the page",
+                  "cells": [
+                    {
+                      "text": "Yes",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Answers only, nothing to add to",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "No, slides are fixed once shown",
+                      "verdict": "bad"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Tests on their own pages at the end",
+                  "cells": [
+                    {
+                      "text": "Yes",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Test files sorted last",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "Yes",
+                      "verdict": "good"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Every changed line guaranteed",
+                  "cells": [
+                    {
+                      "text": "Checked before you start",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "By construction",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Not checked",
+                      "verdict": "bad"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Ready to read",
+                  "cells": [
+                    {
+                      "text": "A few minutes on a big PR",
+                      "verdict": "mixed"
+                    },
+                    {
+                      "text": "At once",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Several minutes",
+                      "verdict": "mixed"
+                    }
+                  ]
+                },
+                {
+                  "criterion": "Comments are real PR line comments",
+                  "cells": [
+                    {
+                      "text": "Yes",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "Yes",
+                      "verdict": "good"
+                    },
+                    {
+                      "text": "No, they sit on slides",
+                      "verdict": "bad"
+                    }
+                  ]
+                }
+              ],
+              "recommended": 0
+            }
+          }
+        ]
+      },
+      "input": "directions",
+      "options": [
+        {
+          "id": "concept-pages",
+          "label": "A page per concept, written by the agent",
+          "detail": "**How it works.** As the review opens, the agent reads the whole change and splits it into concepts, each its own page in a new **Read-through** tab: \"Retry limit is now a setting\", \"Callers pass the setting\". A page opens with a few plain sentences on what the concept is and why, then the code: each changed method **as it is now, whole, with the changed lines marked**, and a switch to the diff. What a changed line calls, and what calls the changed method, opens beside it.\n\n**Repeated edits** become one page: one example in full, then every other place as a list you can expand. **Tests come last**, on their own pages grouped by what they test, shown as titles, pseudo code or real code.\n\n**Ask as you go.** Select a line and ask the agent about it. It answers in the page's thread and can add an explanation or more code to the page, marked as added at your request.\n\n**Nothing skipped.** The agent must place every changed line on some page. The server checks that against the diff and will not open the read-through while any line is left over.\n\n**The server still does the mechanical parts.** It knows every changed block of lines, and spots identical edits to suggest to the agent as repeats.\n\n**Might win:** it is what you described: idea order, one concept per page, whole methods, repeats folded, a reason on every page, and an agent to ask.\n\n**Might lose:** on a 3,000-line PR the agent needs a few minutes before you can start, and its grouping can be off. Even then, every line is still on some page.",
+          "tradeoff": "The best read. Costs agent time up front and leans on the agent's grouping, which the coverage check keeps honest.",
+          "recommended": true,
+          "blocks": [
+            {
+              "type": "flow",
+              "config": {
+                "direction": "LR",
+                "nodes": [
+                  {
+                    "id": "diff",
+                    "label": "The change"
+                  },
+                  {
+                    "id": "agent",
+                    "label": "Agent splits it into concepts",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "check",
+                    "label": "Every changed line placed?",
+                    "shape": "decision",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "read",
+                    "label": "Read-through: code pages, then test pages",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "ask",
+                    "label": "Ask about a line",
+                    "emphasis": "new"
+                  },
+                  {
+                    "id": "comments",
+                    "label": "Your line comments"
+                  },
+                  {
+                    "id": "post",
+                    "label": "Post to the PR"
+                  },
+                  {
+                    "id": "handoff",
+                    "label": "Task file for an agent",
+                    "emphasis": "new"
+                  }
+                ],
+                "edges": [
+                  {
+                    "from": "diff",
+                    "to": "agent"
+                  },
+                  {
+                    "from": "agent",
+                    "to": "check"
+                  },
+                  {
+                    "from": "check",
+                    "to": "agent",
+                    "label": "lines left over",
+                    "style": "dashed"
+                  },
+                  {
+                    "from": "check",
+                    "to": "read",
+                    "label": "yes"
+                  },
+                  {
+                    "from": "read",
+                    "to": "ask"
+                  },
+                  {
+                    "from": "ask",
+                    "to": "read",
+                    "label": "agent adds to the page",
+                    "style": "dashed"
+                  },
+                  {
+                    "from": "read",
+                    "to": "comments"
+                  },
+                  {
+                    "from": "comments",
+                    "to": "post"
+                  },
+                  {
+                    "from": "comments",
+                    "to": "handoff"
+                  }
+                ]
+              },
+              "caption": "How a concept read-through gets built and used"
+            }
+          ]
+        },
+        {
+          "id": "server-order",
+          "label": "A smarter diff, ordered and folded by the server",
+          "detail": "**How it works.** The server, not the agent, builds the reading order. Files are ordered so code is read before the code that uses it, with test files last. Each change is widened to its whole method, identical edits are folded into one example plus a list, and tests are shrunk. Click-to-comment and read tracking work the same as in the first way. You can still ask the agent about a line, but it answers in a thread with no page to add to.\n\n**Might win:** ready the moment the review opens, needs no AI at all, and cannot misplace a line.\n\n**Might lose:** it is still grouped by file, not by idea, so a concept spread over six files is read in six places. Working out what uses what needs code understanding per language, or a rough guess. \"The same edit\" only catches near-identical text. Nothing says why unless you ask.",
+          "tradeoff": "Fast and predictable, but still file by file: it cures the noise and the lost place, not the missing story."
+        },
+        {
+          "id": "deeper-deck",
+          "label": "Add a line-by-line chapter to the existing slide deck",
+          "detail": "**How it works.** Keep one deck and give it more slides: after the overview chapters, one slide per concept with its code on it. It reuses the slide pages and arrow keys you already have.\n\n**Might win:** least new to build and learn.\n\n**Might lose:** slides are fixed once shown, so the agent cannot add to one when you ask. Each slide holds at most twelve pieces, and the agent pastes the code in as text, so a 3,000-line change means dozens of heavy slides. Nothing checks that every line is on one, and a comment on a slide's code is not a PR line comment.",
+          "tradeoff": "Least new screen, but slides are the wrong container for every line of a big change."
+        }
+      ],
+      "topic": "Approach",
+      "status": "answered",
+      "version": 3,
+      "contentVersion": 2,
+      "answer": {
+        "choices": [
+          "concept-pages"
+        ],
+        "version": 2,
+        "at": "2026-10-14T22:14:03.340Z"
+      },
+      "createdAt": "2026-10-14T22:11:46.370Z",
+      "updatedAt": "2026-10-14T22:14:03.340Z"
+    },
+    "Q-12": {
+      "id": "Q-12",
+      "group": "deep-dive/pages",
+      "title": "How should a changed method be shown on a page at first?",
+      "impact": "high",
+      "context": {
+        "why": "You said the diff is sometimes noise and all you want is the method as it is now. But a small tweak reads best as a diff, and \"as it is now\" hides what was taken out. Whatever the default, every piece of code gets a switch between the two, and removed lines never vanish: they fold into a marker you can open.",
+        "blocks": [
+          {
+            "type": "compare",
+            "config": {
+              "left": {
+                "label": "As it is now (lines 15 and 16 highlighted)",
+                "block": {
+                  "type": "code",
+                  "config": {
+                    "mode": "snippet",
+                    "lang": "ts",
+                    "file": "src/send.ts",
+                    "source": "export async function send(job: Job, policy: RetryPolicy) {\n  for (let attempt = 1; ; attempt++) {\n    try {\n      return await deliver(job);\n    } catch (error) {\n      if (attempt >= policy.maxAttempts) throw error;\n      await sleep(policy.backoff(attempt));\n    }\n  }\n}"
+                  }
+                }
+              },
+              "right": {
+                "label": "As a diff",
+                "block": {
+                  "type": "code",
+                  "config": {
+                    "mode": "diff",
+                    "lang": "ts",
+                    "file": "src/send.ts",
+                    "patch": "@@ -10,10 +10,10 @@\n-export async function send(job: Job) {\n+export async function send(job: Job, policy: RetryPolicy) {\n   for (let attempt = 1; ; attempt++) {\n     try {\n       return await deliver(job);\n     } catch (error) {\n-      if (attempt >= 3) throw error;\n-      await sleep(1000 * attempt);\n+      if (attempt >= policy.maxAttempts) throw error;\n+      await sleep(policy.backoff(attempt));\n     }\n   }\n }"
+                  }
+                }
+              },
+              "highlight": "none"
+            },
+            "caption": "The same change both ways"
+          }
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "now",
+          "label": "As it is now, changed lines highlighted, removed lines folded into a marker",
+          "tradeoff": "Reads like the code you'll live with; what was removed is one click away."
+        },
+        {
+          "id": "diff",
+          "label": "As a diff, widened to the whole method",
+          "tradeoff": "Familiar from Bitbucket, without the cut-off context; a big rewrite is still noisy."
+        },
+        {
+          "id": "agent",
+          "label": "The agent picks per piece: a rewrite as it is now, a small tweak as a diff",
+          "detail": "Your settings can force either view for every piece.",
+          "tradeoff": "Each piece starts in the view that reads best; the default varies from piece to piece.",
+          "recommended": true
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Code view",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "agent",
+        "note": "On the 'as it is now' still highlight line number that were changed. Just don't show what it was before until you hover or click it (show in popover). The user should be able to set an option or 'auto' for the agent to choose",
+        "version": 1,
+        "at": "2026-10-14T22:21:17.173Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:21:17.173Z"
+    },
+    "Q-13": {
+      "id": "Q-13",
+      "group": "deep-dive/pages",
+      "title": "How do you see what a changed line calls, and what calls it?",
+      "impact": "high",
+      "context": {
+        "why": "Bitbucket shows the changed lines and a few around them. Here are three ways to reach further; each one adds to the one before it.",
+        "findings": [
+          "The review keeps a full copy of the code at the commit under review, which a search can run over."
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "attach",
+          "label": "The agent adds the callers and definitions that matter to each page, folded until you open them; ask it for more",
+          "tradeoff": "Nothing new to look things up with; you get what the agent thought of, or what you ask for."
+        },
+        {
+          "id": "search",
+          "label": "That, plus click any name in the code to list everywhere it appears",
+          "tradeoff": "Instant, and works in every language. It is a plain text search, so it also lists unrelated things with the same name.",
+          "recommended": true
+        },
+        {
+          "id": "precise",
+          "label": "That, plus exact go-to-definition and find-callers, like in an editor",
+          "tradeoff": "Exact, but needs a language server for each language (TypeScript first), started for every review."
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Related code",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "search",
+        "version": 1,
+        "at": "2026-10-14T22:22:19.510Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:22:19.510Z"
+    },
+    "Q-14": {
+      "id": "Q-14",
+      "group": "deep-dive/repeats",
+      "title": "When you comment on a repeated edit's example, who is the comment about?",
+      "impact": "medium",
+      "context": {
+        "why": "The example stands for every place the edit was made. A comment on it is usually about all of them (\"use the helper instead\"), and sometimes only about that one place."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "all-unless",
+          "label": "Every place, posted once on the example with the others listed; a tick makes it about that place only",
+          "tradeoff": "The author gets one comment, not ten, and the agent's task file says to fix every place.",
+          "recommended": true
+        },
+        {
+          "id": "copies",
+          "label": "A copy of the comment on every place",
+          "tradeoff": "Each place gets its own thread to resolve; ten near-identical comments on the PR."
+        },
+        {
+          "id": "ask",
+          "label": "Ask each time: this place, or all of them",
+          "tradeoff": "Always exact; one more choice on every comment."
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Repeat comments",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "all-unless",
+        "version": 1,
+        "at": "2026-10-14T22:23:07.773Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:23:07.773Z"
+    },
+    "Q-15": {
+      "id": "Q-15",
+      "group": "deep-dive/progress",
+      "title": "How does a piece of code count as read?",
+      "impact": "medium",
+      "context": {
+        "why": "The page keeps count of how much of the change you've read, per page and overall. Your place is saved with the review, so it survives a reload, another browser, or coming back tomorrow."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "tick",
+          "label": "You tick each piece when you've read it, or the whole page at once",
+          "tradeoff": "Honest, like Bitbucket's 'Viewed' box but per method; one click per piece.",
+          "recommended": true
+        },
+        {
+          "id": "auto",
+          "label": "It counts once it has been on screen for a few seconds",
+          "tradeoff": "No clicks, but scrolling past counts as reading."
+        },
+        {
+          "id": "page",
+          "label": "You tick whole pages only",
+          "tradeoff": "Fewer clicks; you can't mark half a page."
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Read tracking",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "auto",
+        "note": "provide ticks, but auto tick if looking at it for more than 10s or a comment is made. Enabe this as a toggleable option in the settings",
+        "version": 1,
+        "at": "2026-10-14T22:24:22.295Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:24:22.295Z"
+    },
+    "Q-16": {
+      "id": "Q-16",
+      "group": "deep-dive/progress",
+      "title": "On a big PR, when can you start reading?",
+      "impact": "medium",
+      "context": {
+        "why": "On a 3,000-line PR, writing every page takes the agent some minutes. It can first lay out the pages and which lines go on each, which is quick and lets the server check nothing is left over, then write the pages in reading order, several at once."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "progressive",
+          "label": "As soon as the first page is written; the rest fill in while you read",
+          "tradeoff": "You start within a minute or two. A page you reach before it's written shows its code, with a note that the explanation is coming.",
+          "recommended": true
+        },
+        {
+          "id": "all",
+          "label": "Only when every page is written",
+          "tradeoff": "No half-written pages; a longer wait."
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Start reading",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "progressive",
+        "version": 1,
+        "at": "2026-10-14T22:24:34.303Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:24:34.303Z"
+    },
+    "Q-17": {
+      "id": "Q-17",
+      "group": "deep-dive/start",
+      "title": "When a review opens, the page asks how you want to review: the overview deck, the line-by-line read-through, or both with the overview first. Beside it, the AI review gets a 'None' choice, which is the default for a read-through. Both choices are remembered for next time.",
+      "impact": "high",
+      "context": {
+        "why": "From your notes: the reviewer picks the technique and can have both, and the read-through is built guide-first, with the AI's review only when you ask for it.",
+        "findings": [
+          "The page already asks how strong an AI review to run as a review opens. This adds the technique and a 'None' strength to that same question."
+        ],
+        "refs": [
+          "Q-10",
+          "Q-3",
+          "src/shared/review.ts:275"
+        ]
+      },
+      "input": "assumption",
+      "topic": "Choosing the technique",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:18:33.940Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:18:33.940Z"
+    },
+    "Q-18": {
+      "id": "Q-18",
+      "group": "deep-dive/repeats",
+      "title": "In a repeated edit, every other place is one line: where it is, and anything that differs from the example. Places identical to the example count as read with it. A place that differs is flagged and has to be opened.",
+      "impact": "medium",
+      "context": {
+        "why": "So a repeat that is almost but not quite the same, the classic hiding place for a bug, cannot slip by behind its example.",
+        "findings": [
+          "The server can tell identical from different by comparing the changed lines, ignoring spacing."
+        ]
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Repeat coverage",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:23:29.245Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:23:29.245Z"
+    },
+    "Q-19": {
+      "id": "Q-19",
+      "group": "deep-dive/tests",
+      "title": "Tests the PR added or changed sit on their own pages after the code pages, grouped by what they test, one entry per test case. The agent writes each test's pseudo code while preparing, so switching views is instant. A test you see as a title only still counts as read.",
+      "impact": "medium",
+      "context": {
+        "why": "From your notes on Q-4 and your message about tests. A code page links ahead to the tests for it."
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Test pages",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "note": "There should be a single agent session using the smallest model that does all of these pseduo code views. To save tokens",
+        "version": 1,
+        "at": "2026-10-14T22:27:37.977Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:27:37.977Z"
+    },
+    "Q-20": {
+      "id": "Q-20",
+      "group": "deep-dive/asking",
+      "title": "Each page has a thread with the agent. Select one or more lines and ask; the agent answers there and can add an explanation or more code to the page, marked as added at your request. Additions never change what the page already showed.",
+      "impact": "medium",
+      "context": {
+        "why": "From your message. Keeping additions separate means what you've ticked as read stays read."
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Asking the agent",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "note": "Additions and edits can change if a section is reviewed (untick it)",
+        "version": 1,
+        "at": "2026-10-14T22:28:17.921Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:28:17.921Z"
+    },
+    "Q-21": {
+      "id": "Q-21",
+      "group": "deep-dive/output",
+      "title": "The task file holds each comment with its file, lines, the code it sits on and the page it came from, any AI finding you agreed with and its suggested fix, and the branch and commit reviewed. The copied prompt tells the agent to work in your own checkout of that branch, check it is still at that commit, make each requested change, and ask you about any comment that is a question rather than a request.",
+      "impact": "high",
+      "context": {
+        "why": "The review's own copy of the code is temporary and is removed when the review ends, so the fixes have to be made in your checkout. The file stays in the review's folder, outside version control."
+      },
+      "input": "assumption",
+      "topic": "Task file",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:19:11.671Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:19:11.671Z"
+    },
+    "Q-22": {
+      "id": "Q-22",
+      "group": "deep-dive/pages",
+      "title": "A list down the side shows every page in order, code pages then test pages, with how much of each you've read. A By file view lists each changed file and which pages its lines are on, so you can still find a file the Bitbucket way.",
+      "impact": "low",
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Getting around",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:22:40.692Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:22:40.692Z"
+    },
+    "Q-23": {
+      "id": "Q-23",
+      "group": "deep-dive/rounds",
+      "title": "When the author pushes after you've posted, the next round's read-through covers only what changed since, the same way the next round's deck does today.",
+      "impact": "low",
+      "context": {
+        "refs": [
+          "openspec/specs/review-rounds/spec.md"
+        ]
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Next round",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:29:24.664Z"
+      },
+      "createdAt": "2026-10-14T22:16:26.321Z",
+      "updatedAt": "2026-10-14T22:29:24.664Z"
+    },
+    "Q-24": {
+      "id": "Q-24",
+      "group": "deep-dive/comments",
+      "title": "A comment on an unchanged line, outside what Bitbucket's diff shows: how should it be posted?",
+      "impact": "high",
+      "context": {
+        "why": "Showing whole methods means you'll comment on lines Bitbucket's diff never shows. Bitbucket's documentation does not say what happens to such a comment. Tools that post to Bitbucket report that it only takes line comments on lines in the diff. Whatever you pick, the preview shows exactly where it will land, and a test against a real PR comes first: if Bitbucket does take it on the exact line, no workaround is needed.",
+        "findings": [
+          "Bitbucket's API places a line comment with just a file and a line number on the old or new side. Its documentation is silent on lines outside the diff.",
+          "CodeRabbit, a review bot that posts to Bitbucket, says Bitbucket takes line comments only on diff lines, and posts the rest elsewhere. That is a vendor's claim, not Atlassian's.",
+          "Bitbucket added comments spanning several lines in its own screens in September 2025. No API field for a span is documented."
+        ],
+        "refs": [
+          "src/server/posting.ts:36",
+          "src/server/bitbucket.ts:36",
+          "https://jira.atlassian.com/browse/BCLOUD-5547",
+          "https://coderabbit-kb.help.usepylon.com/articles/7238891275-what-does-the-caution-message-some-comments-are-outside-the-diff-and-can-t-be-posted-inline-due-to-platform-limitations-mean"
+        ]
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "file-quote",
+          "label": "As a comment on the file, quoting the line number and its code",
+          "tradeoff": "Always lands and says exactly which line; it sits at the top of the file in Bitbucket, not beside the line.",
+          "recommended": true
+        },
+        {
+          "id": "nearest",
+          "label": "On the nearest line Bitbucket shows, quoting the line it's about",
+          "tradeoff": "Sits in the diff where the author is looking, but beside a different line."
+        },
+        {
+          "id": "agent-only",
+          "label": "Keep it out of the PR: it goes only to the agent's task file, and the preview says so",
+          "tradeoff": "Nothing confusing on the PR; the author never sees it."
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Off-diff comments",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "file-quote",
+        "version": 1,
+        "at": "2026-10-14T22:29:47.667Z"
+      },
+      "createdAt": "2026-10-14T22:17:29.568Z",
+      "updatedAt": "2026-10-14T22:29:47.667Z"
+    },
+    "Q-25": {
+      "id": "Q-25",
+      "group": "deep-dive/comments",
+      "title": "You can drag across several lines to comment on them together. Bitbucket gets the comment on the last of those lines, its text opening with the line range, until a test shows its API takes a span.",
+      "impact": "low",
+      "context": {
+        "why": "Today a comment on several lines is posted on its last line with nothing saying where it starts, so the author can't tell which lines it covers.",
+        "refs": [
+          "src/server/posting.ts:36"
+        ]
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Multi-line comments",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:30:05.479Z"
+      },
+      "createdAt": "2026-10-14T22:17:29.568Z",
+      "updatedAt": "2026-10-14T22:30:05.479Z"
+    },
+    "Q-26": {
+      "id": "Q-26",
+      "group": "deep-dive/prep",
+      "title": "On a big PR, who writes the pages?",
+      "impact": "medium",
+      "context": {
+        "why": "The review's own agent has to read the whole change to split it into pages. Writing each page's explanation can stay with it or be handed out. Since you'll be reading and asking questions while pages are still being written, it matters that the agent is free to answer you. Test pseudo code goes to one agent on the smallest model, as you said on Q-19."
+      },
+      "input": "single",
+      "options": [
+        {
+          "id": "main",
+          "label": "The review's own agent writes every page",
+          "tradeoff": "One voice, and it has already read everything. Slowest on a big PR, and your questions wait behind page writing."
+        },
+        {
+          "id": "split",
+          "label": "The review's agent lays out the pages, then page writers on Sonnet each write a batch at once; it checks each page before it goes up",
+          "tradeoff": "Pages land faster and the review's agent stays free for your questions. The writers re-read their code, so more tokens overall.",
+          "recommended": true
+        },
+        {
+          "id": "split-small",
+          "label": "The same, with page writers on the smallest model",
+          "tradeoff": "Cheapest. Explanations of why are shallower and more often wrong."
+        }
+      ],
+      "direction": "concept-pages",
+      "topic": "Page writers",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "split",
+        "version": 1,
+        "at": "2026-10-14T22:36:52.160Z"
+      },
+      "createdAt": "2026-10-14T22:30:33.171Z",
+      "updatedAt": "2026-10-14T22:36:52.160Z"
+    },
+    "Q-27": {
+      "id": "Q-27",
+      "group": "deep-dive/repeats",
+      "title": "Code that was moved, from one file or place to another, shows once as moved: from where to where, with only what changed on the way highlighted. It counts as read in both places.",
+      "impact": "medium",
+      "context": {
+        "why": "Bitbucket shows a move as a block deleted in one place and a block added in another, so you read it twice and have to compare them by eye. Git can spot moved blocks itself, so the server finds them, not the agent."
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Moved code",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:36:20.775Z"
+      },
+      "createdAt": "2026-10-14T22:30:33.171Z",
+      "updatedAt": "2026-10-14T22:36:20.775Z"
+    },
+    "Q-28": {
+      "id": "Q-28",
+      "group": "deep-dive/pages",
+      "title": "Lock files, generated files and changes that only touch spacing go on one Housekeeping page at the very end, listed by file, and count as read once you open it.",
+      "impact": "low",
+      "context": {
+        "why": "They still have to be on some page for every line to be covered, but they're rarely worth reading line by line."
+      },
+      "input": "assumption",
+      "direction": "concept-pages",
+      "topic": "Housekeeping page",
+      "status": "answered",
+      "version": 2,
+      "contentVersion": 1,
+      "answer": {
+        "choice": "holds",
+        "version": 1,
+        "at": "2026-10-14T22:36:04.701Z"
+      },
+      "createdAt": "2026-10-14T22:30:33.171Z",
+      "updatedAt": "2026-10-14T22:36:04.701Z"
+    }
+  },
+  "suggestions": {},
+  "understanding": {
+    "text": "When a review opens, you choose how to review: the **overview deck**, the **line-by-line read-through**, or **both** with the overview first. The AI's own review is a separate choice, set to **None** by default for a read-through.\n\nThe read-through splits the change into **concepts, each on its own page**, in reading order. The review's agent lays the pages out first, and the server checks that **every changed line is on some page**. Page writers then fill the pages in, several at once, and you **start reading as soon as the first one is up**. Each page says in plain words what the concept is and why, then shows the code. Each piece shows **as it is now** or **as a diff**: the agent picks per piece, or your setting fixes one. In the as-it-is-now view the changed line numbers are highlighted, and hovering one shows what it was. **Click any name** to list everywhere it appears. The agent also attaches the callers and definitions that matter.\n\n**Repeated edits** show one example and a line per other place. Places identical to the example count as read with it, and one that differs is flagged. **Moved code** shows once, from where to where. **Tests** come after the code, one entry per test case, as a title, pseudo code or real code. One small-model agent writes all the pseudo code. Lock files, generated files and spacing-only changes sit on a **Housekeeping** page at the end. You **tick pieces as read**, and a setting auto-ticks one you've looked at for 10 seconds or commented on.\n\nYou **click or drag across lines to comment**, or **ask the agent** about them. It answers in the page's thread and can add to the page, which unticks the part it changed. A comment on a repeat's example covers every place unless you tick \"only here\".\n\nAt the end there is **one list, two buttons**. **Post** sends PR drafts: a comment on a line Bitbucket doesn't show becomes a file comment quoting the line, and a multi-line comment opens with its range. **Hand to agent** writes a task file and copies a one-line prompt for any Claude session to fix things in your own checkout.",
+    "version": 4,
+    "updatedAt": "2026-10-14T22:37:02.682Z"
+  },
+  "sections": {
+    "s-eli5": {
+      "reviewed": true,
+      "id": "s-eli5",
+      "title": "ELI5",
+      "order": 1,
+      "blocks": [
+        "eli5-text",
+        "eli5-analogy"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:27.570Z"
+    },
+    "s-summary": {
+      "reviewed": true,
+      "id": "s-summary",
+      "title": "Summary",
+      "order": 2,
+      "blocks": [
+        "summary-text",
+        "summary-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:30.021Z"
+    },
+    "s-how": {
+      "reviewed": true,
+      "id": "s-how",
+      "title": "How it works",
+      "order": 3,
+      "blocks": [
+        "how-text",
+        "how-flow",
+        "how-seq"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:31.971Z"
+    },
+    "s-page": {
+      "reviewed": true,
+      "id": "s-page",
+      "title": "Reading a page",
+      "order": 4,
+      "blocks": [
+        "page-text",
+        "page-kinds",
+        "page-detail",
+        "page-compare"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:33.674Z"
+    },
+    "s-comments": {
+      "reviewed": true,
+      "id": "s-comments",
+      "title": "Comments, questions and the two outputs",
+      "order": 5,
+      "blocks": [
+        "comments-text",
+        "comments-detail",
+        "comments-handoff",
+        "comments-prompt"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:36.186Z"
+    },
+    "s-settings": {
+      "reviewed": true,
+      "id": "s-settings",
+      "title": "Settings",
+      "order": 6,
+      "blocks": [
+        "settings-text",
+        "settings-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:38.563Z"
+    },
+    "s-numbers": {
+      "reviewed": true,
+      "id": "s-numbers",
+      "title": "The numbers",
+      "order": 7,
+      "blocks": [
+        "numbers-text",
+        "numbers-stats",
+        "numbers-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:40.476Z"
+    },
+    "s-tech": {
+      "reviewed": true,
+      "id": "s-tech",
+      "title": "Technical design",
+      "order": 8,
+      "blocks": [
+        "tech-text",
+        "tech-arch",
+        "tech-shapes",
+        "tech-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:41.983Z"
+    },
+    "s-rollout": {
+      "reviewed": true,
+      "id": "s-rollout",
+      "title": "Rollout",
+      "order": 9,
+      "blocks": [
+        "rollout-text",
+        "rollout-timeline"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:43.928Z"
+    },
+    "s-impact": {
+      "reviewed": true,
+      "id": "s-impact",
+      "title": "Impact",
+      "order": 10,
+      "blocks": [
+        "impact-text",
+        "impact-table"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:45.471Z"
+    },
+    "s-risks": {
+      "reviewed": true,
+      "id": "s-risks",
+      "title": "Risks",
+      "order": 11,
+      "blocks": [
+        "risks-text",
+        "risks-matrix"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:48.150Z"
+    },
+    "s-accept": {
+      "reviewed": true,
+      "id": "s-accept",
+      "title": "Acceptance criteria",
+      "order": 12,
+      "blocks": [
+        "accept-text",
+        "accept-list"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:54.884Z"
+    },
+    "s-assumptions": {
+      "reviewed": true,
+      "id": "s-assumptions",
+      "title": "Assumptions",
+      "order": 13,
+      "blocks": [
+        "as-text",
+        "as-shown",
+        "as-tests",
+        "as-house",
+        "as-unlock",
+        "as-defaults",
+        "as-writer",
+        "as-export"
+      ],
+      "version": 2,
+      "updatedAt": "2026-10-14T22:44:56.564Z"
+    }
+  },
+  "blocks": {
+    "eli5-text": {
+      "id": "eli5-text",
+      "type": "text",
+      "config": {
+        "body": "When someone changes a lot of code, checking it in Bitbucket is like proofreading a long book whose pages arrive in alphabetical order. This tool puts them back in story order, one idea per chapter, and says what each chapter is for. If the same fix was made on ten pages, you read one and see a list of the other nine. You write notes in the margin as you go, and at the end your notes go to the author, or to a helper who makes the fixes."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "eli5-analogy": {
+      "id": "eli5-analogy",
+      "type": "analogy",
+      "config": {
+        "title": "Proofreading a book whose pages came shuffled",
+        "pairs": [
+          {
+            "real": "The pull request",
+            "like": "A long manuscript, pages in alphabetical order"
+          },
+          {
+            "real": "A concept page",
+            "like": "A chapter, put back in story order"
+          },
+          {
+            "real": "A repeated edit",
+            "like": "The same typo fixed on ten pages: read one, see the list"
+          },
+          {
+            "real": "The coverage check",
+            "like": "Counting the pages so none fell out of the binder"
+          },
+          {
+            "real": "Your comments",
+            "like": "Notes in the margin"
+          },
+          {
+            "real": "Post, or Hand to agent",
+            "like": "Send the notes to the author, or give them to an editor who makes the fixes"
+          }
+        ],
+        "breaks": "A book has one right order. A change can be read in several, so the agent's chapters are a judgment call you can question. The page count stays exact either way."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "summary-text": {
+      "id": "summary-text",
+      "type": "text",
+      "config": {
+        "body": "Planroom Review gains a second way to review: a **read-through** that takes you through every changed line, one idea at a time, instead of the overview deck or after it.\n\n- You pick the technique when a review opens: deck, read-through, or both with the deck first. The AI's own review is off unless you turn it on.\n- The agent splits the change into **concept pages** in reading order, then test pages, then a Housekeeping page. The server will not open the read-through until every added and removed line is on some page.\n- Each page explains its concept in plain words and shows the code as it is now or as a diff. Repeats and moved code fold into one example. Any name in the code can be clicked to search for it.\n- You comment on lines like on a PR, ask the agent about them, and tick off what you've read.\n- At the end, **Post** sends the comments to the PR as drafts, and **Hand to agent** writes a task file for any Claude session to make the fixes."
+      },
+      "refs": [
+        "Q-1",
+        "Q-10",
+        "Q-11",
+        "Q-17"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "summary-table": {
+      "id": "summary-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Part",
+          "Reused",
+          "New"
+        ],
+        "rows": [
+          [
+            "Opening a PR or branch, and the review's private copy of the code",
+            "As today",
+            "-"
+          ],
+          [
+            "Code view with highlighting and folding",
+            "The existing code viewer",
+            "Line selection, the as-it-is-now view, the old-line popover, clickable names"
+          ],
+          [
+            "Comment preview and posting as Bitbucket drafts",
+            "Comments tab and Post",
+            "Line ranges, comments on lines off the diff, repeat lists"
+          ],
+          [
+            "AI findings",
+            "Review tab and reactions",
+            "Shown under their lines in the read-through; off by default"
+          ],
+          [
+            "Threads with the agent",
+            "Slide and finding threads",
+            "Page threads on selected lines; the agent can add to the page"
+          ],
+          [
+            "Concept pages, coverage check, read tracking, task file",
+            "-",
+            "All new"
+          ]
+        ]
+      },
+      "caption": "What is reused and what is new",
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "how-text": {
+      "id": "how-text",
+      "type": "text",
+      "config": {
+        "body": "The agent first lays out the pages and which lines go on each, which is quick. The server checks nothing is left over. Page writers then fill the pages in, several at once, while you start reading the first one. One small agent writes the pseudo code for every test."
+      },
+      "refs": [
+        "Q-16",
+        "Q-26",
+        "Q-19"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "how-flow": {
+      "id": "how-flow",
+      "type": "flow",
+      "config": {
+        "direction": "LR",
+        "nodes": [
+          {
+            "id": "diff",
+            "label": "The change"
+          },
+          {
+            "id": "index",
+            "label": "Server: every changed line, repeats, moves",
+            "emphasis": "new"
+          },
+          {
+            "id": "outline",
+            "label": "Review agent lays out pages",
+            "emphasis": "new"
+          },
+          {
+            "id": "check",
+            "label": "Every changed line on a page?",
+            "shape": "decision",
+            "emphasis": "new"
+          },
+          {
+            "id": "writers",
+            "label": "Page writers (Sonnet), several at once",
+            "emphasis": "new"
+          },
+          {
+            "id": "pseudo",
+            "label": "Pseudo-code writer (smallest model)",
+            "emphasis": "new"
+          },
+          {
+            "id": "vet",
+            "label": "Review agent checks each page"
+          },
+          {
+            "id": "pages",
+            "label": "Pages appear in reading order",
+            "emphasis": "new"
+          },
+          {
+            "id": "you",
+            "label": "You read, tick, comment, ask"
+          }
+        ],
+        "edges": [
+          {
+            "from": "diff",
+            "to": "index"
+          },
+          {
+            "from": "index",
+            "to": "outline",
+            "label": "repeat and move hints"
+          },
+          {
+            "from": "outline",
+            "to": "check"
+          },
+          {
+            "from": "check",
+            "to": "outline",
+            "label": "lines left over",
+            "style": "dashed"
+          },
+          {
+            "from": "check",
+            "to": "writers",
+            "label": "yes"
+          },
+          {
+            "from": "check",
+            "to": "pseudo",
+            "label": "yes"
+          },
+          {
+            "from": "writers",
+            "to": "vet"
+          },
+          {
+            "from": "pseudo",
+            "to": "vet"
+          },
+          {
+            "from": "vet",
+            "to": "pages"
+          },
+          {
+            "from": "pages",
+            "to": "you"
+          }
+        ]
+      },
+      "caption": "How a read-through is built",
+      "refs": [
+        "Q-16",
+        "Q-26",
+        "Q-19",
+        "Q-27"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "how-seq": {
+      "id": "how-seq",
+      "type": "sequence",
+      "config": {
+        "actors": [
+          "You",
+          "Page",
+          "Server",
+          "Review agent"
+        ],
+        "messages": [
+          {
+            "from": 0,
+            "to": 1,
+            "text": "Pick read-through, AI review None"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "text": "reviewers.start with the technique"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "text": "read.outline"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "text": "Refused: lines left over in 2 files",
+            "reply": true
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "text": "read.outline, every line placed"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "text": "read.page.upsert, page 1"
+          },
+          {
+            "from": 2,
+            "to": 1,
+            "text": "Page 1 shows; the rest say coming"
+          },
+          {
+            "from": 0,
+            "to": 1,
+            "text": "Select lines 14-16, ask why a lock is needed"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "text": "Thread on page 1, lines 14-16"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "text": "Reply, plus the caller added to the page"
+          },
+          {
+            "from": 1,
+            "to": 0,
+            "text": "Answer and the added code, marked as asked",
+            "reply": true
+          }
+        ]
+      },
+      "caption": "Building the read-through, then asking about a line",
+      "refs": [
+        "Q-20"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "page-text": {
+      "id": "page-text",
+      "type": "text",
+      "config": {
+        "body": "Each page reads top to bottom: what the concept is and why, in a few plain sentences, then the code that makes it up, then any related code the agent attached, folded until you open it."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "page-kinds": {
+      "id": "page-kinds",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Page or piece",
+          "What it holds",
+          "Counts as read when"
+        ],
+        "rows": [
+          [
+            "Concept page",
+            "A plain summary, then each piece of changed code: a whole method or block, as it is now or as a diff",
+            "Each piece is ticked"
+          ],
+          [
+            "Repeated edit",
+            "One example in full, then one line per other place, flagged where it differs from the example",
+            "The example is ticked and every flagged place opened"
+          ],
+          [
+            "Moved code, on a concept page",
+            "From where to where, with only what changed on the way highlighted",
+            "Ticked once, for both places"
+          ],
+          [
+            "Test page, after all code pages",
+            "One entry per test case, grouped by what it tests, as a title, pseudo code or real code",
+            "Each entry is ticked, in whatever view"
+          ],
+          [
+            "Housekeeping, last",
+            "Lock files, generated files, binary files and spacing-only changes, listed by file",
+            "Opened"
+          ]
+        ]
+      },
+      "caption": "The kinds of page, and when each counts as read",
+      "refs": [
+        "Q-4",
+        "Q-18",
+        "Q-19",
+        "Q-27",
+        "Q-28"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "page-detail": {
+      "id": "page-detail",
+      "type": "text",
+      "config": {
+        "body": "**Two views of every piece.** *As it is now* shows the code you'll live with. Changed line numbers are highlighted, and hovering over or clicking one shows what the line was before, in a small popover. Removed lines leave a marker you can open. *As a diff* is the familiar view, widened to the whole method. The agent picks the view that reads best for each piece (a rewrite as it is now, a small tweak as a diff) unless your setting fixes one. Every piece has a switch.\n\n**Reaching further.** Click any name in the code to list everywhere it appears in the reviewed commit, with its line of code. The agent also attaches the callers and definitions that matter, folded, and you can ask it for more.\n\n**Keeping your place.** Tick a piece, or a whole page, when you've read it. With auto-tick on, a piece ticks itself once it has been on screen for 10 seconds or you comment on it. The list of pages down the side shows progress per page, and the top shows how much of the whole change you've read. A By file view lists every changed file and the pages its lines are on. Your place is saved with the review, so it survives a reload."
+      },
+      "refs": [
+        "Q-12",
+        "Q-13",
+        "Q-15",
+        "Q-22"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "page-compare": {
+      "id": "page-compare",
+      "type": "compare",
+      "config": {
+        "left": {
+          "label": "As it is now",
+          "block": {
+            "type": "code",
+            "config": {
+              "mode": "snippet",
+              "lang": "ts",
+              "file": "src/send.ts",
+              "source": "export async function send(job: Job, policy: RetryPolicy) {\n  for (let attempt = 1; ; attempt++) {\n    try {\n      return await deliver(job);\n    } catch (error) {\n      if (attempt >= policy.maxAttempts) throw error;\n      await sleep(policy.backoff(attempt));\n    }\n  }\n}"
+            }
+          }
+        },
+        "right": {
+          "label": "As a diff",
+          "block": {
+            "type": "code",
+            "config": {
+              "mode": "diff",
+              "lang": "ts",
+              "file": "src/send.ts",
+              "patch": "@@ -10,10 +10,10 @@\n-export async function send(job: Job) {\n+export async function send(job: Job, policy: RetryPolicy) {\n   for (let attempt = 1; ; attempt++) {\n     try {\n       return await deliver(job);\n     } catch (error) {\n-      if (attempt >= 3) throw error;\n-      await sleep(1000 * attempt);\n+      if (attempt >= policy.maxAttempts) throw error;\n+      await sleep(policy.backoff(attempt));\n     }\n   }\n }"
+            }
+          }
+        },
+        "highlight": "none"
+      },
+      "caption": "One piece, both views. In the as-it-is-now view, lines 10, 15 and 16 are highlighted, and hovering over 15 shows `if (attempt >= 3) throw error;`",
+      "refs": [
+        "Q-12"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "comments-text": {
+      "id": "comments-text",
+      "type": "text",
+      "config": {
+        "body": "You comment the way you would on a PR, and you can also ask the agent. At the end, the same comments go to the author, to an agent, or both."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "comments-detail": {
+      "id": "comments-detail",
+      "type": "text",
+      "config": {
+        "body": "**Commenting.** Click a line, or drag across several, and write a comment under them. On a repeated edit's example, the comment covers every place unless you tick *only here*.\n\n**Asking.** Select lines and ask instead. The agent answers in the page's thread and can add an explanation or more code to the page, marked as added because you asked. If it changes a piece you had ticked, that piece is unticked so you read it again.\n\n**Post** sends the comments to the PR as drafts, as today, with three new rules. The preview shows each comment exactly as it will land:\n\n- a comment on several lines sits on the last one and opens with *Lines 12-18*;\n- a comment on a line Bitbucket's diff doesn't show becomes a comment on the file, quoting the line number and its code;\n- a comment on a repeat's example ends with the list of other places it applies to.\n\n**Hand to agent** writes a task file into the review's folder and copies a one-line prompt to paste into any Claude session. It works for a PR and for a branch, and you can use it as well as Post."
+      },
+      "refs": [
+        "Q-7",
+        "Q-8",
+        "Q-14",
+        "Q-20",
+        "Q-21",
+        "Q-24",
+        "Q-25"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "comments-handoff": {
+      "id": "comments-handoff",
+      "type": "code",
+      "config": {
+        "mode": "snippet",
+        "lang": "markdown",
+        "file": ".planroom/reviews/pr-412/handoff-round-1.md",
+        "source": "# Review fixes: PR 412, Retry policy as a setting\n\nBranch `feature/retry-policy`, reviewed at commit `a1b2c3d`.\nWork in your own checkout of that branch. First check `git rev-parse HEAD` is `a1b2c3d`; if it is not, stop and ask.\nMake each change below and tick it. A comment that asks a question needs the reviewer's answer, not a code change: ask them.\n\n## 1. src/send.ts lines 15-16 (page: Retry limit is now a setting)\n\n```ts\n      if (attempt >= policy.maxAttempts) throw error;\n      await sleep(policy.backoff(attempt));\n```\n\nClamp maxAttempts to at least 1: a policy of 0 retries forever.\n\n- [ ] done\n\n## 2. Every place `retries: 3` was replaced (page: Callers pass the setting)\n\nExample: src/jobs/email.ts line 22. Also: src/jobs/sms.ts line 18, src/jobs/push.ts line 31.\n\nUse `RetryPolicy.default()` instead of a new literal.\n\n- [ ] done\n\n## 3. AI finding you agreed with: src/policy.ts line 40\n\nbackoff() overflows past attempt 31. Suggested fix:\n\n```ts\nreturn Math.min(base * 2 ** attempt, maxDelay);\n```\n\n- [ ] done"
+      },
+      "caption": "What the task file looks like",
+      "refs": [
+        "Q-8",
+        "Q-21"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "comments-prompt": {
+      "id": "comments-prompt",
+      "type": "callout",
+      "config": {
+        "tone": "note",
+        "title": "The copied prompt",
+        "body": "Read /home/you/repo/.planroom/reviews/pr-412/handoff-round-1.md and make the changes it lists in your checkout of feature/retry-policy."
+      },
+      "refs": [
+        "Q-8"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "settings-text": {
+      "id": "settings-text",
+      "type": "text",
+      "config": {
+        "body": "Five settings sit with the review's other preferences, saved on your machine. Four are new, and the AI review strength gains None."
+      },
+      "version": 2,
+      "updatedAt": "2026-10-14T22:43:45.327Z"
+    },
+    "settings-table": {
+      "id": "settings-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Setting",
+          "Choices",
+          "Starts at"
+        ],
+        "rows": [
+          [
+            "How to review",
+            "Overview deck, read-through, both",
+            "Your last choice; the deck the first time"
+          ],
+          [
+            "AI review strength",
+            "None, single, standard, thorough",
+            "None for a read-through, standard for the deck; then your last choice"
+          ],
+          [
+            "Code view",
+            "Auto (the agent picks), as it is now, as a diff",
+            "Auto"
+          ],
+          [
+            "Tests shown as",
+            "Title, pseudo code, real code",
+            "Pseudo code"
+          ],
+          [
+            "Auto-tick",
+            "On or off",
+            "On"
+          ]
+        ]
+      },
+      "refs": [
+        "Q-17",
+        "Q-12",
+        "Q-15",
+        "Q-19"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:42:09.191Z"
+    },
+    "numbers-text": {
+      "id": "numbers-text",
+      "type": "text",
+      "config": {
+        "body": "Sized for the PRs you named: 1,500 to 5,000 changed lines, more with tests. The times are targets to test against, not measurements."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "numbers-stats": {
+      "id": "numbers-stats",
+      "type": "stats",
+      "config": {
+        "items": [
+          {
+            "label": "Changed lines it is built for",
+            "value": "1.5k-5k",
+            "tone": "accent"
+          },
+          {
+            "label": "First page readable (target)",
+            "value": "~2 min"
+          },
+          {
+            "label": "Changed lines left off every page",
+            "value": 0,
+            "tone": "accent"
+          },
+          {
+            "label": "Seconds on screen before auto-tick",
+            "value": 10
+          }
+        ]
+      },
+      "refs": [
+        "Q-6",
+        "Q-16"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "numbers-table": {
+      "id": "numbers-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Limit",
+          "Value",
+          "Effect"
+        ],
+        "rows": [
+          [
+            "Lines per code read from the reviewed commit",
+            "400 (today)",
+            "A method longer than that is read in parts"
+          ],
+          [
+            "Search results per name",
+            "200",
+            "The list says when it was cut short"
+          ],
+          [
+            "Blocks a page writer returns per page",
+            "40, as a write-up section",
+            "A bigger concept is split into two pages"
+          ],
+          [
+            "Page writers at once",
+            "4",
+            "Keeps the review agent free for your questions"
+          ]
+        ]
+      },
+      "caption": "Limits that shape the build",
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "tech-text": {
+      "id": "tech-text",
+      "type": "text",
+      "config": {
+        "body": "The server knows every changed line and checks the agent's layout against it. The agent decides the order, the grouping and the words. The page reads the code itself, so nothing is pasted in twice."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "tech-arch": {
+      "id": "tech-arch",
+      "type": "architecture",
+      "config": {
+        "groups": [
+          {
+            "label": "Server",
+            "nodes": [
+              "index",
+              "coverage",
+              "search",
+              "handoff",
+              "posting"
+            ]
+          },
+          {
+            "label": "Page",
+            "nodes": [
+              "tab",
+              "viewer",
+              "ticks"
+            ]
+          },
+          {
+            "label": "Agents",
+            "nodes": [
+              "skill",
+              "writer"
+            ]
+          }
+        ],
+        "nodes": [
+          {
+            "id": "index",
+            "label": "Line index: hunks, repeats, moves, housekeeping",
+            "emphasis": "new"
+          },
+          {
+            "id": "coverage",
+            "label": "Outline coverage check",
+            "emphasis": "new"
+          },
+          {
+            "id": "search",
+            "label": "Name search (git grep)",
+            "emphasis": "new"
+          },
+          {
+            "id": "handoff",
+            "label": "Task file writer",
+            "emphasis": "new"
+          },
+          {
+            "id": "posting",
+            "label": "Posting: ranges, off-diff, repeats",
+            "emphasis": "changed"
+          },
+          {
+            "id": "tab",
+            "label": "Read-through tab and page list",
+            "emphasis": "new"
+          },
+          {
+            "id": "viewer",
+            "label": "CodeViewer: line select, now view, popover",
+            "emphasis": "changed"
+          },
+          {
+            "id": "ticks",
+            "label": "Read ticks and auto-tick",
+            "emphasis": "new"
+          },
+          {
+            "id": "skill",
+            "label": "planroom-review skill",
+            "emphasis": "changed"
+          },
+          {
+            "id": "writer",
+            "label": "planroom-page-writer subagent",
+            "emphasis": "new"
+          }
+        ],
+        "links": [
+          {
+            "from": "skill",
+            "to": "coverage",
+            "label": "read.outline"
+          },
+          {
+            "from": "index",
+            "to": "coverage"
+          },
+          {
+            "from": "index",
+            "to": "skill",
+            "label": "hints in the tool result"
+          },
+          {
+            "from": "skill",
+            "to": "writer",
+            "label": "page briefs"
+          },
+          {
+            "from": "skill",
+            "to": "tab",
+            "label": "read.page.upsert"
+          },
+          {
+            "from": "viewer",
+            "to": "search"
+          },
+          {
+            "from": "ticks",
+            "to": "tab"
+          },
+          {
+            "from": "tab",
+            "to": "posting",
+            "label": "notes"
+          },
+          {
+            "from": "tab",
+            "to": "handoff",
+            "label": "notes"
+          }
+        ]
+      },
+      "caption": "Where each new part lives",
+      "technical": true,
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "tech-shapes": {
+      "id": "tech-shapes",
+      "type": "code",
+      "config": {
+        "mode": "snippet",
+        "lang": "ts",
+        "file": "src/shared/review.ts",
+        "source": "// Server-built, per round, from `git diff -M -U0 base head` plus a -U3 pass for what Bitbucket shows.\ntype LineIndex = {\n    files: { path: string; from?: string; added: Range[]; removed: Range[]; shown: Range[];\n             housekeeping?: 'lock' | 'generated' | 'binary' | 'whitespace' }[];\n    repeats: { key: string; hunks: HunkRef[]; identical: boolean[] }[];   // normalised text match\n    moves: { from: HunkRef; to: HunkRef }[];                             // removed block == added block, 3+ lines\n};\n\n// Agent -> page. Refused until every added and removed line is in some piece.\n{ type: 'read.outline', pages: { id, kind: 'concept' | 'repeat' | 'tests' | 'housekeeping', title, order,\n    pieces: { id, file, lines: '40-72', oldLines?: '38-66', view?: 'now' | 'diff', move?: true }[] }[] }\n{ type: 'read.page.upsert', page: id, blocks: BlockEntry[], pieces: { id, note?, related?: CodeRef[] }[],\n    tests?: { piece, title, pseudo }[] }\n{ type: 'read.page.add', page: id, thread: string, blocks: BlockEntry[] }   // marked 'asked', unticks what it changes\n\n// Page -> server (not sent to the agent)\n{ type: 'read.tick', piece: id, read: boolean, how: 'manual' | 'auto' }\n\n// Changed\nnoteContent.anchor  // gains end (drag selection) and repeat?: { page, onlyHere: boolean }\nreviewers.start     // gains technique: 'deck' | 'readthrough' | 'both'; strength gains 'none'\nreviewPreferences   // gains technique, readthrough: { view: 'auto'|'now'|'diff', tests: 'title'|'pseudo'|'code', autoTick }"
+      },
+      "caption": "New records and events (sketch)",
+      "technical": true,
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "tech-table": {
+      "id": "tech-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Part",
+          "What",
+          "Notes"
+        ],
+        "rows": [
+          [
+            "GET /api/review/search?round&q",
+            "git grep -n -w -F in the worktree",
+            "200 hits, tracked files only, like /api/code"
+          ],
+          [
+            "POST comments.handoff",
+            "Writes handoff-round-<n>.md from the same derivation as the preview",
+            "Byte-for-byte rule extends to the file"
+          ],
+          [
+            "Thread target page:<id>",
+            "Carries the selected file and lines",
+            "Answered with comment.reply; additions via read.page.add"
+          ],
+          [
+            "agents/planroom-page-writer.md",
+            "Sonnet, Read and Bash: returns one page's blocks as JSON",
+            "Same file run with model: haiku for every test's pseudo code"
+          ],
+          [
+            "inlineOf in posting.ts",
+            "Range: last line, body opens with 'Lines a-b'. Off shown lines: file comment quoting the line",
+            "Repeat comments append the list of other places"
+          ],
+          [
+            "findingsUnlocked",
+            "True at once when the technique is read-through only",
+            "There is no deck to finish"
+          ]
+        ]
+      },
+      "caption": "Endpoints, threads and agents",
+      "technical": true,
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "rollout-text": {
+      "id": "rollout-text",
+      "type": "text",
+      "config": {
+        "body": "It ships in steps you can use as they land. The first step is a five-minute test on a scratch PR, because Bitbucket's documentation doesn't say how it takes comments on lines outside its diff."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "rollout-timeline": {
+      "id": "rollout-timeline",
+      "type": "timeline",
+      "config": {
+        "steps": [
+          {
+            "label": "Bitbucket posting test",
+            "detail": "On a scratch PR, post a draft on an unchanged line far from any change, on a context line, and with a span. Record what lands where; it settles the off-diff and multi-line rules.",
+            "exit": "Rules confirmed or adjusted"
+          },
+          {
+            "label": "Line index and coverage check",
+            "detail": "Server builds the line index; read.outline is checked against it.",
+            "exit": "An outline missing one line is refused, naming it"
+          },
+          {
+            "label": "Read-through tab",
+            "detail": "Page list, concept pages, both code views with the old-line popover, ticks and auto-tick, click and drag to comment.",
+            "exit": "A hand-written outline on a real PR reads end to end"
+          },
+          {
+            "label": "Agent pipeline",
+            "detail": "Skill changes, the page-writer subagent, pseudo code for tests, pages appearing as they are written, the technique choice and 'None' strength.",
+            "exit": "A 3,000-line PR has its first page up in about two minutes"
+          },
+          {
+            "label": "Repeats, moves, housekeeping",
+            "exit": "A ten-place rename reads as one page"
+          },
+          {
+            "label": "Search, asking, findings on lines",
+            "exit": "Ask about a line and the answer's code lands on the page"
+          },
+          {
+            "label": "Outputs and rounds",
+            "detail": "Posting rules, task file and prompt, the next round's read-through.",
+            "exit": "A posted round and a task file match their previews"
+          }
+        ]
+      },
+      "refs": [
+        "Q-24",
+        "Q-25"
+      ],
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "impact-text": {
+      "id": "impact-text",
+      "type": "text",
+      "config": {
+        "body": "Nothing changes for a review that keeps to the overview deck, except that the AI review can now be turned off. The read-through is added beside the deck, and both share posting and threads."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "impact-table": {
+      "id": "impact-table",
+      "type": "table",
+      "config": {
+        "columns": [
+          "Area",
+          "Change"
+        ],
+        "rows": [
+          [
+            "New spec: review-readthrough",
+            "Pages, coverage, views, ticks, repeats, moves, tests, housekeeping, asking"
+          ],
+          [
+            "review-sessions",
+            "Technique chosen at start and remembered"
+          ],
+          [
+            "review-findings",
+            "'None' strength; findings under their lines in the read-through"
+          ],
+          [
+            "review-comments",
+            "Drag ranges, off-diff and repeat posting rules, Hand to agent"
+          ],
+          [
+            "review-rounds",
+            "The next round's read-through covers only what changed"
+          ],
+          [
+            "planroom-review skill",
+            "Read-through steps; delegates to the new page writer"
+          ],
+          [
+            "planroom install",
+            "Links the new agent file"
+          ],
+          [
+            "Not in this change",
+            "Exporting the read-through as PDF or HTML, exact go-to-definition, GitHub PRs"
+          ]
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "risks-text": {
+      "id": "risks-text",
+      "type": "text",
+      "config": {
+        "body": "The biggest risks are the agent grouping things badly, and Bitbucket placing comments somewhere unexpected. Both are contained: the coverage check means a bad grouping never hides a line, and the posting test comes first."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "risks-matrix": {
+      "id": "risks-matrix",
+      "type": "riskMatrix",
+      "config": {
+        "items": [
+          {
+            "label": "Agent groups a concept badly",
+            "likelihood": 2,
+            "impact": 2,
+            "mitigation": "Coverage check; By file view; ask it to explain"
+          },
+          {
+            "label": "Bitbucket misplaces off-diff comments",
+            "likelihood": 2,
+            "impact": 2,
+            "mitigation": "Test first; file comment quoting the line"
+          },
+          {
+            "label": "Token cost on a 5,000-line PR",
+            "likelihood": 2,
+            "impact": 2,
+            "mitigation": "One outline pass; Sonnet writers; haiku pseudo code"
+          },
+          {
+            "label": "Auto-tick counts skimming as read",
+            "likelihood": 2,
+            "impact": 1,
+            "mitigation": "10s threshold; setting to turn it off"
+          },
+          {
+            "label": "Name search lists unrelated matches",
+            "likelihood": 3,
+            "impact": 1,
+            "mitigation": "Labelled a text search; whole words only"
+          },
+          {
+            "label": "Task file applied to a moved branch",
+            "likelihood": 1,
+            "impact": 3,
+            "mitigation": "Prompt checks the commit first and stops"
+          },
+          {
+            "label": "A near-identical repeat hides a bug",
+            "likelihood": 1,
+            "impact": 3,
+            "mitigation": "Any difference flags the place to open"
+          }
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "accept-text": {
+      "id": "accept-text",
+      "type": "text",
+      "config": {
+        "body": "Done means all of these hold. Untick any you disagree with."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "accept-list": {
+      "id": "accept-list",
+      "type": "checklist",
+      "config": {
+        "interactive": true,
+        "items": [
+          {
+            "id": "ac-technique",
+            "text": "A review opens with a choice of deck, read-through or both, and an AI review strength that includes None; both are remembered",
+            "done": true
+          },
+          {
+            "id": "ac-coverage",
+            "text": "The read-through does not open while any added or removed line is on no page, and the refusal names the lines",
+            "done": true
+          },
+          {
+            "id": "ac-order",
+            "text": "Pages run concept pages, then test pages, then Housekeeping, and the first page is readable before the last is written",
+            "done": true
+          },
+          {
+            "id": "ac-views",
+            "text": "Every piece switches between as it is now and as a diff; changed line numbers are highlighted and show the old line on hover or click",
+            "done": true
+          },
+          {
+            "id": "ac-repeats",
+            "text": "A repeated edit shows one example and one line per other place; a place that differs is flagged and must be opened",
+            "done": true
+          },
+          {
+            "id": "ac-moves",
+            "text": "Moved code shows once, from where to where, with only what changed highlighted",
+            "done": true
+          },
+          {
+            "id": "ac-tests",
+            "text": "Each test case shows as a title, pseudo code or real code, defaulted in settings and switchable per test",
+            "done": true
+          },
+          {
+            "id": "ac-search",
+            "text": "Clicking a name lists every whole-word match in the reviewed commit",
+            "done": true
+          },
+          {
+            "id": "ac-ticks",
+            "text": "Pieces tick by hand, or by auto-tick after 10 seconds or a comment; progress survives a reload",
+            "done": true
+          },
+          {
+            "id": "ac-comment",
+            "text": "Clicking or dragging across lines opens a comment; on a repeat it covers every place unless 'only here' is ticked",
+            "done": true
+          },
+          {
+            "id": "ac-ask",
+            "text": "Asking about selected lines gets an answer in the page's thread; anything the agent adds is marked and unticks what it changed",
+            "done": true
+          },
+          {
+            "id": "ac-findings",
+            "text": "With an AI review on, its findings show under the lines they are about",
+            "done": true
+          },
+          {
+            "id": "ac-post",
+            "text": "Post previews and sends ranges, off-diff and repeat comments exactly as the confirmed Bitbucket rules say",
+            "done": true
+          },
+          {
+            "id": "ac-handoff",
+            "text": "Hand to agent writes a task file matching its preview and copies a one-line prompt, for a PR or a branch",
+            "done": true
+          },
+          {
+            "id": "ac-round",
+            "text": "The next round's read-through covers only what changed since the posted round",
+            "done": true
+          }
+        ]
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-text": {
+      "id": "as-text",
+      "type": "text",
+      "config": {
+        "body": "These are details I chose that you didn't decide. Confirm each, or comment to change it."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-shown": {
+      "id": "as-shown",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "What counts as a line Bitbucket shows",
+        "body": "A line inside a diff hunk with three lines of context either side, git's default. The posting test confirms this before the off-diff rule ships."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-tests": {
+      "id": "as-tests",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "How test files are recognised",
+        "body": "By name and folder (`.test.`, `.spec.`, `test/`, `tests/`, `__tests__/`). The agent can move a file in or out of the test pages when the names mislead."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-house": {
+      "id": "as-house",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "What goes on the Housekeeping page",
+        "body": "Known lock files, anything marked generated in `.gitattributes`, binary files, and hunks that change only spacing."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-unlock": {
+      "id": "as-unlock",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Comments and findings with no deck",
+        "body": "For a read-through-only review there is no deck to finish, so the Comments tab (and the Review tab, if an AI review runs) opens at once."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-defaults": {
+      "id": "as-defaults",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "Setting defaults",
+        "body": "Tests shown as pseudo code, auto-tick on, code view on Auto, and the deck as the technique the very first time."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-writer": {
+      "id": "as-writer",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "One new subagent",
+        "body": "A single page-writer agent, run on Sonnet for pages and on the smallest model for every test's pseudo code, rather than two agents."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    },
+    "as-export": {
+      "id": "as-export",
+      "type": "callout",
+      "config": {
+        "tone": "assumption",
+        "title": "No export yet",
+        "body": "The read-through has no PDF or HTML export in this change, unlike the deck."
+      },
+      "version": 1,
+      "updatedAt": "2026-10-14T22:43:39.174Z"
+    }
+  },
+  "threads": {
+    "M-1": {
+      "id": "M-1",
+      "kind": "message",
+      "status": "open",
+      "messages": [
+        {
+          "id": "M-1.1",
+          "author": "user",
+          "text": "Can you also make sure that I can ask the agent any questions along the way to clarify lines or get extra context. It should be able to add information blocks or extra code lines to the sections",
+          "at": "2026-10-14T22:11:08.062Z"
+        },
+        {
+          "id": "M-1.2",
+          "author": "agent",
+          "text": "Yes, that's in. Every concept page gets its own thread with the agent. You can select a line or a few lines and ask about them (\"what calls this?\", \"why a lock here?\"). The agent answers there, and when an answer is worth keeping on the page it adds an info block or extra code (a caller, a definition, the old version) to that page, marked as added because you asked.\n\nThat means read-through pages, unlike the slide deck, stay open to additions after you start reading. I've added it to the first direction, and the deep dive will settle how those additions look.",
+          "at": "2026-10-14T22:12:20.013Z",
+          "touched": [
+            {
+              "ref": "Q-11",
+              "note": "Q-11 updated"
+            }
+          ]
+        }
+      ],
+      "version": 2,
+      "createdAt": "2026-10-14T22:11:08.062Z",
+      "updatedAt": "2026-10-14T22:12:20.013Z"
+    },
+    "M-2": {
+      "id": "M-2",
+      "kind": "message",
+      "status": "open",
+      "messages": [
+        {
+          "id": "M-2.1",
+          "author": "user",
+          "text": "Tests that were written as part of the PR should be shown in seperate sections towards the end. Not as part of the main code content",
+          "at": "2026-10-14T22:11:44.042Z"
+        },
+        {
+          "id": "M-2.2",
+          "author": "agent",
+          "text": "Agreed. Tests the PR added or changed get their own pages after all the code pages, grouped by what they test, never mixed into the code pages. A code page can link ahead to its tests. Each test shows as a title, pseudo code or real code as you set it. I've added this to the first direction.",
+          "at": "2026-10-14T22:12:20.013Z",
+          "touched": [
+            {
+              "ref": "Q-11",
+              "note": "Q-11 updated"
+            }
+          ]
+        }
+      ],
+      "version": 2,
+      "createdAt": "2026-10-14T22:11:44.042Z",
+      "updatedAt": "2026-10-14T22:12:20.013Z"
+    }
+  },
+  "checklistTicks": {},
+  "confirmedAssumptions": {
+    "as-shown": 1,
+    "as-tests": 1,
+    "as-house": 1,
+    "as-unlock": 1,
+    "as-defaults": 1,
+    "as-writer": 1,
+    "as-export": 1
+  },
+  "traces": [
+    {
+      "requirement": "The read-through opens only when every changed line is on a page",
+      "questions": [
+        "Q-4",
+        "Q-26"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Pages run concept pages, test pages, then Housekeeping",
+      "questions": [
+        "Q-16",
+        "Q-19",
+        "Q-22",
+        "Q-26",
+        "Q-28"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "A concept page explains, then shows the code",
+      "questions": [
+        "Q-11",
+        "Q-12",
+        "Q-13"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Each piece shows as it is now or as a diff",
+      "questions": [
+        "Q-12"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Clicking a name lists where it appears",
+      "questions": [
+        "Q-13"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "A repeated edit shows one example and one line per other place",
+      "questions": [
+        "Q-4",
+        "Q-18"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Moved code shows once",
+      "questions": [
+        "Q-27"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Tests have their own pages after the code pages",
+      "questions": [
+        "Q-4",
+        "Q-19"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Housekeeping lists what needs no line-by-line read",
+      "questions": [
+        "Q-28"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Reading is tracked and survives a reload",
+      "questions": [
+        "Q-15",
+        "Q-22"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Every page and file can be found from the side",
+      "questions": [
+        "Q-22"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "The reviewer can comment on a line or a range",
+      "questions": [
+        "Q-14",
+        "Q-25"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "The reviewer can ask the agent about lines",
+      "questions": [
+        "Q-20"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "Pages are written by page writers and test pseudo code by one small-model session",
+      "questions": [
+        "Q-19",
+        "Q-26"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "The read-through settings are saved on the machine",
+      "questions": [
+        "Q-12",
+        "Q-15",
+        "Q-17",
+        "Q-19"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "A read-through opens on a PR or a local branch",
+      "questions": [
+        "Q-5",
+        "Q-10"
+      ],
+      "spec": "review-readthrough"
+    },
+    {
+      "requirement": "The technique is chosen as a round opens and remembered",
+      "questions": [
+        "Q-10",
+        "Q-17"
+      ],
+      "spec": "review-sessions"
+    },
+    {
+      "requirement": "A review moves through ordered stages",
+      "questions": [
+        "Q-10",
+        "Q-17"
+      ],
+      "spec": "review-sessions"
+    },
+    {
+      "requirement": "Findings show under their lines in the read-through",
+      "questions": [
+        "Q-3"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Review runs at the reviewer's strength and is then verified",
+      "questions": [
+        "Q-3",
+        "Q-17"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Findings stay hidden until the walkthrough is done",
+      "questions": [
+        "Q-3",
+        "Q-17"
+      ],
+      "spec": "review-findings"
+    },
+    {
+      "requirement": "Comments on ranges, off-diff lines and repeats are placed by fixed rules",
+      "questions": [
+        "Q-14",
+        "Q-24",
+        "Q-25"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Hand to agent writes a task file",
+      "questions": [
+        "Q-7",
+        "Q-8",
+        "Q-21"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "Every comment has one of three sources",
+      "questions": [
+        "Q-7",
+        "Q-25"
+      ],
+      "spec": "review-comments"
+    },
+    {
+      "requirement": "A delta deck and read-through cover only what changed",
+      "questions": [
+        "Q-23"
+      ],
+      "spec": "review-rounds"
+    },
+    {
+      "requirement": "Install links each tool's skill and agents",
+      "questions": [
+        "Q-19",
+        "Q-26"
+      ],
+      "spec": "tool-installation"
+    }
+  ],
+  "validation": {
+    "passed": true,
+    "issues": [],
+    "trigger": "proposal.ready",
+    "at": "2026-10-14T22:50:30.078Z"
+  },
+  "phases": {
+    "phase1": {
+      "completed": true,
+      "aligned": {
+        "by": "agent",
+        "at": "2026-10-14T22:11:46.370Z"
+      },
+      "path": "finished",
+      "at": "2026-10-14T22:38:10.372Z",
+      "direction": "concept-pages"
+    },
+    "submission": {
+      "revision": 3,
+      "validate": true,
+      "outstanding": [],
+      "at": "2026-10-14T22:46:09.906Z"
+    },
+    "proposalReadyAt": "2026-10-14T22:50:29.519Z",
+    "proposalUnlocked": true,
+    "acceptedAt": "2026-10-14T22:56:19.769Z"
+  },
+  "review": null,
+  "slides": {},
+  "items": {},
+  "reactions": {},
+  "takes": {},
+  "notes": {},
+  "revision": 3,
+  "counters": {
+    "thread": 0,
+    "message": 2,
+    "suggestion": 0,
+    "note": 0
+  },
+  "agentCursor": 40,
+  "lastEvent": {
+    "type": "proposal.accept",
+    "changeId": "add-review-readthrough",
+    "seq": 40,
+    "at": "2026-10-14T22:56:19.769Z"
+  }
+}

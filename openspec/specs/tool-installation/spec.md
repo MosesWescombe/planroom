@@ -21,12 +21,12 @@ How `planroom install` makes each Planroom tool available to Claude Code: one MC
 
 ### Requirement: Install links each tool's skill and agents
 
-`planroom install` SHALL link the `planroom`, `planroom-ask` and `planroom-review` skills and the planning, review and illustration subagents (`planroom-researcher`, `planroom-proposer`, `planroom-reviewer` and `planroom-illustrator`) into the Claude config directory.
+`planroom install` SHALL link the `planroom`, `planroom-ask` and `planroom-review` skills and the planning, review, illustration and page-writing subagents (`planroom-researcher`, `planroom-proposer`, `planroom-reviewer`, `planroom-illustrator` and `planroom-page-writer`) into the Claude config directory.
 
 #### Scenario: Review skill and agents linked
 
 - **WHEN** the user runs `planroom install`
-- **THEN** `planroom-review` appears among the skills and `planroom-reviewer` and `planroom-illustrator` among the agents
+- **THEN** `planroom-review` appears among the skills and `planroom-reviewer`, `planroom-illustrator` and `planroom-page-writer` among the agents
 
 ### Requirement: Uninstall removes what install added
 

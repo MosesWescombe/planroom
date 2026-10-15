@@ -1,0 +1,5 @@
+events.jsonl*
+activity.jsonl*
+revisions/
+lock
+.*.tmp
