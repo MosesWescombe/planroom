@@ -318,8 +318,9 @@ describe('reading', () => {
             anchor: { target: 'page:retry-limit', lines: { file: 'src/send.ts', start: 4, end: 6, text: 'attempt += 1' } }
         });
         const content = server.session().current.pages['1:retry-limit']?.content;
+        await server.emit([{ type: 'comment.reply', threadId: 'C-1', text: 'It stops at the policy limit.' }]);
+        await server.page({ type: 'read.tick', piece: 'send', read: true, how: 'manual' });
         const added = await server.emit([
-            { type: 'comment.reply', threadId: 'C-1', text: 'It stops at the policy limit.' },
             { type: 'read.page.add', page: 'retry-limit', threadId: 'C-1', piece: 'send', text: 'The caller sets the policy.' }
         ]);
         expect(added.isError).toBe(false);
@@ -332,6 +333,25 @@ describe('reading', () => {
         expect(
             JSON.stringify(await server.emit([{ type: 'read.page.add', page: 'send-tests', threadId: 'C-1', text: 'x' }]))
         ).toContain('is not a thread on page send-tests');
+    });
+
+    it('unticks what a question was about once the agent answers: the piece holding its lines, else the page', async () => {
+        const server = await readingNow();
+        for (const piece of ['send', 'callers', 'test-retries'])
+            await server.page({ type: 'read.tick', piece, read: true, how: 'manual' });
+        const ticks = () => Object.keys(server.session().current.ticks).sort();
+        // A removed line shows beside the piece's new lines, so a question on it is about that piece.
+        await server.page({
+            type: 'comment.create',
+            anchor: { target: 'page:retry-limit', lines: { file: 'src/send.ts', side: 'old', start: 8, end: 8 } },
+            intent: 'question',
+            text: 'Where did 3 go?'
+        });
+        expect((await server.emit([{ type: 'comment.reply', threadId: 'C-1', text: 'Into the policy.' }])).isError).toBe(false);
+        expect(ticks()).toEqual(['1:callers', '1:test-retries']);
+        await server.page({ type: 'comment.create', anchor: { target: 'page:retry-limit' }, intent: 'question', text: 'Why?' });
+        await server.emit([{ type: 'comment.reply', threadId: 'C-2', text: 'Callers differ.' }]);
+        expect(ticks()).toEqual(['1:test-retries']);
     });
 
     it('lists whole-word matches of a name in tracked files of the reviewed commit, at most 200', async () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { recordId, repoPath } from './blocks.js';
 import { contextBlock } from './questions.js';
+import type { Anchor } from './records.js';
 
 /**
  * The read-through: the change split into pages the reviewer reads line by line. The server builds a line index of the
@@ -499,6 +500,25 @@ export function pieceRead(
     return repeat.group.places.every(
         (place, at) => at === repeat.example || !place.differs || Boolean(parts.ticks[tickKey(round, piece.id, at)])
     );
+}
+
+/**
+ * The pieces of a page a question on it is about: those whose lines hold the lines it asks about, or every piece when it
+ * asks about the page's words, the whole page, or lines no piece holds.
+ */
+export function askedPieces(index: LineIndex | undefined, pieces: PieceSpec[], lines: Anchor['lines']): PieceSpec[] {
+    if (!lines) return pieces;
+    const asked: LineSpan = [lines.start, lines.end];
+    const path = index && indexFileOf(index, lines.file)?.path;
+    const held = pieces.filter((piece) => {
+        const span = lines.side === 'new' ? piece.lines : piece.oldLines;
+        if (piece.file === lines.file && span && overlaps(parseRange(span), asked)) return true;
+        // A piece also shows the lines removed beside its own, and the places of its repeat.
+        const changed = index && path ? pieceLines(index, piece).get(path) : undefined;
+        const side = lines.side === 'new' ? changed?.added : changed?.removed;
+        return spanLines(asked).some((line) => side?.has(line));
+    });
+    return held.length ? held : pieces;
 }
 
 /** Whether the round's Housekeeping page has been opened, which reads every file on it. */

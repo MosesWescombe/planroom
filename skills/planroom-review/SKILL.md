@@ -171,7 +171,8 @@ up one by one as they are written, so the reviewer starts reading the first whil
    on it, so get it right first.
 4. **Answer questions on lines.** A `comment.create` on `page:<id>` carries the lines the reviewer selected in
    `anchor.lines`, and in `anchor.lines.text` the code they highlighted, which can start and end partway through a
-   line: answer about that code, using the whole lines as context. Reply with `comment.reply`. To show more code or explain on the page itself, add to it with
+   line: answer about that code, using the whole lines as context. One on the page's words instead carries what they
+   selected of the title, summary, a note, pseudo code or an addition in `anchor.quote`. Reply with `comment.reply`. To show more code or explain on the page itself, add to it with
    `read.page.add { page, threadId, piece?, text?, blocks? }`, under the piece it is about: it is marked as added at
    their request, never changes what the page showed, and unticks that piece.
 
@@ -212,7 +213,7 @@ architecture node id, or a sequence actor), and a `draft`: the comment to post.
 | `impact.send` | The reviewer's concerns, under each of your areas (by `id`) and areas they added (no `id`). Investigate them, write Trade-offs, and publish it: see steps 6 and 7. |
 | `walkthrough.done` | The findings now show. Make sure every verified finding is sent. `how: "skipped"` means they knew the change; if Trade-offs is not published yet, still write and publish it. |
 | `item.react` | `agree` and `reword` need nothing. On `reject`, read the `reason`: withdraw or soften any finding it undermines that the reviewer has not reacted to yet. |
-| `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. A thread on `slide:<id>` or `item:<id>` is about that slide or finding; one on `page:<id>` is about a read-through page, with the selected lines in `anchor.lines` and the code highlighted in `anchor.lines.text` (see step 4 of the read-through); one on `comment:<key>` is about a comment the round will post, by its key (`comment:item:<id>`, `comment:note:<id>` or `comment:summary`). |
+| `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. A thread on `slide:<id>` or `item:<id>` is about that slide or finding; one on `page:<id>` is about a read-through page, with the selected lines in `anchor.lines` and the code highlighted in `anchor.lines.text`, or the words selected in `anchor.quote` (see step 4 of the read-through); one on `comment:<key>` is about a comment the round will post, by its key (`comment:item:<id>`, `comment:note:<id>` or `comment:summary`). |
 | `preferences.change` | Follow the new preferences for slides you have not written yet. |
 | `review.posted` | Say what was posted. With `failed` non-empty, the reviewer retries from the page. |
 | `session.end` | The reviewer ended the review: stop. |

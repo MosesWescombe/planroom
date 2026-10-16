@@ -61,8 +61,8 @@ import { useIsCurrentRound, useShownRound } from './hooks';
 /**
  * The read-through: the change line by line, one concept to a page in the agent's reading order, then the test pages,
  * then Housekeeping. Each piece of code shows as it is now or as a diff; the reviewer ticks what they have read, by
- * hand or by auto-tick, selects code to comment on its lines, and asks the agent about the code selected in the page's
- * thread.
+ * hand or by auto-tick, selects code to comment on its lines, and asks the agent about the code or the words selected
+ * in the page's thread.
  */
 
 /** How long a piece stays on screen before auto-tick ticks it. */
@@ -690,8 +690,8 @@ function Related({ code }: { code: RelatedCode }) {
     );
 }
 
-/** What the agent added because the reviewer asked, marked as such. */
-function Additions({ additions }: { additions: PageAddition[] }) {
+/** What the agent added because the reviewer asked, marked as such, its words selectable to ask about. */
+function Additions({ page, additions }: { page: string; additions: PageAddition[] }) {
     if (!additions.length) return null;
     return (
         <>
@@ -699,7 +699,7 @@ function Additions({ additions }: { additions: PageAddition[] }) {
                 <aside key={at} className="page-addition" aria-label="Added at your request">
                     <span className="chip">Added at your request</span>
                     {addition.text && (
-                        <div className="prose">
+                        <div className="prose" data-anchor-target={`page:${page}`}>
                             <Markdown source={addition.text} />
                         </div>
                     )}
@@ -753,8 +753,8 @@ function pieceWhere(piece: PieceSpec): string {
 }
 
 /**
- * One piece of a concept page: what it is for and any blocks that explain it, then its code, the repeat's other places,
- * the code it reaches, additions.
+ * One piece of a concept page: what it is for, its words selectable to ask about, and any blocks that explain it, then
+ * its code, the repeat's other places, the code it reaches, additions.
  */
 const PieceCard = memo(function PieceCard({
     reading,
@@ -792,7 +792,9 @@ const PieceCard = memo(function PieceCard({
                 <span className="piece-name">
                     <FoldButton folded={folded} label={where} onFold={setFolded} />
                     {read && <ReadMark />}
-                    <code className="piece-where">{where}</code>
+                    <code className="piece-where truncate" title={where}>
+                        {where}
+                    </code>
                 </span>
                 {piece.repeat && <span className="chip">Repeated edit</span>}
                 {piece.from && <span className="chip">Moved</span>}
@@ -803,7 +805,7 @@ const PieceCard = memo(function PieceCard({
             </header>
             <div className="piece-body" hidden={folded}>
                 {note && (
-                    <div className="prose piece-note-text">
+                    <div className="prose piece-note-text" data-anchor-target={`page:${page}`}>
                         <Markdown source={note} />
                     </div>
                 )}
@@ -828,13 +830,16 @@ const PieceCard = memo(function PieceCard({
                 {related?.map((code, at) => (
                     <Related key={at} code={code} />
                 ))}
-                <Additions additions={additions} />
+                <Additions page={page} additions={additions} />
             </div>
         </article>
     );
 });
 
-/** One test case: its title, pseudo code or real code, switchable, and its Read tick, which counts in any view. */
+/**
+ * One test case: its title, pseudo code or real code, switchable, and its Read tick, which counts in any view. Its
+ * pseudo code is selectable to ask about.
+ */
 function TestCard({
     reading,
     page,
@@ -867,7 +872,7 @@ function TestCard({
                 <span className="piece-name strong">
                     <FoldButton folded={folded} label={plainTitle(title)} onFold={setFolded} />
                     {read && <ReadMark />}
-                    <span>
+                    <span className="truncate" title={plainTitle(title)}>
                         <TitleMarkdown source={title} />
                     </span>
                 </span>
@@ -891,7 +896,11 @@ function TestCard({
             </header>
             <div className="piece-body" hidden={folded}>
                 {view === 'pseudo' && pseudo && (
-                    <pre className="pseudo-code" aria-label={`Pseudo code of ${plainTitle(title)}`}>
+                    <pre
+                        className="pseudo-code"
+                        aria-label={`Pseudo code of ${plainTitle(title)}`}
+                        data-anchor-target={`page:${page}`}
+                    >
                         {pseudo}
                     </pre>
                 )}
@@ -917,11 +926,9 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
         (view) =>
             Object.values(view.threads)
                 .filter((thread) => thread.anchor?.target === `page:${page.id}`)
-                .map((thread) => ({
-                    id: thread.id,
-                    lines: thread.anchor?.lines
-                        ? `${thread.anchor.lines.file}:${thread.anchor.lines.start}${thread.anchor.lines.end !== thread.anchor.lines.start ? `-${thread.anchor.lines.end}` : ''}`
-                        : undefined
+                .map(({ id, anchor }) => ({
+                    id,
+                    heading: anchor?.lines || anchor?.quote ? describeAnchor(anchor) : undefined
                 })),
         deepEqual
     );
@@ -929,12 +936,14 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
     return (
         <section className="page-threads" aria-label="Questions on this page">
             <h2 className="eyebrow">Questions on this page</h2>
-            {threads.length === 0 && <p className="small muted">Select lines and ask the agent, or ask about the whole page.</p>}
+            {threads.length === 0 && (
+                <p className="small muted">Select code or words and ask the agent, or ask about the whole page.</p>
+            )}
             {threads.map((thread) => (
                 <ThreadRow
                     key={thread.id}
                     id={thread.id}
-                    {...(thread.lines ? { heading: thread.lines } : {})}
+                    {...(thread.heading ? { heading: thread.heading } : {})}
                     onOpen={() => setOpen(thread.id)}
                 />
             ))}
@@ -1003,7 +1012,7 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
                 </div>
             ) : (
                 <>
-                    <div className="prose page-summary">
+                    <div className="prose page-summary" data-anchor-target={`page:${page.id}`}>
                         <Markdown source={content.summary} />
                     </div>
                     {content.blocks?.map((block, index) => (
@@ -1038,7 +1047,7 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
                                   />
                               );
                           })}
-                    <Additions additions={added(undefined)} />
+                    <Additions page={page.id} additions={added(undefined)} />
                 </>
             )}
             <PageThreads page={page} editable={reading.editable} />
@@ -1097,6 +1106,19 @@ function MatchLine({ match }: { match: SearchMatch }) {
             </code>
             <code className="search-text">{match.text.trim()}</code>
         </>
+    );
+}
+
+/** A whole-word match a search found, as a code block of its one line under its file. */
+function Use({ match }: { match: SearchMatch }) {
+    return (
+        <CodeViewer
+            source={match.text.trim()}
+            start={match.line}
+            language={resolveLanguage('', undefined, match.file)}
+            title={match.file}
+            label={`${match.file} line ${match.line}`}
+        />
     );
 }
 
@@ -1178,9 +1200,9 @@ function SearchDialog({
                             ? `The first ${result.matches.length} matches; there are more, so the list was cut short.`
                             : plural(result.matches.length, uses ? 'match' : 'declaration', uses ? 'matches' : 'declarations')}
                     </p>
-                    <ol className="search-matches">
+                    <ol className={uses ? 'search-matches search-uses' : 'search-matches'}>
                         {result.matches.map((match, at) => (
-                            <li key={at}>{uses ? <MatchLine match={match} /> : <Declaration match={match} />}</li>
+                            <li key={at}>{uses ? <Use match={match} /> : <Declaration match={match} />}</li>
                         ))}
                     </ol>
                 </>

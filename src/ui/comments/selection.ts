@@ -1,5 +1,6 @@
 import clamp from 'lodash/clamp';
-import { captureAnchor } from '../../shared/anchors';
+import minBy from 'lodash/minBy';
+import { captureAnchor, type ResolvedAnchor, resolveAnchor } from '../../shared/anchors';
 import type { Anchor } from '../../shared/records';
 
 /** The longest quote an anchor keeps. */
@@ -11,6 +12,30 @@ export const TARGET_ATTRIBUTE = 'data-anchor-target';
 /** The selector for a commentable element by its target, escaped for a double-quoted attribute value. */
 export function targetSelector(target: string): string {
     return `[${TARGET_ATTRIBUTE}="${target.replace(/["\\]/g, '\\$&')}"]`;
+}
+
+/** Resolution methods, best first. */
+const METHODS: readonly ResolvedAnchor['method'][] = ['position', 'context', 'quote', 'target'];
+
+/**
+ * Where an anchor is on the page: the element of its target it resolves in, and where in that element's text, with
+ * `found` null when its quote is gone; undefined when its target is not rendered. A target can mark several elements,
+ * such as every passage of a read-through page, and the anchor is in the one that holds its quote best: with its
+ * context first, then by the method that found it.
+ */
+export function locateAnchor(anchor: Anchor): { element: Element; found: ResolvedAnchor | null } | undefined {
+    const located = [...document.querySelectorAll(targetSelector(anchor.target))].map((element) => {
+        const text = element.textContent ?? '';
+        const found = resolveAnchor(text, anchor);
+        const inContext =
+            found !== null &&
+            text.slice(0, found.start).endsWith(anchor.quote?.prefix ?? '') &&
+            text.slice(found.end).startsWith(anchor.quote?.suffix ?? '');
+        const rank = found ? METHODS.indexOf(found.method) + (inContext ? 0 : METHODS.length) : Number.POSITIVE_INFINITY;
+        return { element, found, rank };
+    });
+    const best = minBy(located, 'rank');
+    return best && { element: best.element, found: best.found };
 }
 
 /** The element a DOM node is, or sits in when it is text. */

@@ -22,6 +22,7 @@ import { AGENT_EVENTS, type AgentEvent, agentEventTypes, emitBatch } from '../sh
 import { type Issue, toIssues } from '../shared/issues.js';
 import { type ContextBlock, isInfo, type QuestionRecord } from '../shared/questions.js';
 import {
+    askedPieces,
     describeLeftover,
     HOUSEKEEPING_PAGE,
     indexFileOf,
@@ -651,6 +652,27 @@ function applyReviewEvent(
     }
 }
 
+/** Untick the pieces a question on a read-through page is about, so the reviewer reads them again with the answer. */
+function untickAsked(draft: Draft, thread: ThreadRecord): void {
+    const page = thread.anchor?.target.match(/^page:(.+)$/)?.[1];
+    const review = draft.state.review;
+    if (!page || !review) return;
+    const round = currentRound(review);
+    const record = ownRecord(draft.state.pages, pageKey(round.n, page));
+    if (!record) return;
+    const ticked = askedPieces(round.index, record.pieces, thread.anchor?.lines)
+        .map((piece) => tickKey(round.n, piece.id))
+        .filter((tick) => Object.hasOwn(draft.state.ticks, tick));
+    for (const tick of ticked) draft.removeTick(tick);
+    if (ticked.length)
+        draft.note({
+            title: 'Unticked what a question was answered on',
+            detail: record.title,
+            ref: `page:${page}`,
+            kind: 'attention'
+        });
+}
+
 /** Why the round cannot take a read-through layout now, if it cannot. */
 function outlineRefusal(draft: Draft, round: RoundRecord): string | undefined {
     if (round.postedAt) return `round ${round.n} is posted; it takes no more read.outline`;
@@ -1109,6 +1131,7 @@ export function applyAgentBatch(
                     updatedAt: now
                 };
                 draft.putThread(record);
+                untickAsked(draft, record);
                 replies.push({ index, threadId: thread.id, explicit: event.touched !== undefined });
                 draft.note({
                     title: thread.kind === 'message' ? 'Replied to your message' : 'Replied to a comment',

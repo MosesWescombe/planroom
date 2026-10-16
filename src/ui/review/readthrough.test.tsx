@@ -658,6 +658,7 @@ describe('pieces of code', () => {
         await userEvent.click(dialog.getByRole('button', { name: 'Show every use' }));
         expect(await dialog.findByText('The first 200 matches; there are more, so the list was cut short.')).toBeInTheDocument();
         expect(dialog.getAllByRole('listitem')).toHaveLength(200);
+        expect(dialog.getByRole('group', { name: 'src/many.ts line 1' })).toHaveTextContent('deliver(0);');
         await userEvent.keyboard('{Escape}');
 
         fireEvent.click(name, { ctrlKey: true });
@@ -809,6 +810,50 @@ describe('reading and commenting', () => {
                 text: 'Can it be zero?'
             })
         );
+    });
+
+    it('asks the agent about the words around the code, quoting the passage selected', async () => {
+        render(<App store={storeWith(readView())} />);
+        const note = within(piece('src/send.ts:1-11')).getByText('The send loop reads the limit.');
+        const selection = defined(window.getSelection());
+        selection.removeAllRanges();
+        selection.addRange(defined(rangeFromOffsets(note, 14, 29)));
+        fireEvent(document, new Event('selectionchange'));
+        const toolbar = await screen.findByRole('toolbar', { name: 'Selection actions' });
+        await userEvent.click(within(toolbar).getByRole('button', { name: 'Comment' }));
+        const composer = within(screen.getByRole('dialog', { name: 'Comment' }));
+        await userEvent.type(composer.getByRole('textbox', { name: 'Comment' }), 'Which limit?');
+        await userEvent.click(composer.getByRole('button', { name: 'Send to agent' }));
+        expect(posted).toContainEqual(
+            expect.objectContaining({
+                type: 'comment.create',
+                anchor: expect.objectContaining({
+                    target: 'page:retry-limit',
+                    quote: expect.objectContaining({ exact: 'reads the limit', prefix: 'The send loop ' })
+                }),
+                intent: 'question',
+                text: 'Which limit?'
+            })
+        );
+    });
+
+    it('lists a question on the words by its quote, attached to whichever passage holds it', async () => {
+        const quoting = (id: string, exact: string, suffix: string) =>
+            commentThread(id, 'page:retry-limit', {
+                anchor: {
+                    target: 'page:retry-limit',
+                    position: { start: 0, end: exact.length },
+                    quote: { exact, prefix: '', suffix }
+                },
+                messages: [{ id: `${id}.1`, author: 'user', text: `About ${exact}`, at: NOW }]
+            });
+        const threads = [quoting('T-2', 'Every job', ' passes the policy.'), quoting('T-3', 'A sentence', ' cut since.')];
+        render(<App store={storeWith(readView({ threads }))} />);
+        const asked = within(screen.getByRole('region', { name: 'Questions on this page' }));
+        const row = (exact: string) => asked.getByRole('button', { name: new RegExp(`About ${exact}`) });
+        await waitFor(() => expect(row('A sentence')).toHaveTextContent('Detached'));
+        expect(row('Every job')).toHaveTextContent('"Every job"');
+        expect(row('Every job')).not.toHaveTextContent('Detached');
     });
 
     it('shows a question folded under the last line it asks about, waiting, then the answer new until opened in a dialog', async () => {

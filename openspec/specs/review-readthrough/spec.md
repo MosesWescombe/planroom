@@ -255,7 +255,7 @@ The reviewer SHALL be able to select code in a piece, with the mouse or with Shi
 
 ### Requirement: The reviewer can ask the agent about lines
 
-Each page SHALL have a thread with the agent. The reviewer SHALL be able to select code on one or more lines and ask about it, and the thread SHALL carry the selected file, the lines the selection touches and exactly the code selected. The agent SHALL answer in the thread and MAY add an explanation or more code to the page, which SHALL be marked as added at the reviewer's request. An addition MUST NOT change anything the page already showed. When an addition changes a piece the reviewer had ticked, that piece SHALL be unticked.
+Each page SHALL have a thread with the agent. The reviewer SHALL be able to select code on one or more lines and ask about it, and the thread SHALL carry the selected file, the lines the selection touches and exactly the code selected. The agent SHALL answer in the thread and MAY add an explanation or more code to the page, which SHALL be marked as added at the reviewer's request. An addition MUST NOT change anything the page already showed. When an addition changes a piece the reviewer had ticked, that piece SHALL be unticked. When the agent answers a question, the pieces it is about SHALL be unticked: those holding the lines it asks about, or every piece of the page when it asks about the page's words or the whole page.
 
 #### Scenario: Ask and answer
 
@@ -276,6 +276,11 @@ Each page SHALL have a thread with the agent. The reviewer SHALL be able to sele
 
 - **WHEN** an addition changes a piece the reviewer had ticked
 - **THEN** that piece is unticked
+
+#### Scenario: Answered question unticks its piece
+
+- **WHEN** the reviewer had ticked a piece and the agent answers a question on its lines
+- **THEN** that piece is unticked, and the page's other pieces stay ticked
 
 ### Requirement: Pages are written by page writers and test pseudo code by one small-model session
 

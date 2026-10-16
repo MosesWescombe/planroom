@@ -288,8 +288,12 @@ function placeCaret(caret: HTMLElement, lines: HTMLElement, root: HTMLElement): 
     // A point between elements, or on an empty line, has no box of its own: the line's code stands in.
     const box = point.getClientRects()[0] ?? code.getBoundingClientRect();
     const origin = root.getBoundingClientRect();
-    caret.style.left = `${box.left - origin.left}px`;
-    caret.style.top = `${box.top - origin.top}px`;
+    const [left, top] = [`${box.left - origin.left}px`, `${box.top - origin.top}px`];
+    // A caret that moves restarts its blink, as in an editor, so it shows at once where it lands. jsdom has no animations.
+    if (left !== caret.style.left || top !== caret.style.top)
+        for (const blink of caret.getAnimations?.() ?? []) blink.currentTime = 0;
+    caret.style.left = left;
+    caret.style.top = top;
     caret.style.height = `${box.height}px`;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { describeAnchor, resolveAnchor } from '../../shared/anchors';
+import { describeAnchor } from '../../shared/anchors';
 import type { CommentIntent, ThreadRecord } from '../../shared/records';
 import { Attachments, usePastes } from '../components/Attachments';
 import { CommentIcon } from '../components/icons';
@@ -9,7 +9,7 @@ import { useStore } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 import { type AnchorState, setAnchorStates } from './anchorStatus';
 import { closeComposer, openComposer, useComposition } from './composer';
-import { captureSelection, place, rangeFromOffsets, type SelectionAnchor, targetSelector } from './selection';
+import { captureSelection, locateAnchor, place, rangeFromOffsets, type SelectionAnchor } from './selection';
 
 const INTENTS: { intent: CommentIntent; toolbar: string; composer: string }[] = [
     { intent: 'question', toolbar: 'Comment', composer: 'Question' },
@@ -48,12 +48,12 @@ function useHighlights(): void {
                     Boolean(thread.kind === 'comment' && thread.anchor)
             );
             for (const thread of open) {
-                const element = document.querySelector(targetSelector(thread.anchor.target));
-                if (!element) {
+                const located = locateAnchor(thread.anchor);
+                if (!located) {
                     states.set(thread.id, 'hidden');
                     continue;
                 }
-                const found = resolveAnchor(element.textContent ?? '', thread.anchor);
+                const { element, found } = located;
                 states.set(thread.id, found ? 'attached' : 'detached');
                 // A comment on a whole question has no quote: painting all of its text would bury the card.
                 if (found && found.method !== 'target' && thread.status === 'open') {
@@ -88,9 +88,9 @@ function usePendingHighlight(composition: ReturnType<typeof useComposition>): vo
             CSS.highlights.delete('planroom-pending');
             return undefined;
         }
-        const element = document.querySelector(targetSelector(composition.anchor.target));
-        const found = element && resolveAnchor(element.textContent ?? '', composition.anchor);
-        const range = found && found.method !== 'target' && rangeFromOffsets(element, found.start, found.end);
+        const located = locateAnchor(composition.anchor);
+        const found = located?.found;
+        const range = found && found.method !== 'target' && rangeFromOffsets(located.element, found.start, found.end);
         if (range) CSS.highlights.set('planroom-pending', new Highlight(range));
         return () => void CSS.highlights.delete('planroom-pending');
     }, [composition]);

@@ -13,7 +13,7 @@ import { readSetting } from '../local';
 import { setAnchorStates } from './anchorStatus';
 import { CommentLayer } from './CommentLayer';
 import { closeComposer, commentOnWhole } from './composer';
-import { captureSelection, rangeFromOffsets } from './selection';
+import { captureSelection, locateAnchor, rangeFromOffsets } from './selection';
 
 /** Make `range` the page's only selection. */
 function selectRange(range: Range): void {
@@ -84,6 +84,31 @@ describe('commenting on any selected text', () => {
         range.setEnd(instance(screen.getByText('second').firstChild, Text), 3);
         selectRange(range);
         expect(captureSelection()).toBeUndefined();
+    });
+
+    it('finds an anchor on a target that marks several passages in the passage that holds its quote in context', () => {
+        renderWith(
+            storeWith(makeView()),
+            <>
+                <p data-anchor-target="page:p">The send loop reads the limit.</p>
+                <p data-anchor-target="page:p">The send loop calls the policy.</p>
+            </>
+        );
+        const quoting = (suffix: string) =>
+            locateAnchor({
+                target: 'page:p',
+                position: { start: 0, end: 13 },
+                quote: { exact: 'The send loop', prefix: '', suffix }
+            });
+        expect(quoting(' calls the policy.')?.element).toBe(screen.getByText('The send loop calls the policy.'));
+        expect(quoting(' reads the limit.')?.element).toBe(screen.getByText('The send loop reads the limit.'));
+        const gone = locateAnchor({
+            target: 'page:p',
+            position: { start: 0, end: 4 },
+            quote: { exact: 'gone', prefix: '', suffix: '' }
+        });
+        expect(gone).toEqual({ element: screen.getByText('The send loop reads the limit.'), found: null });
+        expect(locateAnchor({ target: 'page:other' })).toBeUndefined();
     });
 
     it('comment on a table cell: the toolbar opens the composer, and sending carries the change intent and the anchor', async () => {

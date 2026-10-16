@@ -7199,14 +7199,26 @@ button.nav-item {
     background: var(--accent-soft);
 }
 
-/* Only the code takes a selection: the gutter, the screen-reader words and the controls stay out of it. */
+/* Only the code takes a selection: the gutter, the screen-reader words and the controls stay out of it. The space after
+   a line's code takes it too, so a drag can start or pass there as in an editor, reaching the end of that line. */
 .code-line {
     user-select: none;
 }
 
+.code-viewer .line-text {
+    flex: 1;
+}
+
+.code-viewer .line-text,
 .line-code,
 .was-popover {
     user-select: text;
+}
+
+.line-text > .visually-hidden,
+.gone-toggle,
+.fold-more {
+    user-select: none;
 }
 
 /* The code a question on a read-through page is about, as it reads in the viewer. */
@@ -7225,6 +7237,7 @@ button.nav-item {
     margin-left: -1px;
     background: var(--ink);
     pointer-events: none;
+    animation: blink 1s steps(1) infinite;
 }
 
 /* The outline sits inside, since the viewer clips what overflows it. */
@@ -7365,7 +7378,6 @@ button.nav-item {
     top: 0;
     z-index: 3;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin: -12px -12px 0;
@@ -7394,12 +7406,18 @@ button.nav-item {
     display: none;
 }
 
-/* A piece's place or a test's title, with its fold chevron and read mark kept beside it when a long path wraps. */
+/* A piece's place or a test's title, with its fold chevron and read mark beside it. */
 .piece-name {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
+}
+
+/* Only the place or title gives way, cut short, so the header's controls stay on its line. */
+.piece-head > :not(.piece-name),
+.piece-name > :not(.truncate) {
+    flex-shrink: 0;
 }
 
 .piece-where {
@@ -7444,6 +7462,13 @@ button.nav-item {
     flex-direction: column;
     gap: 6px;
     padding-left: 18px;
+}
+
+/* Every use of a name, each a code block of its own, so no list numbers beside them. */
+.search-uses {
+    gap: 8px;
+    padding-left: 0;
+    list-style: none;
 }
 
 .repeat-places li {
