@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keyMove, pastPiece, pieceAt } from './readKeys';
+import { keyMove, middlePiece, pastPiece, pieceAt } from './readKeys';
 
 /** A tall piece then a short one, down an 800px view that scrolls to 2400. */
 const PIECES = [
@@ -14,6 +14,16 @@ describe('the read-through keys', () => {
         expect(pieceAt(PIECES, at(900))).toBe(1);
         expect(pieceAt(PIECES, at(2000))).toBe(1);
         expect(pieceAt([], at(0))).toBe(-1);
+    });
+
+    it('takes the piece across the middle of the view for Space, else the one closest to it', () => {
+        const short = [
+            { top: 16, bottom: 216 },
+            ...PIECES.map((piece) => ({ top: piece.top + 200, bottom: piece.bottom + 200 }))
+        ];
+        expect(middlePiece(short, at(0))).toBe(1);
+        expect(middlePiece(PIECES, at(1600))).toBe(1);
+        expect(middlePiece([], at(0))).toBe(-1);
     });
 
     it('scrolls up to the start of a piece, then pulls back to the end of a tall piece before it', () => {

@@ -4807,6 +4807,45 @@ button.rail-strip-item {
     color: var(--on-accent);
 }
 
+/* A read page's numbers in the rail, and a heading whose pages are all read, in dark blue in place of a tick. */
+.nav-heading.is-read,
+.contents .is-read {
+    color: var(--accent-text);
+}
+
+/* A page the agent is still writing: a turning arc beside its title in the rail, and around its number folded. */
+.spinner,
+.strip-section.is-coming::after {
+    border: 1.5px solid var(--line-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+
+.spinner {
+    display: inline-block;
+    flex: none;
+    width: 12px;
+    height: 12px;
+}
+
+.strip-section.is-coming {
+    position: relative;
+    border-color: transparent;
+}
+
+.strip-section.is-coming::after {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .rail-strip-item[aria-current="step"] .strip-section {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-soft);
@@ -7363,7 +7402,6 @@ button.nav-item {
     height: 16px;
 }
 
-.nav-heading:has(.read-mark),
 .nav-heading:has(.mark-all) {
     display: flex;
     align-items: center;
@@ -7371,10 +7409,6 @@ button.nav-item {
 }
 
 /* A rail heading's read mark at its end, in line with the marks on its rows. */
-.nav-heading .read-mark {
-    margin-left: auto;
-}
-
 /* The tests heading's Mark all read, at its end in plain case. */
 .nav-heading .mark-all {
     margin-left: auto;

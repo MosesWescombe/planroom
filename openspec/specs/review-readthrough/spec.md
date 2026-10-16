@@ -236,7 +236,7 @@ A list down the side SHALL show every page in order, code pages under their grou
 
 ### Requirement: The keyboard reads the change piece by piece
 
-While no field or dialog has the keys, Page Down and Page Up SHALL bring the next or previous piece to the top of the page, and past the last or the first piece SHALL go on to the next or previous page. The arrow keys SHALL scroll a step at a time and SHALL stop at the end of the current piece, or its start going up; pressed on, they SHALL pull the page a little way, then go on to the next piece, or the previous one, and a pull let go short SHALL spring back. With reduced motion the press after the stop SHALL go on at once. Space SHALL tick the current piece read, when it is not, and fold it, or open it again. The current piece SHALL be the one the keys last went to, or the one clicked in, while it is in view, else the one at the top of the view. The keys SHALL be listed under the read progress.
+While no field or dialog has the keys, Page Down and Page Up SHALL bring the next or previous piece to the top of the page, and past the last or the first piece SHALL go on to the next or previous page. The arrow keys SHALL scroll a step at a time and SHALL stop at the end of the current piece, or its start going up; pressed on, they SHALL pull the page a little way, then go on to the next piece, or the previous one, and a pull let go short SHALL spring back. With reduced motion the press after the stop SHALL go on at once. Space SHALL tick the piece nearest the middle of the view read, when it is not, and fold it to its header and what it is for, or open it again. The current piece SHALL be the one the keys last went to, or the one clicked in, while it is in view, else the one at the top of the view. The keys SHALL be listed under the read progress.
 
 #### Scenario: Page Down
 
@@ -251,7 +251,7 @@ While no field or dialog has the keys, Page Down and Page Up SHALL bring the nex
 #### Scenario: Space
 
 - **WHEN** the reviewer presses Space on an unread piece
-- **THEN** the piece is ticked read and folds to its header
+- **THEN** the piece is ticked read and folds to its header and what it is for
 
 ### Requirement: The reviewer can comment on a line or a range
 

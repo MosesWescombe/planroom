@@ -451,7 +451,9 @@ describe('the read-through tab', () => {
             within(screen.getByRole('navigation', { name: 'Read-through' })).getByRole('button', { name: /The helper moved/ })
         );
         expect(screen.getByText(/This page is coming/)).toBeInTheDocument();
-        expect(within(screen.getByRole('navigation', { name: 'Read-through' })).getByText('coming')).toBeInTheDocument();
+        expect(
+            within(screen.getByRole('navigation', { name: 'Read-through' })).getByRole('img', { name: 'coming' })
+        ).toBeInTheDocument();
     });
 
     it('lists, by file, a folder tree with the numbers of the pages each changed file is on', async () => {
@@ -489,11 +491,11 @@ describe('the read-through tab', () => {
         expect(piece('src/jobs/email.ts:4')).toHaveClass('is-read');
         expect(screen.getByText('Page read')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Mark the page read' })).not.toBeInTheDocument();
-        expect(
-            within(rail().getByRole('button', { name: /The retry limit/ })).getByRole('img', { name: 'read' })
-        ).toBeInTheDocument();
-        expect(within(rail().getByText('CONCEPTS')).getByRole('img', { name: 'read' })).toBeInTheDocument();
-        expect(within(rail().getByText('TESTS')).queryByRole('img', { name: 'read' })).not.toBeInTheDocument();
+        expect(within(rail().getByRole('button', { name: /The retry limit/ })).getByLabelText('2 of 2 read')).toHaveClass(
+            'is-read'
+        );
+        expect(rail().getByText('CONCEPTS')).toHaveClass('is-read');
+        expect(rail().getByText('TESTS')).not.toHaveClass('is-read');
 
         await userEvent.click(screen.getByRole('tab', { name: 'By file' }));
         // The moved helper's page is on both the file it left and the one it moved to.
@@ -518,7 +520,7 @@ describe('the read-through tab', () => {
                     .getAllByRole('button')
                     .map((button) => button.textContent)
             )
-        ).toEqual([['1', ''], ['3'], ['4']]);
+        ).toEqual([['1', '2'], ['3'], ['4']]);
         await userEvent.click(strip.getByRole('button', { name: /^Page 3: Tests of the send loop/ }));
         expect(screen.getByRole('heading', { level: 1, name: 'Tests of the send loop' })).toBeInTheDocument();
     });
@@ -711,9 +713,9 @@ describe('reading and commenting', () => {
         });
         render(<App store={storeWith(readView({ pages: [check, RETRY, TESTS], ticks: { '1:send': tick } }))} />);
         const rail = within(screen.getByRole('navigation', { name: 'Read-through' }));
-        expect(
-            within(rail.getByRole('button', { name: /Where the limit/ })).getByRole('img', { name: 'read' })
-        ).toBeInTheDocument();
+        expect(within(rail.getByRole('button', { name: /Where the limit/ })).getByLabelText('1 of 1 read')).toHaveClass(
+            'is-read'
+        );
         const toggle = within(piece('src/send.ts:8')).getByRole('button', { name: 'src/send.ts:8 read' });
         expect(toggle).toHaveAttribute('aria-pressed', 'true');
         await userEvent.click(toggle);
@@ -730,13 +732,16 @@ describe('reading and commenting', () => {
         expect(posted).toEqual([{ type: 'read.tick', piece: 'send', read: true, how: 'auto' }]);
     });
 
-    it('collapses a piece to its header and opens it again, and never auto-ticks it collapsed', async () => {
+    it('collapses a piece to its header and note and opens it again, and never auto-ticks it collapsed', async () => {
         render(<App store={storeWith(readView())} />);
         const send = piece('src/send.ts:1-11');
+        const code = await line(send, 'policy.maxAttempts');
         const fold = within(send).getByRole('button', { name: 'Collapse src/send.ts:1-11' });
         await userEvent.click(fold);
         expect(fold).toHaveAttribute('aria-expanded', 'false');
-        expect(within(send).getByText('The send loop reads the limit.')).not.toBeVisible();
+        expect(code).not.toBeVisible();
+        expect(within(send).getByText('It stops at the last attempt.')).not.toBeVisible();
+        expect(within(send).getByText('The send loop reads the limit.')).toBeVisible();
         expect(within(send).getByRole('button', { name: 'src/send.ts:1-11 read' })).toBeVisible();
         vi.useFakeTimers();
         act(() => FakeObserver.show(send));
@@ -744,7 +749,7 @@ describe('reading and commenting', () => {
         expect(posted).toEqual([]);
         fireEvent.click(fold);
         expect(fold).toHaveAttribute('aria-expanded', 'true');
-        expect(within(send).getByText('The send loop reads the limit.')).toBeVisible();
+        expect(code).toBeVisible();
     });
 
     it('folds a read piece once it leaves the screen, holding still what is on screen', () => {
@@ -1282,6 +1287,15 @@ describe('the keys', () => {
         press(' ');
         expect(posted).toEqual([{ type: 'read.tick', piece: 'send', read: true, how: 'manual' }]);
         expect(fold('src/send.ts:1-11')).toHaveAttribute('aria-expanded', 'false');
+        expect(piece('src/send.ts:1-11')).toHaveFocus();
+    });
+
+    it('ticks the piece across the middle of the view with Space, though another piece in view has focus', () => {
+        render(<App store={storeWith(readView())} />);
+        layOut(400);
+        act(() => piece('src/jobs/email.ts:4').focus());
+        press(' ');
+        expect(posted).toEqual([{ type: 'read.tick', piece: 'send', read: true, how: 'manual' }]);
         expect(piece('src/send.ts:1-11')).toHaveFocus();
     });
 

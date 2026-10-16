@@ -1,4 +1,6 @@
 import clamp from 'lodash/clamp';
+import minBy from 'lodash/minBy';
+import range from 'lodash/range';
 import { type RefObject, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useReducedMotion } from '../hooks';
@@ -7,7 +9,8 @@ import { typing } from './hooks';
 /**
  * The read-through's keys. Page Down and Page Up go piece to piece, on past the last or the first to the next or previous
  * page. The arrow keys scroll a step at a time, stop at the end or the start of the current piece and, pressed on, pull
- * the page a little way before they go on to the next piece. Space ticks the current piece read and folds or opens it.
+ * the page a little way before they go on to the next piece. Space ticks the piece nearest the middle of the view read and
+ * folds or opens it.
  */
 
 /** The room the keys leave above a piece they bring to the top, and below a piece whose end they stop at. */
@@ -58,6 +61,12 @@ export function inView(piece: Extent, scroll: Scroll): boolean {
 export function pieceAt(pieces: readonly Extent[], scroll: Scroll): number {
     const at = pieces.findIndex((piece) => piece.top >= scroll.top + EDGE - 2 || piece.bottom > scroll.top + scroll.height / 4);
     return at === -1 ? pieces.length - 1 : at;
+}
+
+/** The piece nearest the middle of the view: the one across it, else the closest. -1 on a page without pieces. */
+export function middlePiece(pieces: readonly Extent[], scroll: Scroll): number {
+    const middle = scroll.top + scroll.height / 2;
+    return minBy(range(pieces.length), (at) => Math.max(pieces[at]!.top - middle, middle - pieces[at]!.bottom, 0)) ?? -1;
 }
 
 /**
@@ -112,7 +121,7 @@ function topIn(main: HTMLElement, element: HTMLElement): number {
 /** What Space does to each piece of the page on show, by its element. */
 const spaceActions = new WeakMap<Element, () => void>();
 
-/** Have Space call the latest `action` while `ref`'s piece is the current one. */
+/** Have Space call the latest `action` while `ref`'s piece is the one nearest the middle of the view. */
 export function useSpaceKey(ref: RefObject<HTMLElement | null>, action: () => void): void {
     const latest = useRef(action);
     latest.current = action;
@@ -201,9 +210,10 @@ export function useReadKeys({
             unpull();
             act(past, measured.elements);
         };
-        const space = ({ elements, pieces, scroll, current }: ReturnType<typeof measure>): boolean => {
-            const element = elements[current];
-            const action = element && inView(pieces[current]!, scroll) ? spaceActions.get(element) : undefined;
+        const space = ({ elements, pieces, scroll }: ReturnType<typeof measure>): boolean => {
+            const at = middlePiece(pieces, scroll);
+            const element = elements[at];
+            const action = element && inView(pieces[at]!, scroll) ? spaceActions.get(element) : undefined;
             if (!element || !action) return false;
             flushSync(action);
             focus(element);

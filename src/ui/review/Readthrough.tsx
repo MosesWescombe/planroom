@@ -298,7 +298,7 @@ function useFold(ref: React.RefObject<HTMLElement | null>, reading: Reading, pie
     return [folded, setFolded] as const;
 }
 
-/** A piece's button that folds it down to its header, say once read, or opens it again. */
+/** A piece's button that folds it down to its header and what it is for, say once read, or opens it again. */
 function FoldButton({ folded, label, onFold }: { folded: boolean; label: string; onFold: (folded: boolean) => void }) {
     return (
         <button
@@ -850,7 +850,7 @@ const PieceCard = memo(function PieceCard({
     const autoTick = () => {
         if (tickable) tick(piece.id, true, 'auto');
     };
-    // A folded piece shows no code, so its header on screen reads nothing.
+    // A folded piece shows no code, so its header and note on screen read nothing.
     useAutoTick(ref, tickable && !folded, autoTick);
     const read = usePieceRead(reading, piece);
     useFoldOffScreen(ref, read && !folded, () => setFolded(true));
@@ -873,12 +873,12 @@ const PieceCard = memo(function PieceCard({
                 {piece.lines && <ViewSwitch view={view} onChange={setOverride} label={where} />}
                 <ReadTick reading={reading} piece={piece.id} label={where} onRead={() => setFolded(true)} />
             </header>
+            {note && (
+                <div className="prose piece-note-text" data-anchor-target={`page:${page}`}>
+                    <Markdown source={note} />
+                </div>
+            )}
             <div className="piece-body" hidden={folded}>
-                {note && (
-                    <div className="prose piece-note-text" data-anchor-target={`page:${page}`}>
-                        <Markdown source={note} />
-                    </div>
-                )}
                 {blocks?.map((block, index) => (
                     <BlockView key={index} block={{ ...block, id: `${piece.id}-block-${index}` }} placement="question" />
                 ))}
@@ -1503,9 +1503,10 @@ function ReadContents({
                             {section.map((page, at) => (
                                 <li key={page.id}>
                                     {(at === 0 || section[at - 1]?.heading !== page.heading) && (
-                                        <div className="nav-heading">
+                                        <div
+                                            className={`nav-heading${pages.every((other) => other.heading !== page.heading || other.done) ? ' is-read' : ''}`}
+                                        >
                                             {page.heading}
-                                            {pages.every((other) => other.heading !== page.heading || other.done) && <ReadMark />}
                                             {kind === 'tests' && editable && unreadTests.length > 0 && (
                                                 <button
                                                     type="button"
@@ -1526,16 +1527,21 @@ function ReadContents({
                                         title={plainTitle(page.title)}
                                         onClick={() => onPick(page.id)}
                                     >
-                                        <span className="contents-number mono muted">{page.number}</span>
+                                        <span className={`contents-number mono ${page.done ? 'is-read' : 'muted'}`}>
+                                            {page.number}
+                                        </span>
                                         <RailTitle className="nav-name">
                                             <TitleMarkdown source={page.title} />
                                         </RailTitle>
-                                        {page.done ? (
-                                            <ReadMark />
-                                        ) : (
-                                            <span className="mono small muted" aria-label={`${page.read} of ${page.total} read`}>
-                                                {page.written ? `${page.read}/${page.total}` : 'coming'}
+                                        {page.written ? (
+                                            <span
+                                                className={`mono small ${page.done ? 'is-read' : 'muted'}`}
+                                                aria-label={`${page.read} of ${page.total} read`}
+                                            >
+                                                {page.read}/{page.total}
                                             </span>
+                                        ) : (
+                                            <span className="spinner" role="img" aria-label="coming" />
                                         )}
                                     </button>
                                 </li>
@@ -1551,9 +1557,11 @@ function ReadContents({
                                     aria-current={current === HOUSEKEEPING_PAGE ? 'step' : undefined}
                                     onClick={() => onPick(HOUSEKEEPING_PAGE)}
                                 >
-                                    <span className="contents-number mono muted">{pages.length + 1}</span>
+                                    <span className={`contents-number mono ${housekeeping ? 'is-read' : 'muted'}`}>
+                                        {pages.length + 1}
+                                    </span>
                                     <span className="nav-name">Housekeeping</span>
-                                    {housekeeping && <ReadMark />}
+                                    {housekeeping && <span className="visually-hidden">read</span>}
                                 </button>
                             </li>
                         </ol>
@@ -1574,8 +1582,8 @@ function ReadContents({
 }
 
 /**
- * The collapsed rail: pages read over total, then one numbered mark per page, ticked once read, a gap between the
- * concept pages, the tests and Housekeeping.
+ * The collapsed rail: pages read over total, then one numbered mark per page, filled blue once read, a gap
+ * between the concept pages, the tests and Housekeeping.
  */
 function ReadStrip({ round, current, onPick }: { round: RoundRecord; current: string; onPick: (page: string) => void }) {
     const pages = useRailPages(round);
@@ -1587,6 +1595,7 @@ function ReadStrip({ round, current, onPick }: { round: RoundRecord; current: st
             section: page.kind,
             title: plainTitle(page.title),
             done: page.done,
+            written: page.written,
             state: page.done ? 'read' : page.written ? `${page.read} of ${page.total} read` : 'coming'
         })),
         ...(round.index && housekeepingEntries(round.index).length > 0
@@ -1597,6 +1606,7 @@ function ReadStrip({ round, current, onPick }: { round: RoundRecord; current: st
                       section: 'housekeeping',
                       title: 'Housekeeping',
                       done: housekeeping,
+                      written: true,
                       state: housekeeping ? 'read' : 'not read'
                   }
               ]
@@ -1622,8 +1632,11 @@ function ReadStrip({ round, current, onPick }: { round: RoundRecord; current: st
                                 title={label}
                                 onClick={() => onPick(mark.id)}
                             >
-                                <span className={`strip-section is-${mark.done ? 'reviewed' : 'open'}`} aria-hidden="true">
-                                    {mark.done ? <CheckIcon size={9} /> : mark.number}
+                                <span
+                                    className={`strip-section is-${mark.done ? 'reviewed' : mark.written ? 'open' : 'coming'}`}
+                                    aria-hidden="true"
+                                >
+                                    {mark.number}
                                 </span>
                             </button>
                         );
