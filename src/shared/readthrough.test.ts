@@ -4,9 +4,10 @@ import {
     type LineIndex,
     type PageRecord,
     pieceLines,
-    pieceRead,
+    readPieces,
     readProgress,
     roundPages,
+    sharedTicks,
     type TickRecord,
     tickKey,
     uncovered
@@ -100,10 +101,32 @@ describe('reading', () => {
     const tick: TickRecord = { how: 'manual', at: NOW };
 
     it('reads a repeat only once its example is ticked and the place that differs opened', () => {
-        expect(pieceRead({ ticks: {} }, INDEX, 1, example)).toBe(false);
+        const read = (ticks: Record<string, TickRecord>) => readPieces({ pages: { '1:renames': page }, ticks }, INDEX, 1);
+        expect(read({}).has('r')).toBe(false);
         const ticked = { [tickKey(1, 'r')]: tick };
-        expect(pieceRead({ ticks: ticked }, INDEX, 1, example)).toBe(false);
-        expect(pieceRead({ ticks: { ...ticked, [tickKey(1, 'r', 1)]: tick } }, INDEX, 1, example)).toBe(true);
+        expect(read(ticked).has('r')).toBe(false);
+        expect(read({ ...ticked, [tickKey(1, 'r', 1)]: tick }).has('r')).toBe(true);
+    });
+
+    it('reads code on several pages the same on each, and unticks it everywhere at once', () => {
+        const whole = { id: 'whole', file: 'src/a.ts', lines: '9-31' };
+        const part = { id: 'part', file: 'src/a.ts', lines: '10' };
+        const other = { id: 'other', file: 'src/c.ts', lines: '1-4' };
+        const pages = {
+            '1:first': { ...page, id: 'first', pieces: [whole] },
+            '1:second': { ...page, id: 'second', order: 2, pieces: [part, other] }
+        };
+        // Ticking the whole hunk reads the part of it on the other page, and nothing else there.
+        const wholeRead = { pages, ticks: { [tickKey(1, 'whole')]: tick } };
+        expect([...readPieces(wholeRead, INDEX, 1)].sort()).toEqual(['part', 'whole']);
+        expect(readProgress(wholeRead, INDEX, 1).pages).toEqual({
+            first: { read: 1, total: 1 },
+            second: { read: 1, total: 2 }
+        });
+        // Ticking the part leaves the rest of the whole hunk unread.
+        expect([...readPieces({ pages, ticks: { [tickKey(1, 'part')]: tick } }, INDEX, 1)]).toEqual(['part']);
+        expect(sharedTicks({ pages }, INDEX, 1, [part]).sort()).toEqual([tickKey(1, 'part'), tickKey(1, 'whole')]);
+        expect(sharedTicks({ pages }, INDEX, 1, [other])).toEqual([tickKey(1, 'other')]);
     });
 
     it('counts the lines of the whole change read, and ticks of another round not at all', () => {

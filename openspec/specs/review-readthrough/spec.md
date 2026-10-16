@@ -193,7 +193,12 @@ The Housekeeping page SHALL come last and SHALL list by file the known lock file
 
 ### Requirement: Reading is tracked and survives a reload
 
-The reviewer SHALL be able to tick a piece, or a whole page, as read. With auto-tick on, a piece SHALL tick itself once it has been on screen for 10 seconds or once the reviewer comments on it. Auto-tick SHALL be a setting that starts on. The page list SHALL show how much of each page has been read and the top of the page SHALL show how much of the whole change has been read. Ticks SHALL be saved with the review and SHALL be restored when the page reloads.
+The reviewer SHALL be able to tick a piece, or a whole page, as read. With auto-tick on, a piece SHALL tick itself once it has been on screen for 10 seconds or once the reviewer comments on it. Auto-tick SHALL be a setting that starts on. The page list SHALL show how much of each page has been read and the top of the page SHALL show how much of the whole change has been read. Ticks SHALL be saved with the review and SHALL be restored when the page reloads. Code on more than one page SHALL share its read status: a piece SHALL count as read on every page once each changed line it covers is on pieces ticked read, and unticking a piece, or anything else that unticks it, SHALL also untick every piece that shares a changed line with it.
+
+#### Scenario: Code on two pages
+
+- **WHEN** the same lines are pieces on two pages and the reviewer ticks one of them
+- **THEN** the other counts as read too, and unticking either leaves both unread
 
 #### Scenario: Auto-tick on time
 
@@ -228,6 +233,25 @@ A list down the side SHALL show every page in order, code pages under their grou
 
 - **WHEN** the reviewer opens the By file view and picks `src/send.ts`
 - **THEN** the view lists the pages that hold lines of `src/send.ts`
+
+### Requirement: The keyboard reads the change piece by piece
+
+While no field or dialog has the keys, Page Down and Page Up SHALL bring the next or previous piece to the top of the page, and past the last or the first piece SHALL go on to the next or previous page. The arrow keys SHALL scroll a step at a time and SHALL stop at the end of the current piece, or its start going up; pressed on, they SHALL pull the page a little way, then go on to the next piece, or the previous one, and a pull let go short SHALL spring back. With reduced motion the press after the stop SHALL go on at once. Space SHALL tick the current piece read, when it is not, and fold it, or open it again. The current piece SHALL be the one the keys last went to, or the one clicked in, while it is in view, else the one at the top of the view. The keys SHALL be listed under the read progress.
+
+#### Scenario: Page Down
+
+- **WHEN** the reviewer presses Page Down on the last piece of a page
+- **THEN** the next page opens
+
+#### Scenario: Pulling past a piece
+
+- **WHEN** the arrow keys reach the end of a piece and the reviewer holds the down arrow
+- **THEN** the page pulls a little way, then the next piece comes to the top
+
+#### Scenario: Space
+
+- **WHEN** the reviewer presses Space on an unread piece
+- **THEN** the piece is ticked read and folds to its header
 
 ### Requirement: The reviewer can comment on a line or a range
 

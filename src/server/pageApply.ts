@@ -21,7 +21,7 @@ import {
 } from '../shared/derive.js';
 import { type LoggedAttachment, type NewLoggedEvent, PAGE_REQUESTS, type PageRequest } from '../shared/events.js';
 import { answerProblem, describeAnswer, type QuestionRecord } from '../shared/questions.js';
-import { HOUSEKEEPING_PAGE, repeatOf, roundPages, tickKey } from '../shared/readthrough.js';
+import { HOUSEKEEPING_PAGE, repeatOf, roundPages, sharedTicks, tickKey } from '../shared/readthrough.js';
 import {
     type Attachment,
     type BlockRecord,
@@ -544,6 +544,7 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
         case 'read.tick': {
             if (!round.readthrough) reject('The read-through is not open yet');
             const key = tickKey(round.n, request.piece, request.place);
+            let keys = [key];
             if (request.piece === HOUSEKEEPING_PAGE) {
                 if (request.place !== undefined) reject('The Housekeeping page has no places', 'place', 400);
             } else {
@@ -556,11 +557,14 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
                     const repeat = repeatOf(round.index, piece);
                     if (!repeat || request.place === repeat.example || request.place >= repeat.group.places.length)
                         reject(`piece ${piece.id} has no other place ${request.place}`, 'place', 400);
+                } else {
+                    // Code on several pages is unread on each at once.
+                    keys = sharedTicks(state, round.index, round.n, [piece]);
                 }
             }
-            if (request.read === Boolean(state.ticks[key])) return {};
-            if (request.read) draft.putTick(key, { how: request.how, at: now });
-            else draft.removeTick(key);
+            if (request.read) {
+                if (!state.ticks[key]) draft.putTick(key, { how: request.how, at: now });
+            } else for (const tick of keys) if (Object.hasOwn(state.ticks, tick)) draft.removeTick(tick);
             return {};
         }
         case 'comments.handoff': {

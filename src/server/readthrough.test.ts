@@ -354,6 +354,43 @@ describe('reading', () => {
         expect(ticks()).toEqual(['1:test-retries']);
     });
 
+    it('reads code on two pages the same on both, and unticking it or answering on it unreads it on both', async () => {
+        const server = await opened();
+        await server.page({ type: 'reviewers.start', technique: 'readthrough', reviewers: NONE });
+        const pages = outline();
+        pages.push({
+            id: 'limit-check',
+            kind: 'concept',
+            title: 'Where the limit is checked',
+            group: 'Retry policy',
+            order: 2,
+            pieces: [{ id: 'limit', file: 'src/send.ts', lines: '8' }]
+        });
+        expect((await server.emit([{ type: 'read.outline', pages }])).isError).toBe(false);
+        const ticks = () => Object.keys(server.session().current.ticks).sort();
+        const progress = () => {
+            const state = server.session().current;
+            return readProgress(state, currentRound(defined(state.review)).index, 1).pages;
+        };
+        await server.page({ type: 'read.tick', piece: 'send', read: true, how: 'manual' });
+        expect(progress()).toMatchObject({ 'retry-limit': { read: 1 }, 'limit-check': { read: 1, total: 1 } });
+        // The limit check is read by the send loop's tick, so unticking it there unticks the loop too.
+        await server.page({ type: 'read.tick', piece: 'limit', read: false, how: 'manual' });
+        expect(ticks()).toEqual([]);
+        expect(progress()).toMatchObject({ 'retry-limit': { read: 0 }, 'limit-check': { read: 0 } });
+
+        for (const piece of ['send', 'limit', 'callers'])
+            await server.page({ type: 'read.tick', piece, read: true, how: 'manual' });
+        await server.page({
+            type: 'comment.create',
+            anchor: { target: 'page:limit-check', lines: { file: 'src/send.ts', side: 'new', start: 8, end: 8 } },
+            intent: 'question',
+            text: 'Why the policy?'
+        });
+        await server.emit([{ type: 'comment.reply', threadId: 'C-1', text: 'Callers set it.' }]);
+        expect(ticks()).toEqual(['1:callers']);
+    });
+
     it('lists whole-word matches of a name in tracked files of the reviewed commit, at most 200', async () => {
         const server = await readingNow();
         await writeFile(join(server.repo.dir, 'notes.txt'), 'send me\n');

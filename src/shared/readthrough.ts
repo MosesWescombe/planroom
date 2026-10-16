@@ -485,21 +485,74 @@ export function repeatOf(
 }
 
 /**
- * Whether a piece counts as read: ticked, and for a repeat's example, every place that differs from it opened too.
+ * Whether a piece's own tick reads it: ticked, and for a repeat's example, every place that differs from it opened too.
  * Identical places count with the example.
  */
-export function pieceRead(
-    parts: Pick<ReadParts, 'ticks'>,
-    index: LineIndex | undefined,
-    round: number,
-    piece: PieceSpec
-): boolean {
+function tickedRead(parts: Pick<ReadParts, 'ticks'>, index: LineIndex | undefined, round: number, piece: PieceSpec): boolean {
     if (!parts.ticks[tickKey(round, piece.id)]) return false;
     const repeat = repeatOf(index, piece);
     if (!repeat) return true;
     return repeat.group.places.every(
         (place, at) => at === repeat.example || !place.differs || Boolean(parts.ticks[tickKey(round, piece.id, at)])
     );
+}
+
+/** Whether `lines` holds a changed line and every one of them is in `within`. */
+function linesWithin(lines: Lines, within: Lines): boolean {
+    let any = false;
+    for (const [path, entry] of lines) {
+        const held = within.get(path);
+        for (const line of entry.added) if (!held?.added.has(line)) return false;
+        for (const line of entry.removed) if (!held?.removed.has(line)) return false;
+        any ||= entry.added.size + entry.removed.size > 0;
+    }
+    return any;
+}
+
+/** Whether `a` and `b` share a changed line. */
+function sharesLine(a: Lines, b: Lines): boolean {
+    for (const [path, entry] of a) {
+        const other = b.get(path);
+        if (!other) continue;
+        for (const line of entry.added) if (other.added.has(line)) return true;
+        for (const line of entry.removed) if (other.removed.has(line)) return true;
+    }
+    return false;
+}
+
+/**
+ * The ids of a round's read pieces. Code on more than one page reads the same on each: a piece counts as read when its
+ * own tick reads it, or when every changed line it covers is on pieces whose own ticks read them.
+ */
+export function readPieces(parts: ReadParts, index: LineIndex | undefined, round: number): Set<string> {
+    const pieces = roundPages(parts, round).flatMap((page) => page.pieces);
+    const read = new Set(pieces.filter((piece) => tickedRead(parts, index, round, piece)).map((piece) => piece.id));
+    if (!index) return read;
+    const covered = pieces.map((piece) => ({ piece, lines: pieceLines(index, piece) }));
+    const readLines: Lines = new Map();
+    for (const { piece, lines } of covered) if (read.has(piece.id)) mergeLines(readLines, lines);
+    for (const { piece, lines } of covered) if (linesWithin(lines, readLines)) read.add(piece.id);
+    return read;
+}
+
+/**
+ * The ticks that read `pieces`, wherever their code is: each one's own tick, and that of every piece of the round
+ * sharing a changed line with one. Taking them all off leaves none of the pieces read.
+ */
+export function sharedTicks(
+    parts: Pick<ReadParts, 'pages'>,
+    index: LineIndex | undefined,
+    round: number,
+    pieces: readonly PieceSpec[]
+): string[] {
+    const ids = new Set(pieces.map((piece) => piece.id));
+    if (index) {
+        const lines: Lines = new Map();
+        for (const piece of pieces) mergeLines(lines, pieceLines(index, piece));
+        for (const other of roundPages(parts, round).flatMap((page) => page.pieces))
+            if (sharesLine(pieceLines(index, other), lines)) ids.add(other.id);
+    }
+    return [...ids].map((id) => tickKey(round, id));
 }
 
 /**
@@ -537,14 +590,11 @@ export function readProgress(parts: ReadParts, index: LineIndex | undefined, rou
     const pages: ReadProgress['pages'] = {};
     if (!index) return { pages, lines: { read: 0, total: 0 } };
     const read: Lines = housekeepingRead(parts, round) ? housekeepingLines(index) : new Map();
+    const done = readPieces(parts, index, round);
     for (const page of roundPages(parts, round)) {
-        let done = 0;
-        for (const piece of page.pieces)
-            if (pieceRead(parts, index, round, piece)) {
-                done += 1;
-                mergeLines(read, pieceLines(index, piece));
-            }
-        pages[page.id] = { read: done, total: page.pieces.length };
+        const pieces = page.pieces.filter((piece) => done.has(piece.id));
+        for (const piece of pieces) mergeLines(read, pieceLines(index, piece));
+        pages[page.id] = { read: pieces.length, total: page.pieces.length };
     }
     const changed = changedLines(index);
     let readCount = 0;

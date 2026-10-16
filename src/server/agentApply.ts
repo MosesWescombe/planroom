@@ -28,6 +28,7 @@ import {
     indexFileOf,
     pageKey,
     roundPages,
+    sharedTicks,
     tickKey,
     uncovered
 } from '../shared/readthrough.js';
@@ -598,11 +599,12 @@ function applyReviewEvent(
             const changed = !isEqual(page.content, content);
             if (changed) {
                 draft.putPage(key, { ...page, content, version: page.version + 1, updatedAt: now });
-                // A rewritten page is read again, the differing places of its repeats too.
+                // A rewritten page is read again, the differing places of its repeats too, and its code on other pages.
                 if (page.content) {
                     const own = new Set(page.pieces.map((piece) => tickKey(round.n, piece.id)));
+                    const shared = new Set(sharedTicks(draft.state, round.index, round.n, page.pieces));
                     for (const tick of Object.keys(draft.state.ticks))
-                        if (own.has(tick.replace(/#\d+$/, ''))) draft.removeTick(tick);
+                        if (own.has(tick.replace(/#\d+$/, '')) || shared.has(tick)) draft.removeTick(tick);
                 }
                 if (!page.content) draft.note({ title: 'Wrote a read-through page', detail: page.title, ref: `page:${id}` });
             }
@@ -635,9 +637,12 @@ function applyReviewEvent(
                 at: now
             };
             draft.putPage(key, { ...page, added: [...page.added, addition], version: page.version + 1, updatedAt: now });
-            const tick = event.piece === undefined ? undefined : tickKey(round.n, event.piece);
-            if (tick && Object.hasOwn(draft.state.ticks, tick)) {
-                draft.removeTick(tick);
+            const piece = page.pieces.find((candidate) => candidate.id === event.piece);
+            const ticked = piece
+                ? sharedTicks(draft.state, round.index, round.n, [piece]).filter((tick) => Object.hasOwn(draft.state.ticks, tick))
+                : [];
+            for (const tick of ticked) draft.removeTick(tick);
+            if (ticked.length) {
                 draft.note({
                     title: 'Unticked a piece the agent added to',
                     detail: page.title,
@@ -660,9 +665,12 @@ function untickAsked(draft: Draft, thread: ThreadRecord): void {
     const round = currentRound(review);
     const record = ownRecord(draft.state.pages, pageKey(round.n, page));
     if (!record) return;
-    const ticked = askedPieces(round.index, record.pieces, thread.anchor?.lines)
-        .map((piece) => tickKey(round.n, piece.id))
-        .filter((tick) => Object.hasOwn(draft.state.ticks, tick));
+    const ticked = sharedTicks(
+        draft.state,
+        round.index,
+        round.n,
+        askedPieces(round.index, record.pieces, thread.anchor?.lines)
+    ).filter((tick) => Object.hasOwn(draft.state.ticks, tick));
     for (const tick of ticked) draft.removeTick(tick);
     if (ticked.length)
         draft.note({

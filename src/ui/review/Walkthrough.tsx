@@ -28,7 +28,7 @@ import { useReadOnly } from '../readOnly';
 import { StepperContext, useSteppers } from '../stepper';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy, useUiState } from '../ui';
-import { useIsCurrentRound, useShownRound } from './hooks';
+import { typing, useIsCurrentRound, useShownRound } from './hooks';
 
 /** One block of a slide, re-rendered only when its own version changes. */
 const SlideBlock = memo(function SlideBlock({ id }: { id: string }) {
@@ -188,16 +188,6 @@ function PrintedDeck({ slides }: { slides: string[] }) {
                 </div>
             ))}
         </div>
-    );
-}
-
-/** Whether a key press is someone typing, which the deck leaves alone. */
-function typing(target: EventTarget | null): boolean {
-    return (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-            ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
-            Boolean(target.closest('dialog, .modal')))
     );
 }
 

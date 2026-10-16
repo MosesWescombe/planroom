@@ -293,6 +293,19 @@ class FakeObserver {
                     }
                 ]);
     }
+    /** Take `element` off screen. */
+    static hide(element: Element) {
+        for (const observer of FakeObserver.all)
+            if (observer.element === element)
+                observer.callback([
+                    {
+                        isIntersecting: false,
+                        intersectionRect: { height: 0 },
+                        boundingClientRect: { height: 200 },
+                        rootBounds: { height: 800 }
+                    }
+                ]);
+    }
 }
 
 beforeEach(() => {
@@ -668,17 +681,43 @@ describe('pieces of code', () => {
 });
 
 describe('reading and commenting', () => {
-    it('ticks a piece by hand, and counts it in the page and the whole change', async () => {
+    it('ticks a piece by hand, which folds it, and counts it in the page and the whole change', async () => {
         const { rerender } = render(<App store={storeWith(readView())} />);
-        await userEvent.click(within(piece('src/send.ts:1-11')).getByRole('checkbox', { name: 'src/send.ts:1-11 read' }));
+        await userEvent.click(within(piece('src/send.ts:1-11')).getByRole('button', { name: 'src/send.ts:1-11 read' }));
         expect(posted).toEqual([{ type: 'read.tick', piece: 'send', read: true, how: 'manual' }]);
+        expect(within(piece('src/send.ts:1-11')).getByRole('button', { name: 'Collapse src/send.ts:1-11' })).toHaveAttribute(
+            'aria-expanded',
+            'false'
+        );
         // As the server sends it back, and as a reload restores it.
         rerender(<App store={storeWith(readView({ ticks: { '1:send': tick } }))} />);
-        expect(within(piece('src/send.ts:1-11')).getByRole('checkbox', { name: 'src/send.ts:1-11 read' })).toBeChecked();
+        expect(within(piece('src/send.ts:1-11')).getByRole('button', { name: 'src/send.ts:1-11 read' })).toHaveAttribute(
+            'aria-pressed',
+            'true'
+        );
         expect(screen.getByText('5 of 27 changed lines read')).toBeInTheDocument();
         expect(
             within(screen.getByRole('navigation', { name: 'Read-through' })).getByRole('button', { name: /The retry limit/ })
         ).toHaveTextContent('1/2');
+    });
+
+    it('shows code on two pages read on both once one is ticked, and unticks it from either', async () => {
+        const check = page({
+            id: 'limit-check',
+            title: 'Where the limit is checked',
+            order: 0,
+            pieces: [{ id: 'limit', file: 'src/send.ts', lines: '8', view: 'diff' }],
+            content: { summary: 'The check.', pieces: [{ id: 'limit', note: 'The check reads the policy.' }] }
+        });
+        render(<App store={storeWith(readView({ pages: [check, RETRY, TESTS], ticks: { '1:send': tick } }))} />);
+        const rail = within(screen.getByRole('navigation', { name: 'Read-through' }));
+        expect(
+            within(rail.getByRole('button', { name: /Where the limit/ })).getByRole('img', { name: 'read' })
+        ).toBeInTheDocument();
+        const toggle = within(piece('src/send.ts:8')).getByRole('button', { name: 'src/send.ts:8 read' });
+        expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await userEvent.click(toggle);
+        expect(posted).toEqual([{ type: 'read.tick', piece: 'limit', read: false, how: 'manual' }]);
     });
 
     it('auto-ticks a piece after ten seconds on screen, and never with auto-tick off', async () => {
@@ -698,7 +737,7 @@ describe('reading and commenting', () => {
         await userEvent.click(fold);
         expect(fold).toHaveAttribute('aria-expanded', 'false');
         expect(within(send).getByText('The send loop reads the limit.')).not.toBeVisible();
-        expect(within(send).getByRole('checkbox', { name: 'src/send.ts:1-11 read' })).toBeVisible();
+        expect(within(send).getByRole('button', { name: 'src/send.ts:1-11 read' })).toBeVisible();
         vi.useFakeTimers();
         act(() => FakeObserver.show(send));
         act(() => vi.advanceTimersByTime(60_000));
@@ -706,6 +745,21 @@ describe('reading and commenting', () => {
         fireEvent.click(fold);
         expect(fold).toHaveAttribute('aria-expanded', 'true');
         expect(within(send).getByText('The send loop reads the limit.')).toBeVisible();
+    });
+
+    it('folds a read piece once it leaves the screen, holding still what is on screen', () => {
+        const rect = (top: number, height: number) => DOMRect.fromRect({ y: top, height, width: 100 });
+        render(<App store={storeWith(readView({ ticks: { '1:send': tick } }))} />);
+        const send = piece('src/send.ts:1-11');
+        const main = send.closest('#main');
+        if (!(main instanceof HTMLElement)) throw new Error('No scroller');
+        main.getBoundingClientRect = () => rect(0, 800);
+        main.scrollTop = 1000;
+        // Scrolled past, above the screen: 600px open, 40px folded.
+        send.getBoundingClientRect = () => rect(-700, send.querySelector('.piece-body[hidden]') ? 40 : 600);
+        act(() => FakeObserver.hide(send));
+        expect(within(send).getByRole('button', { name: 'Collapse src/send.ts:1-11' })).toHaveAttribute('aria-expanded', 'false');
+        expect(main.scrollTop).toBe(440);
     });
 
     it('leaves a piece unticked a minute on screen with auto-tick off', () => {
@@ -913,7 +967,7 @@ describe('test pages', () => {
         expect(await line(piece('gives up'), 'expect(true)')).toBeInTheDocument();
         expect(piece('retries up to the policy').querySelector('.code-line')).toBeNull();
         await userEvent.click(
-            within(piece('retries up to the policy')).getByRole('checkbox', { name: 'retries up to the policy read' })
+            within(piece('retries up to the policy')).getByRole('button', { name: 'retries up to the policy read' })
         );
         expect(posted).toEqual([{ type: 'read.tick', piece: 'test-retries', read: true, how: 'manual' }]);
     });
@@ -933,11 +987,11 @@ describe('test pages', () => {
             pieces: [{ id: 'test-later', file: 'src/send.test.ts', lines: '4-6' }]
         });
         const pages = [RETRY, TESTS, policy, coming];
-        const { rerender } = render(<App store={storeWith(readView({ pages, ticks: { '1:test-retries': tick } }))} />);
+        const { rerender } = render(<App store={storeWith(readView({ pages, ticks: { '1:test-gives-up': tick } }))} />);
         const heading = () => within(within(screen.getByRole('navigation', { name: 'Read-through' })).getByText('TESTS'));
         await userEvent.click(heading().getByRole('button', { name: 'Mark all read' }));
         expect(posted).toEqual([
-            { type: 'read.tick', piece: 'test-gives-up', read: true, how: 'manual' },
+            { type: 'read.tick', piece: 'test-retries', read: true, how: 'manual' },
             { type: 'read.tick', piece: 'test-policy', read: true, how: 'manual' }
         ]);
         const ticks = { '1:test-retries': tick, '1:test-gives-up': tick, '1:test-policy': tick };
@@ -1180,5 +1234,146 @@ describe('the code viewer', () => {
         } finally {
             Reflect.deleteProperty(selection, 'modify');
         }
+    });
+});
+
+describe('the keys', () => {
+    /** Lay the first page out as a browser would: its two pieces down an 800px view, the page scrolled to `top`. */
+    function layOut(top: number) {
+        const main = defined(document.getElementById('main'));
+        const set = (element: HTMLElement, sizes: Record<string, number>) => {
+            for (const [name, value] of Object.entries(sizes))
+                Object.defineProperty(element, name, { value, configurable: true });
+        };
+        set(main, { clientHeight: 800, scrollHeight: 2400 });
+        main.scrollTop = top;
+        // As in a browser, the page is its pieces' offset parent while the pull shifts it, and the main area's otherwise.
+        const shown = defined(document.querySelector<HTMLElement>('.read-page'));
+        const shifted = () => Boolean(shown.style.transform);
+        set(shown, { offsetTop: 160 });
+        Object.defineProperty(shown, 'offsetParent', { value: main, configurable: true });
+        for (const [where, offsetTop, offsetHeight] of [
+            ['src/send.ts:1-11', 100, 1000],
+            ['src/jobs/email.ts:4', 1116, 300]
+        ] as const) {
+            set(piece(where), { offsetHeight });
+            Object.defineProperties(piece(where), {
+                offsetTop: { get: () => offsetTop - (shifted() ? 160 : 0), configurable: true },
+                offsetParent: { get: () => (shifted() ? shown : main), configurable: true }
+            });
+        }
+        const scrolled = vi.fn();
+        main.scrollTo = scrolled;
+        /** Settle the page at `top`, as a smooth scroll ends. */
+        return {
+            scrolled,
+            settle: (at: number) => {
+                main.scrollTop = at;
+                main.dispatchEvent(new Event('scrollend'));
+            }
+        };
+    }
+    const press = (key: string) => fireEvent.keyDown(document.body, { key });
+    const fold = (where: string) => within(piece(where)).getByRole('button', { name: `Collapse ${where}` });
+
+    it('ticks the piece being read with Space and folds it', () => {
+        render(<App store={storeWith(readView())} />);
+        layOut(0);
+        press(' ');
+        expect(posted).toEqual([{ type: 'read.tick', piece: 'send', read: true, how: 'manual' }]);
+        expect(fold('src/send.ts:1-11')).toHaveAttribute('aria-expanded', 'false');
+        expect(piece('src/send.ts:1-11')).toHaveFocus();
+    });
+
+    it('folds a read piece with Space and opens it again, ticking nothing', () => {
+        render(<App store={storeWith(readView({ ticks: { '1:send': tick } }))} />);
+        layOut(0);
+        press(' ');
+        expect(fold('src/send.ts:1-11')).toHaveAttribute('aria-expanded', 'false');
+        press(' ');
+        expect(fold('src/send.ts:1-11')).toHaveAttribute('aria-expanded', 'true');
+        expect(posted).toEqual([]);
+    });
+
+    it('leaves Space to a button that has focus', () => {
+        render(<App store={storeWith(readView())} />);
+        layOut(0);
+        fireEvent.keyDown(fold('src/send.ts:1-11'), { key: ' ' });
+        expect(posted).toEqual([]);
+        expect(fold('src/send.ts:1-11')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('goes piece to piece with Page Down, then on to the next page, and back with Page Up', () => {
+        render(<App store={storeWith(readView())} />);
+        const { scrolled } = layOut(0);
+        press('PageDown');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 84, behavior: 'smooth' });
+        press('PageDown');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 1100, behavior: 'smooth' });
+        expect(piece('src/jobs/email.ts:4')).toHaveFocus();
+        press('PageUp');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 84, behavior: 'smooth' });
+        expect(piece('src/send.ts:1-11')).toHaveFocus();
+        press('PageDown');
+        press('PageDown');
+        expect(screen.getByRole('heading', { level: 1, name: 'The helper moved' })).toBeInTheDocument();
+    });
+
+    it('scrolls a step with the arrow keys, stops at the end of a piece, then pulls through to the next one', () => {
+        render(<App store={storeWith(readView())} />);
+        const { scrolled, settle } = layOut(0);
+        vi.useFakeTimers();
+        press('ArrowDown');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 40, behavior: 'smooth' });
+        settle(300);
+        press('ArrowDown');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 316, behavior: 'smooth' });
+        settle(316);
+        const shown = defined(document.querySelector<HTMLElement>('.read-page'));
+        for (const shift of ['translateY(-12px)', 'translateY(-24px)', 'translateY(-36px)']) {
+            press('ArrowDown');
+            expect(shown.style.transform).toBe(shift);
+            act(() => vi.advanceTimersByTime(150));
+        }
+        expect(scrolled).toHaveBeenCalledTimes(2);
+        press('ArrowDown');
+        expect(shown.style.transform).toBe('');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 1100, behavior: 'smooth' });
+        expect(piece('src/jobs/email.ts:4')).toHaveFocus();
+    });
+
+    it('stops the arrow keys at the start of a piece going up, then pulls back to the end of the one before', () => {
+        render(<App store={storeWith(readView())} />);
+        const { scrolled, settle } = layOut(1180);
+        vi.useFakeTimers();
+        press('ArrowUp');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 1140, behavior: 'smooth' });
+        settle(1120);
+        press('ArrowUp');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 1100, behavior: 'smooth' });
+        settle(1100);
+        const shown = defined(document.querySelector<HTMLElement>('.read-page'));
+        for (const shift of ['translateY(12px)', 'translateY(24px)', 'translateY(36px)']) {
+            press('ArrowUp');
+            expect(shown.style.transform).toBe(shift);
+            act(() => vi.advanceTimersByTime(150));
+        }
+        expect(scrolled).toHaveBeenCalledTimes(2);
+        press('ArrowUp');
+        expect(shown.style.transform).toBe('');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 316, behavior: 'smooth' });
+        expect(piece('src/send.ts:1-11')).toHaveFocus();
+    });
+
+    it('lets go of a pull that stops short a moment after the key is up', () => {
+        render(<App store={storeWith(readView())} />);
+        layOut(316);
+        vi.useFakeTimers();
+        const shown = defined(document.querySelector<HTMLElement>('.read-page'));
+        press('ArrowDown');
+        fireEvent.keyUp(document.body, { key: 'ArrowDown' });
+        expect(shown.style.transform).toBe('translateY(-12px)');
+        act(() => vi.advanceTimersByTime(400));
+        expect(shown.style.transform).toBe('');
     });
 });

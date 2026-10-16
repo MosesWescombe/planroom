@@ -2,6 +2,7 @@ import { diffArrays } from 'diff';
 import clamp from 'lodash/clamp';
 import groupBy from 'lodash/groupBy';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { describeAnchor } from '../../shared/anchors';
 import type { ContextBlock } from '../../shared/questions';
 import {
@@ -17,8 +18,8 @@ import {
     type PieceView,
     pagesOfFile,
     parseRange,
-    pieceRead,
     type RelatedCode,
+    readPieces,
     readProgress,
     repeatOf,
     roundPages,
@@ -35,6 +36,7 @@ import {
     TEST_VIEWS,
     type TestView
 } from '../../shared/review';
+import type { View } from '../../shared/view';
 import { fetchDiff, fetchExcerpt, fetchSearch, type SearchResult } from '../api';
 import { BlockView } from '../blocks/Block';
 import { type CodeRow, CodeViewer, type LineSelection, parsePatch } from '../code/CodeViewer';
@@ -42,7 +44,7 @@ import { blockLength } from '../code/folding';
 import { resolveLanguage } from '../code/highlight';
 import { commentOnWhole, openComposer } from '../comments/composer';
 import { MAX_QUOTE, place, type SelectionBox } from '../comments/selection';
-import { CheckIcon, ChevronIcon, CommentIcon } from '../components/icons';
+import { CheckIcon, ChevronIcon, CommentIcon, VsCodeIcon } from '../components/icons';
 import { Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
@@ -57,6 +59,7 @@ import { CommentEditor } from './BitbucketComment';
 import { buildTree, commonRoot, compactFolders, type Folder } from './FileTreeSelect';
 import { FindingCards, findingsOnRow, underRow } from './Findings';
 import { useIsCurrentRound, useShownRound } from './hooks';
+import { useReadKeys, useSpaceKey } from './readKeys';
 
 /**
  * The read-through: the change line by line, one concept to a page in the agent's reading order, then the test pages,
@@ -156,6 +159,30 @@ function useAutoTick(ref: React.RefObject<HTMLElement | null>, active: boolean, 
     }, [ref, active]);
 }
 
+/**
+ * Call `onFold` once `ref`'s element is off screen while `active`. One above the screen keeps its bottom edge, and so
+ * everything on screen under it, where it was: the page scrolls up by the height the fold takes away.
+ */
+function useFoldOffScreen(ref: React.RefObject<HTMLElement | null>, active: boolean, onFold: () => void): void {
+    const latest = useRef(onFold);
+    latest.current = onFold;
+    useEffect(() => {
+        const element = ref.current;
+        if (!active || !element || typeof IntersectionObserver === 'undefined') return undefined;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[entries.length - 1]?.isIntersecting !== false) return;
+            const scroller = element.closest('#main');
+            const bottom = element.getBoundingClientRect().bottom;
+            flushSync(() => latest.current());
+            // Where the browser anchors the scroll itself, the edge has not moved and this adds nothing.
+            if (scroller && bottom <= scroller.getBoundingClientRect().top)
+                scroller.scrollTop += element.getBoundingClientRect().bottom - bottom;
+        });
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [ref, active]);
+}
+
 /** What the read-through needs to act on a page: the round, whether it takes changes, and the reviewer's settings. */
 interface Reading {
     round: RoundRecord;
@@ -175,17 +202,36 @@ function useReading(round: RoundRecord, onName: Reading['onName']): Reading {
     return { round, editable: current && !readOnly, onName, ...settings };
 }
 
+/** Each round's read pieces by the ticks they were worked out from, so every piece's selector shares one pass. */
+const readCache = new WeakMap<View['ticks'], { pages: View['pages']; round: RoundRecord; read: ReadonlySet<string> }>();
+
+/** The ids of the round's read pieces, code on several pages read on each at once. */
+function readSet(view: View, round: RoundRecord): ReadonlySet<string> {
+    const cached = readCache.get(view.ticks);
+    if (cached?.pages === view.pages && cached.round === round) return cached.read;
+    const read = readPieces(view, round.index, round.n);
+    readCache.set(view.ticks, { pages: view.pages, round, read });
+    return read;
+}
+
+/**
+ * Whether `piece` shows as read with its Read toggle pressed: its own tick, though a repeat's differing place is still
+ * to open, or its code read on other pages.
+ */
+function shownRead(view: View, round: RoundRecord, piece: string): boolean {
+    return Boolean(view.ticks[tickKey(round.n, piece)]) || readSet(view, round).has(piece);
+}
+
 /**
  * The ticks the reviewer took off by hand on this page load, which auto-tick then leaves alone.
  * ponytail: forgotten on reload, so auto-tick can tick such a piece again; keep the untick in state if that bites.
  */
 const untickedByHand = new Set<string>();
 
-/** Whether auto-tick may tick `piece` now: it is on, the round takes changes, and the piece is unticked but not by hand. */
+/** Whether auto-tick may tick `piece` now: it is on, the round takes changes, and the piece is unread but not by hand. */
 function useAutoTickable(reading: Reading, piece: string): boolean {
-    const key = tickKey(reading.round.n, piece);
-    const ticked = useSelector((view) => Boolean(view.ticks[key]));
-    return reading.autoTick && reading.editable && !ticked && !untickedByHand.has(key);
+    const ticked = useSelector((view) => shownRead(view, reading.round, piece));
+    return reading.autoTick && reading.editable && !ticked && !untickedByHand.has(tickKey(reading.round.n, piece));
 }
 
 /** Tick `piece` read or not, or a place of it opened, in the current round. */
@@ -198,26 +244,30 @@ function useTick() {
     );
 }
 
-/** A piece's Read checkbox. */
-function ReadTick({ reading, piece, label }: { reading: Reading; piece: string; label: string }) {
-    const ticked = useSelector((view) => Boolean(view.ticks[tickKey(reading.round.n, piece)]));
+/** A piece's Read toggle: a tick button, pressed once read; ticking it by hand calls `onRead`, say to fold the piece. */
+function ReadTick({ reading, piece, label, onRead }: { reading: Reading; piece: string; label: string; onRead: () => void }) {
+    const ticked = useSelector((view) => shownRead(view, reading.round, piece));
     const tick = useTick();
     return (
-        <label className="toggle-inline read-tick">
-            <input
-                type="checkbox"
-                checked={ticked}
-                disabled={!reading.editable}
-                aria-label={`${label} read`}
-                onChange={(event) => {
-                    const key = tickKey(reading.round.n, piece);
-                    if (event.target.checked) untickedByHand.delete(key);
-                    else untickedByHand.add(key);
-                    tick(piece, event.target.checked, 'manual');
-                }}
-            />
-            <span>Read</span>
-        </label>
+        <button
+            type="button"
+            className="icon-button read-tick"
+            aria-pressed={ticked}
+            disabled={!reading.editable}
+            aria-label={`${label} read`}
+            title={ticked ? 'Mark unread' : 'Mark read'}
+            onClick={() => {
+                const key = tickKey(reading.round.n, piece);
+                if (ticked) untickedByHand.add(key);
+                else {
+                    untickedByHand.delete(key);
+                    onRead();
+                }
+                tick(piece, !ticked, 'manual');
+            }}
+        >
+            <CheckIcon size={14} />
+        </button>
     );
 }
 
@@ -228,6 +278,24 @@ function ReadMark() {
             <CheckIcon size={9} />
         </span>
     );
+}
+
+/**
+ * A piece's fold, which Space toggles while the piece is the current one, first ticking it read by hand, as its Read
+ * toggle does, when it is not read yet.
+ */
+function useFold(ref: React.RefObject<HTMLElement | null>, reading: Reading, piece: string) {
+    const [folded, setFolded] = useState(false);
+    const ticked = useSelector((view) => shownRead(view, reading.round, piece));
+    const tick = useTick();
+    useSpaceKey(ref, () => {
+        if (!ticked && reading.editable) {
+            untickedByHand.delete(tickKey(reading.round.n, piece));
+            tick(piece, true, 'manual');
+        }
+        setFolded((was) => !was);
+    });
+    return [folded, setFolded] as const;
 }
 
 /** A piece's button that folds it down to its header, say once read, or opens it again. */
@@ -246,9 +314,9 @@ function FoldButton({ folded, label, onFold }: { folded: boolean; label: string;
     );
 }
 
-/** Whether `piece` counts as read in the round: ticked, and any repeat place that differs opened. */
+/** Whether `piece` counts as read in the round: ticked with any repeat place that differs opened, or read elsewhere. */
 function usePieceRead(reading: Reading, piece: PieceSpec): boolean {
-    return useSelector((view) => pieceRead(view, reading.round.index, reading.round.n, piece));
+    return useSelector((view) => readSet(view, reading.round).has(piece.id));
 }
 
 /** The reviewer's own comments on `file` whose last line is `row`. */
@@ -731,11 +799,12 @@ function OpenInEditor({ reading, file, lines }: { reading: Reading; file: string
     if (!dir || !lines || !reading.editable) return null;
     return (
         <a
-            className="button-link small"
+            className="icon-button tiny"
             href={editorLink(dir, file, parseRange(lines)[0])}
             aria-label={`Open in VS Code: ${file}`}
+            title="Open in VS Code"
         >
-            Open in VS Code
+            <VsCodeIcon />
         </a>
     );
 }
@@ -775,7 +844,7 @@ const PieceCard = memo(function PieceCard({
 }) {
     const ref = useRef<HTMLElement>(null);
     const [override, setOverride] = useState<PieceView>();
-    const [folded, setFolded] = useState(false);
+    const [folded, setFolded] = useFold(ref, reading, piece.id);
     const tickable = useAutoTickable(reading, piece.id);
     const tick = useTick();
     const autoTick = () => {
@@ -784,10 +853,11 @@ const PieceCard = memo(function PieceCard({
     // A folded piece shows no code, so its header on screen reads nothing.
     useAutoTick(ref, tickable && !folded, autoTick);
     const read = usePieceRead(reading, piece);
+    useFoldOffScreen(ref, read && !folded, () => setFolded(true));
     const view = override ?? startingView(reading, piece);
     const where = pieceWhere(piece);
     return (
-        <article ref={ref} id={`piece-${piece.id}`} className={`piece${read ? ' is-read' : ''}`} aria-label={where}>
+        <article ref={ref} id={`piece-${piece.id}`} className={`piece${read ? ' is-read' : ''}`} aria-label={where} tabIndex={-1}>
             <header className="piece-head">
                 <span className="piece-name">
                     <FoldButton folded={folded} label={where} onFold={setFolded} />
@@ -801,7 +871,7 @@ const PieceCard = memo(function PieceCard({
                 <span className="grow" />
                 <OpenInEditor reading={reading} file={piece.file} {...(piece.lines ? { lines: piece.lines } : {})} />
                 {piece.lines && <ViewSwitch view={view} onChange={setOverride} label={where} />}
-                <ReadTick reading={reading} piece={piece.id} label={where} />
+                <ReadTick reading={reading} piece={piece.id} label={where} onRead={() => setFolded(true)} />
             </header>
             <div className="piece-body" hidden={folded}>
                 {note && (
@@ -855,11 +925,12 @@ function TestCard({
 }) {
     const ref = useRef<HTMLElement>(null);
     const [override, setOverride] = useState<TestView>();
-    const [folded, setFolded] = useState(false);
+    const [folded, setFolded] = useFold(ref, reading, piece.id);
     const tickable = useAutoTickable(reading, piece.id);
     const tick = useTick();
     useAutoTick(ref, tickable && !folded, () => tick(piece.id, true, 'auto'));
     const read = usePieceRead(reading, piece);
+    useFoldOffScreen(ref, read && !folded, () => setFolded(true));
     const view = override ?? (reading.tests === 'pseudo' && !pseudo ? 'code' : reading.tests);
     return (
         <article
@@ -867,6 +938,7 @@ function TestCard({
             id={`piece-${piece.id}`}
             className={`piece test-case${read ? ' is-read' : ''}`}
             aria-label={plainTitle(title)}
+            tabIndex={-1}
         >
             <header className="piece-head">
                 <span className="piece-name strong">
@@ -892,7 +964,7 @@ function TestCard({
                         </button>
                     ))}
                 </span>
-                <ReadTick reading={reading} piece={piece.id} label={plainTitle(title)} />
+                <ReadTick reading={reading} piece={piece.id} label={plainTitle(title)} onRead={() => setFolded(true)} />
             </header>
             <div className="piece-body" hidden={folded}>
                 {view === 'pseudo' && pseudo && (
@@ -963,12 +1035,10 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
 function PageView({ reading, page, number, total }: { reading: Reading; page: PageRecord; number: number; total: number }) {
     const tick = useTick();
     const unread = useSelector(
-        (view) => page.pieces.filter((piece) => !view.ticks[tickKey(reading.round.n, piece.id)]).map((piece) => piece.id),
+        (view) => page.pieces.filter((piece) => !shownRead(view, reading.round, piece.id)).map((piece) => piece.id),
         deepEqual
     );
-    const read = useSelector((view) =>
-        page.pieces.every((piece) => pieceRead(view, reading.round.index, reading.round.n, piece))
-    );
+    const read = useSelector((view) => page.pieces.every((piece) => readSet(view, reading.round).has(piece.id)));
     const { content } = page;
     const notes = new Map(content?.pieces.map((piece) => [piece.id, piece]) ?? []);
     const tests = new Map(content?.tests?.map((test) => [test.piece, test]) ?? []);
@@ -1383,7 +1453,7 @@ function ReadContents({
         (view) =>
             roundPages(view, round.n)
                 .filter((page) => page.kind === 'tests' && page.content)
-                .flatMap((page) => page.pieces.filter((piece) => !view.ticks[tickKey(round.n, piece.id)]))
+                .flatMap((page) => page.pieces.filter((piece) => !shownRead(view, round, piece.id)))
                 .map((piece) => piece.id),
         deepEqual
     );
@@ -1657,6 +1727,7 @@ export function Readthrough() {
         setPage(id);
         document.getElementById('main')?.scrollTo?.({ top: 0 });
     };
+    useReadKeys({ page: round.readthrough ? current : undefined, previous: order[at - 1], next: order[at + 1], go });
     let body: ReactNode;
     if (!hasReadthrough(round.technique)) body = <p className="muted">This round is reviewed with the overview deck alone.</p>;
     else if (!round.readthrough) body = <ReadBuilding round={round} />;
@@ -1673,6 +1744,10 @@ export function Readthrough() {
                             value={progress.read}
                             aria-label="How much of the change is read"
                         />
+                        <p className="small muted read-keys">
+                            <kbd>PgDn</kbd> <kbd>PgUp</kbd> piece to piece · <kbd>↓</kbd> <kbd>↑</kbd> scroll, press on past the
+                            end · <kbd>Space</kbd> read and fold
+                        </p>
                     </div>
                     <NameSearch onSearch={(name) => setSearch({ name, uses: false })} />
                 </div>

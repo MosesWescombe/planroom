@@ -839,6 +839,13 @@ input[type="checkbox"] {
     overflow-y: auto;
 }
 
+/* The rail still scrolls by wheel, touch and keyboard, without a scroll bar. */
+.rail-wrap,
+.rail-scroll,
+.rail-strip {
+    scrollbar-width: none;
+}
+
 /* The rail's head: the brand, level with the top row, and the collapse button. */
 .rail-head {
     display: flex;
@@ -7319,6 +7326,16 @@ button.nav-item {
     accent-color: var(--accent);
 }
 
+/* The read-through's keys under its progress, each key a small raised cap. */
+.read-keys kbd {
+    padding: 0 4px;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
 .name-search .field-input {
     width: 180px;
 }
@@ -7327,6 +7344,8 @@ button.nav-item {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    /* The arrow keys' pull past a piece shifts the page a little way, and lets it spring back. */
+    transition: transform 0.2s ease-out;
 }
 
 .piece {
@@ -7349,6 +7368,11 @@ button.nav-item {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+/* A rail heading's read mark at its end, in line with the marks on its rows. */
+.nav-heading .read-mark {
+    margin-left: auto;
 }
 
 /* The tests heading's Mark all read, at its end in plain case. */
@@ -7424,8 +7448,17 @@ button.nav-item {
     font-size: 13px;
 }
 
+/* As tall as the segmented view switch beside it: its 32px buttons inside 3px of padding. */
 .read-tick {
-    font-size: 13px;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--line);
+}
+
+.read-tick[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
 }
 
 .piece-note,

@@ -5,6 +5,16 @@ import { plainTitle } from '../components/Markdown';
 import { deepEqual, useSelector } from '../store';
 import { useActions, useUiState } from '../ui';
 
+/** Whether a key press is someone typing, or in a dialog, which the deck's and the read-through's keys leave alone. */
+export function typing(target: EventTarget | null): boolean {
+    return (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+            ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+            Boolean(target.closest('dialog, .modal')))
+    );
+}
+
 /** The round on show: the one the reviewer switched to, else the current one. */
 export function useShownRound(): RoundRecord {
     const { round } = useUiState();
