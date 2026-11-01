@@ -1,4 +1,3 @@
-import { EditorView } from '@codemirror/view';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,7 +5,7 @@ import type { LineIndex, PageRecord, TickRecord } from '../../shared/readthrough
 import type { ThreadRecord } from '../../shared/records';
 import { DEFAULT_PREFERENCES, type ItemRecord, type ReviewPreferences, type RoundRecord } from '../../shared/review';
 import { commentThread, NOW } from '../../test/fixtures';
-import { defined, makeView, posted, storeWith } from '../../test/harness';
+import { defined, makeView, posted, storeWith, typeInto } from '../../test/harness';
 import { App } from '../App';
 import { CodeViewer, type LineSelection } from '../code/CodeViewer';
 import { rangeFromOffsets } from '../comments/selection';
@@ -316,14 +315,11 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
-/** Replace the text of the comment editor `box`, as typing it would. */
-function typeInto(box: HTMLElement, text: string) {
-    const view = EditorView.findFromDOM(box.closest('.markdown-editor') as HTMLElement)!;
-    act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } }));
-}
-
 /** The piece card for `where`. */
 const piece = (where: string) => screen.getByRole('article', { name: where });
+
+/** The block of a page's pieces of `path`. */
+const file = (path: string) => screen.getByRole('region', { name: path });
 
 /** The code line in `container` holding `text`, once its file's diff has loaded; highlighting splits a line into spans. */
 async function line(container: HTMLElement, text: string): Promise<HTMLElement> {
@@ -380,6 +376,17 @@ describe('the read-through tab', () => {
         expect(screen.getByRole('heading', { level: 1, name: 'What needs no line-by-line read' })).toBeInTheDocument();
         expect(screen.getByText('pnpm-lock.yaml')).toBeInTheDocument();
         expect(posted).toEqual([{ type: 'read.tick', piece: 'housekeeping', read: true, how: 'auto' }]);
+    });
+
+    it('stays in place when the agent restructures away the page on show, a new page there coming', async () => {
+        const store = storeWith(readView());
+        render(<App store={store} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+        expect(screen.getByRole('heading', { level: 1, name: 'The helper moved' })).toBeInTheDocument();
+        const split = page({ id: 'split', title: 'Split off', order: 2, pieces: MOVED.pieces });
+        act(() => store.snapshot(readView({ pages: [RETRY, split, TESTS] })));
+        expect(screen.getByRole('heading', { level: 1, name: 'Split off' })).toBeInTheDocument();
+        expect(screen.getByText(/This page is coming/)).toBeInTheDocument();
     });
 
     it('keeps the place on show in the address: a link opens it, and Back returns to the place before', async () => {
@@ -557,20 +564,59 @@ describe('the read-through tab', () => {
 });
 
 describe('pieces of code', () => {
-    it('opens a piece in VS Code at its first line, from the worktree, while the round is the live one', async () => {
+    it('opens a file in VS Code at its first piece, from the worktree, while the round is the live one', async () => {
         const { unmount } = render(<App store={storeWith(readView({ worktreeDir: '/repo/.planroom/wt' }))} />);
-        expect(within(piece('src/send.ts:1-11')).getByRole('link', { name: 'Open in VS Code: src/send.ts' })).toHaveAttribute(
+        expect(within(file('src/send.ts')).getByRole('link', { name: 'Open in VS Code: src/send.ts' })).toHaveAttribute(
             'href',
             'vscode://file/repo/.planroom/wt/src/send.ts:1:1'
         );
-        expect(within(piece('src/jobs/email.ts:4')).getByRole('link', { name: /Open in VS Code/ })).toHaveAttribute(
+        expect(within(file('src/jobs/email.ts')).getByRole('link', { name: /Open in VS Code/ })).toHaveAttribute(
             'href',
             'vscode://file/repo/.planroom/wt/src/jobs/email.ts:4:1'
         );
         unmount();
         render(<App store={storeWith(readView())} />);
-        expect(within(piece('src/send.ts:1-11')).queryByRole('link', { name: /Open in VS Code/ })).not.toBeInTheDocument();
+        expect(within(file('src/send.ts')).queryByRole('link', { name: /Open in VS Code/ })).not.toBeInTheDocument();
         expect(editorLink('C:\\work\\my repo', 'src/a#b.ts', 7)).toBe('vscode://file/C:/work/my%20repo/src/a%23b.ts:7:1');
+    });
+
+    it("groups a file's pieces under one header where the file first shows, each a section in line order", async () => {
+        const split = page({
+            id: 'split',
+            title: 'The send loop in parts',
+            pieces: [
+                { id: 'loop', file: 'src/send.ts', lines: '4-11' },
+                { id: 'helper', file: 'src/b.ts', lines: '1-4' },
+                { id: 'imports', file: 'src/send.ts', lines: '1-2' }
+            ],
+            content: {
+                summary: 'Split.',
+                pieces: [
+                    { id: 'loop', note: 'The loop reads the limit.' },
+                    { id: 'imports', note: 'It imports the sender.' }
+                ]
+            }
+        });
+        const { rerender } = render(<App store={storeWith(readView({ pages: [split] }))} />);
+        expect(screen.getAllByRole('region', { name: /^src\// }).map((region) => region.getAttribute('aria-label'))).toEqual([
+            'src/send.ts',
+            'src/b.ts'
+        ]);
+        const send = within(file('src/send.ts'));
+        expect(send.getAllByRole('article').map((article) => article.getAttribute('aria-label'))).toEqual([
+            'src/send.ts:1-2',
+            'src/send.ts:4-11'
+        ]);
+        expect(within(piece('src/send.ts:1-2')).getByText('It imports the sender.')).toBeInTheDocument();
+        expect(within(piece('src/send.ts:4-11')).getByText('The loop reads the limit.')).toBeInTheDocument();
+        expect(within(piece('src/send.ts:4-11')).getByText('lines 4-11')).toHaveAttribute('title', 'src/send.ts:4-11');
+        const head = () => within(defined(file('src/send.ts').querySelector<HTMLElement>('.piece-file-head')));
+        expect(head().queryByRole('img', { name: 'read' })).not.toBeInTheDocument();
+
+        rerender(<App store={storeWith(readView({ pages: [split], ticks: { '1:loop': tick } }))} />);
+        expect(head().queryByRole('img', { name: 'read' })).not.toBeInTheDocument();
+        rerender(<App store={storeWith(readView({ pages: [split], ticks: { '1:loop': tick, '1:imports': tick } }))} />);
+        expect(head().getByRole('img', { name: 'read' })).toBeInTheDocument();
     });
 
     it('shows a piece as it is now with its changed lines marked, and switches only that piece to a diff', async () => {
@@ -798,6 +844,29 @@ describe('reading and commenting', () => {
         );
     });
 
+    it('comments on a whole file from its header, and shows the comment under it', async () => {
+        const { rerender } = render(<App store={storeWith(readView())} />);
+        const send = within(file('src/send.ts'));
+        await userEvent.click(send.getByRole('button', { name: 'Comment on src/send.ts' }));
+        const box = send.getByRole('dialog', { name: 'Comment on src/send.ts' });
+        expect(box).toHaveClass('composer');
+        const text = within(box).getByRole('textbox', { name: 'Your comment on src/send.ts' });
+        expect(text).toHaveFocus();
+        typeInto(text, 'Split this file');
+        await userEvent.click(within(box).getByRole('button', { name: 'Add comment' }));
+        expect(posted).toEqual([
+            { type: 'note.save', anchor: { file: 'src/send.ts', side: 'new' }, text: 'Split this file', page: 'retry-limit' }
+        ]);
+        await waitFor(() => expect(send.queryByRole('dialog')).not.toBeInTheDocument());
+
+        const note = { id: 'N-1', round: 1, anchor: { file: 'src/send.ts', side: 'new' as const }, text: 'Split it', at: NOW };
+        rerender(<App store={storeWith({ ...readView(), notes: { 'N-1': note } })} />);
+        const shown = within(file('src/send.ts')).getByText('Split it');
+        expect(shown.closest('.piece-file-notes')).toBeInTheDocument();
+        expect(shown.closest('article')).toBeNull();
+        expect(within(file('src/jobs/email.ts')).queryByText('Split it')).not.toBeInTheDocument();
+    });
+
     it('comments on every line a selection spans, and on a repeat example for every place unless only here', async () => {
         render(<App store={storeWith(readView())} />);
         const send = within(piece('src/send.ts:1-11'));
@@ -857,7 +926,7 @@ describe('reading and commenting', () => {
         await userEvent.click(send.getByRole('button', { name: 'Ask the agent' }));
         const composer = within(screen.getByRole('dialog', { name: 'Comment' }));
         expect(composer.getByText('policy.maxAttempts')).toHaveClass('is-code');
-        await userEvent.type(composer.getByRole('textbox', { name: 'Comment' }), 'Can it be zero?');
+        typeInto(composer.getByRole('textbox', { name: 'Comment' }), 'Can it be zero?');
         await userEvent.click(composer.getByRole('button', { name: 'Send to agent' }));
         expect(posted).toContainEqual(
             expect.objectContaining({
@@ -881,7 +950,7 @@ describe('reading and commenting', () => {
         const toolbar = await screen.findByRole('toolbar', { name: 'Selection actions' });
         await userEvent.click(within(toolbar).getByRole('button', { name: 'Comment' }));
         const composer = within(screen.getByRole('dialog', { name: 'Comment' }));
-        await userEvent.type(composer.getByRole('textbox', { name: 'Comment' }), 'Which limit?');
+        typeInto(composer.getByRole('textbox', { name: 'Comment' }), 'Which limit?');
         await userEvent.click(composer.getByRole('button', { name: 'Send to agent' }));
         expect(posted).toContainEqual(
             expect.objectContaining({
@@ -894,6 +963,40 @@ describe('reading and commenting', () => {
                 text: 'Which limit?'
             })
         );
+    });
+
+    it('asks the agent about any words on the page, such as a file name, as a question on the page', async () => {
+        render(<App store={storeWith(readView())} />);
+        const where = defined(screen.getByRole('region', { name: 'src/send.ts' }).querySelector('.piece-file-path'));
+        const selection = defined(window.getSelection());
+        selection.removeAllRanges();
+        selection.addRange(defined(rangeFromOffsets(where, 0, 11)));
+        fireEvent(document, new Event('selectionchange'));
+        const toolbar = await screen.findByRole('toolbar', { name: 'Selection actions' });
+        await userEvent.click(within(toolbar).getByRole('button', { name: 'Comment' }));
+        const composer = within(screen.getByRole('dialog', { name: 'Comment' }));
+        typeInto(composer.getByRole('textbox', { name: 'Comment' }), 'Why this file?');
+        await userEvent.click(composer.getByRole('button', { name: 'Send to agent' }));
+        expect(posted).toContainEqual(
+            expect.objectContaining({
+                type: 'comment.create',
+                anchor: expect.objectContaining({
+                    target: 'page:retry-limit',
+                    quote: expect.objectContaining({ exact: 'src/send.ts' })
+                }),
+                text: 'Why this file?'
+            })
+        );
+    });
+
+    it('shows only the line toolbar over selected code, never the page one as well', async () => {
+        render(<App store={storeWith(readView())} />);
+        selectCode(await line(piece('src/send.ts:1-11'), 'policy.maxAttempts'), 'policy.maxAttempts');
+        fireEvent(document, new Event('selectionchange'));
+        expect(await screen.findByRole('toolbar', { name: 'Line 8 selected' })).toBeInTheDocument();
+        // The page's toolbar would show a frame after the selection changed.
+        await act(() => new Promise((resolve) => window.requestAnimationFrame(resolve)));
+        expect(screen.queryByRole('toolbar', { name: 'Selection actions' })).toBeNull();
     });
 
     it('lists a question on the words by its quote, attached to whichever passage holds it', async () => {
@@ -995,10 +1098,7 @@ describe('test pages', () => {
         const { rerender } = render(<App store={storeWith(readView({ pages, ticks: { '1:test-gives-up': tick } }))} />);
         const heading = () => within(within(screen.getByRole('navigation', { name: 'Read-through' })).getByText('TESTS'));
         await userEvent.click(heading().getByRole('button', { name: 'Mark all read' }));
-        expect(posted).toEqual([
-            { type: 'read.tick', piece: 'test-retries', read: true, how: 'manual' },
-            { type: 'read.tick', piece: 'test-policy', read: true, how: 'manual' }
-        ]);
+        expect(posted).toEqual([{ type: 'read.mark', pieces: ['test-retries', 'test-policy'] }]);
         const ticks = { '1:test-retries': tick, '1:test-gives-up': tick, '1:test-policy': tick };
         rerender(<App store={storeWith(readView({ pages, ticks }))} />);
         expect(heading().queryByRole('button', { name: 'Mark all read' })).not.toBeInTheDocument();
@@ -1030,6 +1130,14 @@ describe('findings under their lines', () => {
         const send = piece('src/send.ts:1-11');
         const card = await within(send).findByRole('button', { name: /A limit of zero retries forever/ });
         expect(card.closest('.code-note')?.previousElementSibling?.textContent).toContain('policy.maxAttempts');
+    });
+
+    it("shows a finding on a whole file under its file's header", async () => {
+        const whole = { ...finding, id: 'I-2', title: 'Split the sender', anchor: { file: 'src/send.ts', side: 'new' as const } };
+        render(<App store={storeWith(readView({ items: [finding, whole], round: { reviewers: standard } }))} />);
+        const card = await within(file('src/send.ts')).findByRole('button', { name: /Split the sender/ });
+        expect(card.closest('.piece-file-notes')).toBeInTheDocument();
+        expect(card.closest('article')).toBeNull();
     });
 
     it('opens a finding over the read-through instead of going to the Review tab', async () => {
@@ -1131,20 +1239,47 @@ describe('handing the comments to an agent', () => {
 });
 
 describe('the code viewer', () => {
-    it('shows what a change replaced on click only, and opens a removed-lines marker', async () => {
-        render(<CodeViewer source={SEND_PATCH} format="now" label="send" />);
-        fireEvent.mouseEnter(screen.getByText(/policy\.maxAttempts/).closest('.code-line')!);
-        expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    /** The lines of the code window in `box`: each line's number and its code. */
+    const windowLines = (box: HTMLElement) =>
+        [...box.querySelectorAll('.code-line')].map((row) => [
+            row.querySelector('.line-number')?.textContent,
+            row.querySelector('.line-code')?.textContent
+        ]);
+
+    it('shows what a change replaced on click only, as highlighted code numbered as it was, until Escape', async () => {
+        render(<CodeViewer source={SEND_PATCH} format="now" language="typescript" label="send" />);
+        fireEvent.mouseEnter(await line(document.body, 'policy.maxAttempts'));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         const dot = screen.getByRole('button', { name: 'What the change at line 8 replaced' });
         await userEvent.click(dot);
-        expect(screen.getByRole('note', { name: 'Before the change at line 8' })).toHaveTextContent(
-            'if (attempt >= 3) throw error;'
-        );
+        const box = screen.getByRole('dialog', { name: 'Before the change at line 8' });
+        expect(box).toHaveFocus();
+        expect(windowLines(box)).toEqual([['8', '            if (attempt >= 3) throw error;']]);
+        expect(within(box).getByText('throw')).toHaveClass('hljs-keyword');
+        // Its code is a window of its own, not in a line of the code it floats over, so selecting it picks none of those.
+        expect(box.closest('.code-line')).toBeNull();
         await userEvent.click(dot);
-        expect(screen.queryByRole('note')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        await userEvent.click(dot);
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(dot).toHaveFocus();
+    });
+
+    it('opens a removed-lines marker to the lines removed, highlighted and numbered as they were, until a press outside', async () => {
+        render(<CodeViewer source={SEND_PATCH} format="now" language="typescript" label="send" />);
         expect(screen.queryByText(/log\.warn/)).not.toBeInTheDocument();
-        await userEvent.click(screen.getByRole('button', { name: /1 line removed/ }));
-        expect(screen.getByText(/log\.warn/).closest('.code-line')).toHaveClass('is-remove');
+        const marker = screen.getByRole('button', { name: /1 line removed/ });
+        await userEvent.click(marker);
+        const box = screen.getByRole('dialog', { name: 'The 1 line removed' });
+        expect(marker).toHaveAttribute('aria-expanded', 'true');
+        expect(windowLines(box)).toEqual([['10', "        log.warn('retrying');"]]);
+        expect(within(box).getByText("'retrying'")).toHaveClass('hljs-string');
+        await userEvent.click(box);
+        expect(box).toBeInTheDocument();
+        await userEvent.click(await line(document.body, 'policy.maxAttempts'));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('marks each change with one dot, on its first line, holding every line the change replaced', async () => {
@@ -1154,7 +1289,10 @@ describe('the code viewer', () => {
             screen.getAllByRole('button', { name: /What the change at line/ }).map((dot) => dot.getAttribute('aria-label'))
         ).toEqual(['What the change at line 2 replaced', 'What the change at line 4 replaced']);
         await userEvent.click(screen.getByRole('button', { name: 'What the change at line 2 replaced' }));
-        expect(screen.getByRole('note', { name: 'Before the change at line 2' })).toHaveTextContent(/^Beforeonetwo$/);
+        expect(windowLines(screen.getByRole('dialog', { name: 'Before the change at line 2' }))).toEqual([
+            ['2', 'one'],
+            ['3', 'two']
+        ]);
     });
 
     it('picks the whole lines a selection touches with the code selected, leaving a line it only touches the edge of', async () => {
@@ -1331,6 +1469,14 @@ describe('the keys', () => {
         press('PageDown');
         press('PageDown');
         expect(screen.getByRole('heading', { level: 1, name: 'The helper moved' })).toBeInTheDocument();
+    });
+
+    it("brings a piece to the top under its file's header, which stays pinned there", () => {
+        render(<App store={storeWith(readView())} />);
+        const { scrolled } = layOut(0);
+        Object.defineProperty(defined(file('src/send.ts').querySelector('.piece-file-head')), 'offsetHeight', { value: 44 });
+        press('PageDown');
+        expect(scrolled).toHaveBeenLastCalledWith({ top: 40, behavior: 'smooth' });
     });
 
     it('scrolls a step with the arrow keys, stops at the end of a piece, then pulls through to the next one', () => {

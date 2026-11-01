@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AGREED, NOW, phasesWith, questionRecord } from '../../test/fixtures';
-import { instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
+import { editorText, instance, makeView, posted, renderWith, storeWith, typeInto } from '../../test/harness';
 import { App } from '../App';
 import { writeSetting } from '../local';
 import { setSendKey } from '../sendKey';
@@ -88,7 +88,7 @@ describe('question cards', () => {
         fireEvent.click(multi);
         fireEvent.click(within(card('Q-2')).getByRole('button', { name: /Option B/ }));
         expect(within(card('Q-2')).getAllByRole('button', { pressed: true })).toHaveLength(2);
-        expect(within(card('Q-3')).getByLabelText('Your answer')).toBeInstanceOf(HTMLTextAreaElement);
+        expect(within(card('Q-3')).getByLabelText('Your answer')).toHaveAttribute('role', 'textbox');
     });
 
     it('save: posts the answer with its note, and the card shows as answered', async () => {
@@ -96,7 +96,7 @@ describe('question cards', () => {
         renderWith(store, <QuestionCard id="Q-14" />);
         const user = userEvent.setup();
         await user.click(within(card('Q-14')).getByText(/Option B/));
-        await user.type(screen.getByLabelText('Add a note (optional)'), 'Overrides need an expiry');
+        typeInto(screen.getByLabelText('Add a note (optional)'), 'Overrides need an expiry');
         await user.click(screen.getByRole('button', { name: 'Save answer' }));
         await waitFor(() => expect(posted).toHaveLength(1));
         expect(posted[0]).toEqual({
@@ -121,6 +121,19 @@ describe('question cards', () => {
         expect(window.localStorage.length).toBe(0);
     });
 
+    it('an answered card shows what the user wrote as the Markdown it was written in', () => {
+        const question = questionRecord('Q-3', 'answered', {
+            input: 'freeform',
+            options: undefined,
+            answer: { text: 'Limit **per key**', note: 'See `limits.ts`', version: 1, at: NOW }
+        });
+        renderWith(storeWith(makeView({ questions: [question] })), <QuestionCard id="Q-3" />);
+        const answer = instance(card('Q-3').querySelector('.your-answer'), HTMLElement);
+        expect(answer).toHaveTextContent('You answered: Limit per key. See limits.ts');
+        expect(answer.querySelector('strong')).toHaveTextContent('per key');
+        expect(answer.querySelector('code')).toHaveTextContent('limits.ts');
+    });
+
     describe('the send key saves from a text box', () => {
         afterEach(() => setSendKey('shift-enter'));
 
@@ -129,10 +142,12 @@ describe('question cards', () => {
             const user = userEvent.setup();
             await user.click(within(card('Q-14')).getByText(/Option B/));
             const note = screen.getByLabelText('Add a note (optional)');
-            await user.type(note, 'One{Enter}two');
-            expect(note).toHaveValue('One\ntwo');
+            typeInto(note, 'One');
+            fireEvent.keyDown(note, { key: 'Enter' });
+            expect(editorText(note)).toBe('One\n');
             expect(posted).toEqual([]);
-            await user.type(note, '{Shift>}{Enter}{/Shift}');
+            typeInto(note, 'One\ntwo');
+            fireEvent.keyDown(note, { key: 'Enter', shiftKey: true });
             await waitFor(() => expect(posted).toHaveLength(1));
             expect(posted[0]).toMatchObject({ type: 'answer.submit', answer: { choice: 'b', note: 'One\ntwo' } });
         });
@@ -141,11 +156,11 @@ describe('question cards', () => {
             setSendKey('enter');
             const question = questionRecord('Q-3', 'open', { input: 'freeform', options: undefined });
             renderWith(storeWith(makeView({ questions: [question] })), <QuestionCard id="Q-3" />);
-            const user = userEvent.setup();
             const box = screen.getByLabelText('Your answer');
-            await user.type(box, '{Enter}');
+            fireEvent.keyDown(box, { key: 'Enter' });
             expect(posted).toEqual([]);
-            await user.type(box, 'Per key{Enter}');
+            typeInto(box, 'Per key');
+            fireEvent.keyDown(box, { key: 'Enter' });
             await waitFor(() => expect(posted).toHaveLength(1));
             expect(posted[0]).toMatchObject({ type: 'answer.submit', questionId: 'Q-3', answer: { text: 'Per key' } });
         });
@@ -179,7 +194,7 @@ describe('question cards', () => {
         renderWith(storeWith(makeView({ questions: [question] })), <QuestionCard id="Q-14" />);
         const user = userEvent.setup();
         await user.click(within(card('Q-14')).getByRole('button', { name: 'View' }));
-        expect(within(card('Q-14')).getByLabelText('Add a note (optional)')).toBeDisabled();
+        expect(within(card('Q-14')).getByLabelText('Add a note (optional)')).toHaveAttribute('contenteditable', 'false');
         await user.click(within(card('Q-14')).getByRole('button', { name: 'Close' }));
         expect(card('Q-14')).toHaveTextContent('You answered: Option B. Overrides need an expiry');
         expect(posted).toEqual([]);
@@ -195,7 +210,7 @@ describe('question cards', () => {
         const radios = within(card('Q-14')).getAllByRole('radio');
         expect(radios[1]).toBeChecked();
         radios.forEach((radio) => expect(radio).toBeDisabled());
-        expect(within(card('Q-14')).getByLabelText('Add a note (optional)')).toBeDisabled();
+        expect(within(card('Q-14')).getByLabelText('Add a note (optional)')).toHaveAttribute('contenteditable', 'false');
         expect(within(card('Q-14')).queryByRole('button', { name: 'Edit' })).toBeNull();
         expect(within(card('Q-14')).queryByRole('button', { name: 'Ask to clarify' })).toBeNull();
         expect(card('Q-14')).not.toHaveTextContent('Double-click to edit');
@@ -298,11 +313,11 @@ describe('question cards', () => {
         renderWith(storeWith(view), <QuestionCard id="Q-14" />);
         await userEvent.setup().click(within(card('Q-14')).getByText(/Option B/));
         const long = 'n'.repeat(4001);
-        fireEvent.change(screen.getByLabelText('Add a note (optional)'), { target: { value: long } });
+        typeInto(screen.getByLabelText('Add a note (optional)'), long);
         cleanup();
         renderWith(storeWith(view), <QuestionCard id="Q-14" />);
         expect(within(card('Q-14')).getAllByRole('radio')[1]).toBeChecked();
-        expect(screen.getByLabelText('Add a note (optional)')).toHaveValue(long);
+        expect(editorText(screen.getByLabelText('Add a note (optional)'))).toBe(long);
         const save = screen.getByRole('button', { name: 'Save answer' });
         expect(save).toBeDisabled();
         expect(save).toHaveAttribute('title', 'the note is over the 4000-character limit');
@@ -402,7 +417,7 @@ describe('the Interrogate phase', () => {
         renderWith(store, <Interrogate />);
         const user = userEvent.setup();
         await user.click(screen.getByRole('button', { name: 'Add a question' }));
-        await user.type(screen.getByLabelText('Suggest a question for the agent'), 'Should internal service keys skip limits?');
+        typeInto(screen.getByLabelText('Suggest a question for the agent'), 'Should internal service keys skip limits?');
         await user.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() =>
             expect(posted).toEqual([{ type: 'question.suggest', text: 'Should internal service keys skip limits?' }])
@@ -568,7 +583,7 @@ describe('phase 1 stages, assumptions and directions', () => {
         cleanup();
         renderWith(storeWith(makeView({ questions: [assumption] })), <QuestionCard id="Q-2" />);
         await user.click(screen.getByRole('button', { name: 'Not quite…' }));
-        await user.type(screen.getByLabelText('What is actually the case'), 'Internal keys too');
+        typeInto(screen.getByLabelText('What is actually the case'), 'Internal keys too');
         await user.click(screen.getByRole('button', { name: 'Save answer' }));
         await waitFor(() => expect(posted[1]).toMatchObject({ answer: { text: 'Internal keys too' } }));
     });

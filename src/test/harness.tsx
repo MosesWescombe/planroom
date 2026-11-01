@@ -1,4 +1,5 @@
-import { cleanup, type RenderResult, render } from '@testing-library/react';
+import { EditorView } from '@codemirror/view';
+import { act, cleanup, type RenderResult, render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { SessionState } from '../shared/state';
@@ -54,6 +55,59 @@ export function defined<T>(value: T | null | undefined): T {
 export function instance<T>(value: unknown, type: abstract new (...args: never[]) => T): T {
     if (value instanceof type) return value;
     throw new Error(`Expected a ${type.name}, got ${String(value)}`);
+}
+
+/** The Markdown editor whose text box is `box`. */
+export function editorOf(box: HTMLElement): EditorView {
+    return defined(EditorView.findFromDOM(instance(box.closest('.markdown-editor'), HTMLElement)));
+}
+
+/**
+ * Replace the text of the Markdown editor `box`, as typing it would, the caret left at its end; userEvent cannot type
+ * into CodeMirror in jsdom.
+ */
+export function typeInto(box: HTMLElement, text: string): void {
+    const view = editorOf(box);
+    act(() =>
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text }, selection: { anchor: text.length } })
+    );
+}
+
+/** The text in the Markdown editor `box`. */
+export function editorText(box: HTMLElement): string {
+    return editorOf(box).state.doc.toString();
+}
+
+/** An IntersectionObserver that reports every observed element as fully on screen, since jsdom has none. */
+export class OnScreen implements IntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = '0px';
+    readonly scrollMargin = '0px';
+    readonly thresholds = [0];
+
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+
+    observe(target: Element): void {
+        const rect = target.getBoundingClientRect();
+        const entry: IntersectionObserverEntry = {
+            target,
+            time: 0,
+            intersectionRatio: 1,
+            isIntersecting: true,
+            boundingClientRect: rect,
+            intersectionRect: rect,
+            rootBounds: null
+        };
+        this.callback([entry], this);
+    }
+
+    unobserve(): void {}
+
+    disconnect(): void {}
+
+    takeRecords(): IntersectionObserverEntry[] {
+        return [];
+    }
 }
 
 /** Every page event the components posted, parsed. */

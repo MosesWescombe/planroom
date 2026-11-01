@@ -505,7 +505,7 @@ export const blockCatalog: Record<BlockType, CatalogEntry> = {
         notes: [
             '2 to 8 `areas`, each an `id` (lowercase, hyphens), a `title`, a one-line `summary` of how the change reaches it, and up to 4 `blocks`: the ids of blocks that explain it, sent with `doc.block.upsert`.',
             'Explain each area by showing it: a `flow` or `sequence` of the path from the change, a `stepThrough` or an `html` visual to animate it, `code` for the caller or config it meets.',
-            'The reviewer can add areas of their own. The map is fixed once the first part of the deck is published.'
+            'The reviewer can add areas of their own. Changing the map after they sent their concerns drops those on areas it no longer has, and takes them again.'
         ],
         example: {
             areas: [

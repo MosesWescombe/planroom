@@ -12,7 +12,8 @@ import {
 import { isInfo } from '../../shared/questions';
 import type { View } from '../../shared/view';
 import { CheckIcon, PlusIcon } from '../components/icons';
-import { Markdown } from '../components/Markdown';
+import { InlineMarkdown, Markdown } from '../components/Markdown';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 import { Rail } from '../components/Rail';
 import { useReadOnly } from '../readOnly';
 import { deepEqual, useSelector } from '../store';
@@ -60,7 +61,7 @@ function Suggestions() {
             <div className="nav-heading">YOUR SUGGESTIONS</div>
             {suggestions.map((suggestion) => (
                 <div key={suggestion.id} className="suggestion">
-                    <span>{suggestion.text}</span>
+                    <InlineMarkdown source={suggestion.text} />
                     <span className="suggestion-status">
                         {suggestion.status === 'pending'
                             ? 'Pending · waiting for the agent'
@@ -103,8 +104,17 @@ function AddQuestion() {
                 );
             }}
         >
-            <label htmlFor="suggest-question">Suggest a question for the agent</label>
-            <textarea id="suggest-question" rows={2} value={text} autoFocus onChange={(event) => setText(event.target.value)} />
+            <label id="suggest-question-label" htmlFor="suggest-question">
+                Suggest a question for the agent
+            </label>
+            <MarkdownEditor
+                id="suggest-question"
+                labelId="suggest-question-label"
+                rows={2}
+                value={text}
+                autoFocus
+                onChange={setText}
+            />
             <div className="row-end">
                 <button type="button" className="button-text" onClick={() => setOpen(false)}>
                     Cancel

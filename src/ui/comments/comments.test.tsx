@@ -1,11 +1,12 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QuestionRecord, QuestionStatus } from '../../shared/questions';
 import type { Attachment, ThreadMessage } from '../../shared/records';
 import type { AgentStatus } from '../../shared/view';
 import { commentThread, NOW, questionRecord } from '../../test/fixtures';
-import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
+import { defined, editorText, instance, makeView, posted, renderWith, storeWith, typeInto } from '../../test/harness';
+import { App } from '../App';
 import { SidePanel } from '../components/SidePanel';
 import { Thread } from '../components/Thread';
 import { QuestionCard } from '../interrogate/QuestionCard';
@@ -68,7 +69,7 @@ describe('commenting on any selected text', () => {
         expect(range?.toString()).toBe('support can raise one key');
     });
 
-    it('ignores a selection that spans two commentable elements or sits in a field', () => {
+    it('ignores a selection across two commentable elements with nothing commentable around them', () => {
         renderWith(
             storeWith(makeView()),
             <>
@@ -84,6 +85,51 @@ describe('commenting on any selected text', () => {
         range.setEnd(instance(screen.getByText('second').firstChild, Text), 3);
         selectRange(range);
         expect(captureSelection()).toBeUndefined();
+    });
+
+    it('takes a selection from outside a passage into it as on what holds them both', () => {
+        renderWith(
+            storeWith(makeView()),
+            <div data-anchor-target="page:p">
+                <code>src/send.ts</code> <p data-anchor-target="block:b">The send loop reads the limit.</p>
+            </div>
+        );
+        const range = document.createRange();
+        range.setStart(instance(screen.getByText('src/send.ts').firstChild, Text), 4);
+        range.setEnd(instance(screen.getByText('The send loop reads the limit.').firstChild, Text), 8);
+        selectRange(range);
+        expect(captureSelection()?.anchor).toEqual({
+            target: 'page:p',
+            position: { start: 4, end: 20 },
+            quote: { exact: 'send.ts The send', prefix: 'src/', suffix: ' loop reads the limit.' }
+        });
+    });
+
+    it('takes nothing from text marked data-no-comment, and finds no quote in it', () => {
+        renderWith(
+            storeWith(makeView()),
+            <div data-anchor-target="page:p">
+                <p>Retries stop at the limit.</p>
+                <section data-no-comment>
+                    <p>"the cap" asked</p>
+                </section>
+            </div>
+        );
+        select(screen.getByText('"the cap" asked'), 'the cap');
+        expect(captureSelection()).toBeUndefined();
+        const range = document.createRange();
+        range.setStart(instance(screen.getByText('Retries stop at the limit.').firstChild, Text), 0);
+        range.setEnd(instance(screen.getByText('"the cap" asked').firstChild, Text), 3);
+        selectRange(range);
+        expect(captureSelection()).toBeUndefined();
+        const quoting = (exact: string) =>
+            locateAnchor({
+                target: 'page:p',
+                position: { start: 0, end: exact.length },
+                quote: { exact, prefix: '', suffix: '' }
+            });
+        expect(quoting('the cap')?.found).toBeNull();
+        expect(quoting('Retries')?.found).toEqual({ start: 0, end: 7, method: 'position' });
     });
 
     it('finds an anchor on a target that marks several passages in the passage that holds its quote in context', () => {
@@ -126,7 +172,7 @@ describe('commenting on any selected text', () => {
         const composer = screen.getByRole('dialog', { name: 'Comment' });
         expect(within(composer).getByRole('radio', { name: 'Change this' })).toHaveAttribute('aria-checked', 'true');
         const user = userEvent.setup();
-        await user.type(within(composer).getByLabelText('Comment'), 'Overrides need an owner and an expiry');
+        typeInto(within(composer).getByLabelText('Comment'), 'Overrides need an owner and an expiry');
         await user.click(within(composer).getByRole('button', { name: 'Send to agent' }));
         await waitFor(() =>
             expect(posted).toEqual([
@@ -160,6 +206,24 @@ describe('commenting on any selected text', () => {
         act(() => closeComposer());
     });
 
+    it('text outside any card: the toolbar opens the composer on a comment on the tab, quoting it; the side panel is not commentable', async () => {
+        render(<App store={storeWith(makeView())} />);
+        select(screen.getByText(/stress-testing this change/), 'stress-testing this change');
+        expect(captureSelection()?.anchor).toMatchObject({
+            target: 'tab:interrogate',
+            quote: { exact: 'stress-testing this change' }
+        });
+        fireEvent(document, new Event('selectionchange'));
+        const toolbar = await screen.findByRole('toolbar', { name: 'Selection actions' });
+        fireEvent.click(within(toolbar).getByRole('button', { name: 'Comment' }));
+        const composer = screen.getByRole('dialog', { name: 'Comment' });
+        expect(within(composer).getByText('stress-testing this change')).toBeInTheDocument();
+        act(() => closeComposer());
+
+        select(screen.getByRole('complementary', { name: 'Side panel' }), 'Message the agent');
+        expect(captureSelection()).toBeUndefined();
+    });
+
     it('ask to clarify a question: anchored to the question id, not a quote of the whole card', async () => {
         renderWith(
             storeWith(makeView()),
@@ -172,7 +236,7 @@ describe('commenting on any selected text', () => {
         const composer = screen.getByRole('dialog', { name: 'Comment' });
         expect(within(composer).getByText('Comment on Q-3')).toBeInTheDocument();
         const user = userEvent.setup();
-        await user.type(within(composer).getByLabelText('Comment'), 'Which callers?');
+        typeInto(within(composer).getByLabelText('Comment'), 'Which callers?');
         await user.click(within(composer).getByRole('button', { name: 'Send to agent' }));
         await waitFor(() =>
             expect(posted).toEqual([
@@ -192,15 +256,14 @@ describe('commenting on any selected text', () => {
         );
         select(screen.getByText('support can raise one key'), 'raise one key');
         fireEvent.keyDown(document, { key: 'c' });
-        const user = userEvent.setup();
-        await user.type(within(screen.getByRole('dialog', { name: 'Comment' })).getByLabelText('Comment'), 'Halfway through');
+        typeInto(within(screen.getByRole('dialog', { name: 'Comment' })).getByLabelText('Comment'), 'Halfway through');
         act(() => commentOnWhole('question:Q-3', 'question'));
         const composer = screen.getByRole('dialog', { name: 'Comment' });
         expect(within(composer).getByText('Comment on Q-3')).toBeInTheDocument();
-        expect(within(composer).getByLabelText('Comment')).toHaveValue('Halfway through');
+        expect(editorText(within(composer).getByLabelText('Comment'))).toBe('Halfway through');
         act(() => closeComposer());
         act(() => commentOnWhole('question:Q-3', 'question'));
-        expect(within(screen.getByRole('dialog', { name: 'Comment' })).getByLabelText('Comment')).toHaveValue('');
+        expect(editorText(within(screen.getByRole('dialog', { name: 'Comment' })).getByLabelText('Comment'))).toBe('');
         act(() => closeComposer());
     });
 
@@ -240,6 +303,21 @@ describe('threads', () => {
         act(() => setAnchorStates(new Map([['C-1', 'detached']])));
         expect(screen.getByText('Detached · the quoted text is gone')).toBeInTheDocument();
         expect(screen.getByText('raise a key')).toHaveClass('is-detached');
+        act(() => setAnchorStates(new Map()));
+    });
+
+    it('a slide or page the agent removed: its threads stay, detached', async () => {
+        act(() => setAnchorStates(new Map()));
+        const threads = [commentThread('C-1', 'slide:gone'), commentThread('C-2', 'page:gone')];
+        renderWith(
+            storeWith(makeView({ threads })),
+            <>
+                <Thread id="C-1" />
+                <Thread id="C-2" />
+                <CommentLayer />
+            </>
+        );
+        await waitFor(() => expect(screen.getAllByText('Detached · the quoted text is gone')).toHaveLength(2));
         act(() => setAnchorStates(new Map()));
     });
 
@@ -286,7 +364,7 @@ describe('threads', () => {
         renderWith(storeWith(makeView({ threads: [commentThread('C-1', 'block:b1')] })), <Thread id="C-1" />);
         const user = userEvent.setup();
         await user.click(screen.getByRole('button', { name: 'Reply' }));
-        await user.type(screen.getByLabelText('Reply'), 'The account manager');
+        typeInto(screen.getByLabelText('Reply'), 'The account manager');
         await user.click(screen.getByRole('button', { name: 'Send' }));
         await user.click(screen.getByRole('button', { name: 'Resolve' }));
         await waitFor(() =>
@@ -321,7 +399,7 @@ describe('threads', () => {
         const store = storeWith(makeView());
         renderWith(store, <SidePanel />);
         const user = userEvent.setup();
-        await user.type(screen.getByLabelText('Message the agent'), 'Keep the EU edge in mind throughout');
+        typeInto(screen.getByLabelText('Message the agent'), 'Keep the EU edge in mind throughout');
         await user.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(posted).toEqual([{ type: 'message.send', text: 'Keep the EU edge in mind throughout' }]));
         act(() =>
@@ -386,8 +464,8 @@ describe('threads', () => {
         const log = Array.from({ length: 40 }, (_, n) => `line ${n + 1}`).join('\n');
         const box = screen.getByLabelText('Message the agent');
         fireEvent.paste(box, { clipboardData: { getData: () => log, files: [] } });
-        expect(box).toHaveValue('');
-        await user.type(box, 'Why does this fail?');
+        expect(editorText(box)).toBe('');
+        typeInto(box, 'Why does this fail?');
         await user.click(screen.getByRole('button', { name: 'Send' }));
         const attachments: Attachment[] = [{ kind: 'text', text: log }];
         await waitFor(() => expect(posted).toEqual([{ type: 'message.send', text: 'Why does this fail?', attachments }]));
@@ -422,8 +500,8 @@ describe('threads', () => {
     it('a short paste goes into the message as text', () => {
         renderWith(storeWith(makeView()), <SidePanel />);
         const box = screen.getByLabelText('Message the agent');
-        const pasted = fireEvent.paste(box, { clipboardData: { getData: () => 'EU edge', files: [] } });
-        expect(pasted).toBe(true);
+        fireEvent.paste(box, { clipboardData: { getData: () => 'EU edge', files: [] } });
+        expect(editorText(box)).toBe('EU edge');
         expect(screen.queryByRole('button', { name: /Pasted text/ })).toBeNull();
     });
 });
@@ -471,7 +549,7 @@ describe('comments on a question card', () => {
         const user = userEvent.setup();
         await user.click(screen.getByRole('button', { name: /Why does the limiter sit before auth\?/ }));
         await user.click(screen.getByRole('button', { name: 'Reply' }));
-        await user.type(screen.getByLabelText('Reply'), 'Half a thought');
+        typeInto(screen.getByLabelText('Reply'), 'Half a thought');
         const changes: QuestionRecord[] = [
             questionRecord('Q-3', 'needs-review', { version: 2, contentVersion: 2, changedByAgentAt: NOW }),
             questionRecord('Q-3', 'conflict', {
@@ -484,7 +562,7 @@ describe('comments on a question card', () => {
         for (const value of changes) {
             act(() => store.apply([{ field: 'questions', id: 'Q-3', value }]));
             const reply = within(screen.getByRole('dialog')).getByLabelText('Reply');
-            expect(reply).toHaveValue('Half a thought');
+            expect(editorText(reply)).toBe('Half a thought');
             expect(reply).toHaveFocus();
         }
     });
@@ -563,5 +641,41 @@ describe('comments on a question card', () => {
         expect(screen.getAllByRole('dialog')).toHaveLength(1);
         await user.keyboard('{Escape}');
         expect(screen.queryByRole('dialog')).toBeNull();
+    });
+});
+
+describe('the composer of a comment button', () => {
+    afterEach(() => closeComposer());
+
+    it('opens by the button pressed, on screen, even when its target is scrolled out of sight', () => {
+        renderWith(
+            storeWith(makeView({})),
+            <>
+                <h1 data-anchor-target="page:retry">Retry</h1>
+                <button type="button">Ask the agent about this page</button>
+                <CommentLayer />
+            </>
+        );
+        const title = screen.getByRole('heading', { name: 'Retry' });
+        const button = screen.getByRole('button', { name: 'Ask the agent about this page' });
+        vi.spyOn(title, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({ x: 40, y: -900, width: 200, height: 30 }));
+        vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({ x: 40, y: 500, width: 200, height: 20 }));
+        act(() => commentOnWhole('page:retry', 'question', button));
+        expect(screen.getByRole('dialog', { name: 'Comment' })).toHaveStyle({
+            top: `${Math.min(528, window.innerHeight - 320)}px`
+        });
+        act(() => commentOnWhole('page:retry', 'question'));
+        expect(screen.getByRole('dialog', { name: 'Comment' })).toHaveStyle({ top: '8px' });
+    });
+
+    it('closes alone on Escape, leaving a dialog it was opened over open', async () => {
+        const onKey = vi.fn();
+        window.addEventListener('keydown', onKey);
+        renderWith(storeWith(makeView({})), <CommentLayer />);
+        act(() => commentOnWhole('item:I-1', 'question'));
+        await userEvent.keyboard('{Escape}');
+        window.removeEventListener('keydown', onKey);
+        expect(screen.queryByRole('dialog', { name: 'Comment' })).not.toBeInTheDocument();
+        expect(onKey).not.toHaveBeenCalled();
     });
 });

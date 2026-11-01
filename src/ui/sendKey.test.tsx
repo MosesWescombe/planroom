@@ -1,7 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { makeView, posted, renderWith, storeWith } from '../test/harness';
+import { editorText, makeView, posted, renderWith, storeWith, typeInto } from '../test/harness';
 import { SidePanel } from './components/SidePanel';
 import { TopBar } from './components/TopBar';
 import { readSetting, writeSetting } from './local';
@@ -23,11 +23,12 @@ function renderPage() {
 describe('send key', () => {
     it('by default Enter types a new line and Shift+Enter sends', async () => {
         const box = renderPage();
-        const user = userEvent.setup();
-        await user.type(box, 'First line{Enter}second line');
-        expect(box).toHaveValue('First line\nsecond line');
+        typeInto(box, 'First line');
+        fireEvent.keyDown(box, { key: 'Enter' });
+        expect(editorText(box)).toBe('First line\n');
         expect(posted).toEqual([]);
-        await user.type(box, '{Shift>}{Enter}{/Shift}');
+        typeInto(box, 'First line\nsecond line');
+        fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
         await waitFor(() => expect(posted).toEqual([{ type: 'message.send', text: 'First line\nsecond line' }]));
     });
 
@@ -41,10 +42,12 @@ describe('send key', () => {
         expect(readSetting('planroom:send-key')).toBe('enter');
         await user.click(within(dialog).getByRole('button', { name: 'Close' }));
 
-        await user.type(box, 'One{Shift>}{Enter}{/Shift}two');
-        expect(box).toHaveValue('One\ntwo');
+        typeInto(box, 'One');
+        fireEvent.keyDown(box, { key: 'Enter', shiftKey: true });
+        expect(editorText(box)).toBe('One\n');
         expect(posted).toEqual([]);
-        await user.type(box, '{Enter}');
+        typeInto(box, 'One\ntwo');
+        fireEvent.keyDown(box, { key: 'Enter' });
         await waitFor(() => expect(posted).toEqual([{ type: 'message.send', text: 'One\ntwo' }]));
 
         setSendKey('shift-enter');

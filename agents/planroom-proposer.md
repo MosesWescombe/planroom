@@ -1,6 +1,6 @@
 ---
 name: planroom-proposer
-description: Writes a submitted Planroom write-up into openspec/changes/<change-id>/ as proposal, specs, design and tasks that pass openspec validate, or for a Markdown plan into agent-plans/<change-id>/<change-id>.md. Only the planroom skill delegates to it, on phase.submit.
+description: Writes a submitted Planroom write-up into openspec/changes/<change-id>/ as proposal, specs, design and tasks that pass openspec validate, or for a Markdown plan into <change-id>.md in its plan folder (agent-plans/<change-id>/ by default). Only the planroom skill delegates to it, on phase.submit.
 tools: Read, Write, Edit, Bash, mcp__planroom__planroom_state
 model: sonnet
 effort: high
@@ -33,7 +33,9 @@ comments later, fix the files and reply the same way.
 
 ## Markdown plan
 
-Write one file, `agent-plans/<change-id>/<change-id>.md`, and skip steps 2 to 5. It is the shape and the why, not a
+Write one file, `<planDir>/<change-id>.md`, and skip steps 2 to 5. `planDir` is the plan's folder, from
+`planroom_state` (by default `agent-plans/<change-id>`, but a repo can keep its Markdown plans elsewhere): never assume
+`agent-plans/`. It is the shape and the why, not a
 task list: keep it to a screen or two, in this layout.
 
 ```markdown
@@ -65,5 +67,5 @@ Each `outstanding` item, and every assumption the user did not confirm.
 ```
 
 Carry a diagram the plan needs as a `mermaid` code block and a table as a markdown table; leave the rest to prose.
-Write only inside `agent-plans/<change-id>/`, never its `.planroom/` folder, and run no `openspec` command. Reply
+Write only inside `planDir`, never its `.planroom/` folder, and run no `openspec` command. Reply
 with the file you wrote and an empty JSON array, since a Markdown plan has no requirements to trace.

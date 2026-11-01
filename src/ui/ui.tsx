@@ -12,8 +12,8 @@ export type PanelTab = 'review' | 'activity' | 'comments';
 export type Drawer = 'nav' | 'panel' | undefined;
 
 /**
- * A record the page can navigate to: `Q-12`, `section:s4`, `block:b1`, `thread:C-1`, `file:specs/x/spec.md`, and in a
- * review `slide:why-1`, `page:retry-limit` and `item:I-3`.
+ * A record the page can navigate to: `Q-12`, `section:s4`, `block:b1`, `thread:C-1`, `file:specs/x/spec.md`, a tab as
+ * `tab:writeup`, and in a review `slide:why-1`, `page:retry-limit`, `item:I-3` and `comment:item:I-3`.
  */
 export type Target = string;
 
@@ -82,6 +82,7 @@ const PANEL_KEY = 'planroom:panel-collapsed';
 type Place = Pick<UiState, 'tab' | 'slide' | 'page' | 'round'>;
 
 const REVIEW_TABS: readonly Tab[] = ['walkthrough', 'readthrough', 'findings', 'comments'];
+const TABS: readonly Tab[] = ['interrogate', 'directions', 'writeup', 'proposal', ...REVIEW_TABS];
 
 /** The place a review's address `hash` names, as far as it names one: `#tab=readthrough&page=retry-limit`. */
 export function placeFromHash(hash: string): Partial<Place> {
@@ -121,7 +122,8 @@ function tabFor(target: Target): Tab | undefined {
     if (target.startsWith('slide:')) return 'walkthrough';
     if (target.startsWith('page:')) return 'readthrough';
     if (target.startsWith('item:')) return 'findings';
-    return undefined;
+    if (target.startsWith('comment:')) return 'comments';
+    return TABS.find((tab) => target === `tab:${tab}`);
 }
 
 /** Scroll an element into view and focus it, once a tab switch has rendered. */

@@ -56,8 +56,9 @@ function threadLines(thread: ThreadRecord, assets: string): string[] {
 }
 
 /**
- * An ask as Markdown: its questions by group, each with its answer and the comments on it, then the messages to the
- * agent. The agent receives it when the user sends their answers, and it is what an ask's `output` file holds.
+ * An ask as Markdown: its questions by group, each with its answer and the comments on it, then the comments on the
+ * page around them, then the messages to the agent. The agent receives it when the user sends their answers, and it is
+ * what an ask's `output` file holds.
  */
 export function askTranscript(
     state: Pick<SessionState, 'kind' | 'format' | 'changeId' | 'title' | 'questions' | 'threads'>
@@ -75,6 +76,10 @@ export function askTranscript(
                 lines.push('', ...threadLines(thread, assets));
         }
     }
+    // A comment on text outside the cards, such as a group's heading, is on the tab.
+    const elsewhere = threads.filter((thread) => thread.kind === 'comment' && !thread.anchor?.target.startsWith('question:'));
+    if (elsewhere.length) lines.push('', '## Comments on the page');
+    for (const thread of elsewhere) lines.push('', ...threadLines(thread, assets));
     const messages = threads.filter((thread) => thread.kind === 'message');
     if (messages.length) lines.push('', '## Messages');
     for (const thread of messages) lines.push('', ...threadLines(thread, assets));

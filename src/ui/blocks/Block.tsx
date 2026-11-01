@@ -305,7 +305,7 @@ export const BlockView = memo(function BlockView({ block, placement }: { block: 
                         className="icon-button tiny"
                         aria-label="Comment on this block"
                         title="Comment on this block"
-                        onClick={() => commentOnWhole(target, 'question')}
+                        onClick={(event) => commentOnWhole(target, 'question', event.currentTarget)}
                     >
                         <CommentIcon size={14} />
                     </button>

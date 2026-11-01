@@ -17,7 +17,9 @@ const RAIL_SIZE: PaneSize = { key: 'planroom:rail-width', initial: 272, min: 200
  */
 function Brand({ compact = false }: { compact?: boolean }) {
     const unswitchable = useSelector((view) => view.kind !== 'plan');
-    const path = useSelector((view) => (view.kind === 'plan' ? planDir(view.format, view.changeId) : view.changeId));
+    const path = useSelector((view) =>
+        view.kind === 'plan' ? planDir(view.format, view.changeId, view.plansRoot) : view.changeId
+    );
     if (compact) {
         return (
             <div className="brand" title={path}>

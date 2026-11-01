@@ -76,12 +76,36 @@ function refuse(message: string, status: 400 | 404 | 409 = 400): never {
 }
 
 /**
- * Resolve a review target: a PR link names its workspace, repo and number; a bare number takes them from `origin`;
- * anything else is a local branch, reviewed against its merge base with the default branch without any network call.
- * A PR's source and destination branches are fetched so its commits can be read here.
+ * The open PR from `branch` in the `origin` repo on Bitbucket, if there is one. Without a Bitbucket origin, or when
+ * Bitbucket cannot be asked, there is none.
  */
-export async function resolveTarget(repoRoot: string, raw: string, access: BitbucketAccess): Promise<ResolvedTarget> {
-    const parsed = parseTarget(raw);
+async function openPullRequestFrom(repoRoot: string, branch: string, access: BitbucketAccess): Promise<number | undefined> {
+    const url = await originUrl(repoRoot);
+    const repo = url ? bitbucketRepo(url) : undefined;
+    if (!repo) return undefined;
+    try {
+        return await access.client.openPullRequest(repo, branch);
+    } catch (error) {
+        console.error(`planroom: could not look up an open PR from ${branch}; reviewing the branch`, error);
+        return undefined;
+    }
+}
+
+/**
+ * Resolve a review target: a PR link names its workspace, repo and number; a bare number takes them from `origin`;
+ * anything else is a branch: the open PR from it in the Bitbucket `origin` repo, or with none, or when `local`, the
+ * local branch, reviewed against its merge base with the default branch without any further network call. A PR's
+ * source and destination branches are fetched so its commits can be read here.
+ */
+export async function resolveTarget(
+    repoRoot: string,
+    raw: string,
+    access: BitbucketAccess,
+    local = false
+): Promise<ResolvedTarget> {
+    let parsed = parseTarget(raw);
+    const open = parsed.kind === 'branch' && !local ? await openPullRequestFrom(repoRoot, parsed.branch, access) : undefined;
+    if (open !== undefined) parsed = { kind: 'pr', number: open };
     if (parsed.kind === 'branch') {
         const { branch } = parsed;
         const head = (await commitOf(repoRoot, `refs/heads/${branch}`)) ?? (await commitOf(repoRoot, branch));

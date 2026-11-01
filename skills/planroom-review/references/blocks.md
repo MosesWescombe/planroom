@@ -8,7 +8,8 @@ Send a block before, or in the same batch as, the slide that lists it. A block i
 
 - An entry in a slide's `blocks` can be a list of two or three ids instead of one: those blocks sit side by side as columns, and
   stack on a narrow screen. `"blocks": ["how-text", ["how-before", "how-after"]]` puts two diagrams next to each other.
-- A block on a published slide is fixed for the round: re-sending it is refused.
+- A block on a published slide can change at any time: re-send it, and its slide shows as changed until the reviewer sees it.
+  A your-take card that changes asks the reviewer again. A block on an earlier round's slide is fixed: re-sending it is refused.
 - `technical: true` folds the block behind a "Technical detail" toggle, its caption as the label: for code, schemas and internals
   a non-technical reader can skip. Explain the point in plain words in a block that is not folded.
 - Text in any config is shown as text. Never send HTML: it is displayed literally, except in an `html` block.
@@ -1350,7 +1351,7 @@ Config schema:
 
 - 2 to 8 `areas`, each an `id` (lowercase, hyphens), a `title`, a one-line `summary` of how the change reaches it, and up to 4 `blocks`: the ids of blocks that explain it, sent with `doc.block.upsert`.
 - Explain each area by showing it: a `flow` or `sequence` of the path from the change, a `stepThrough` or an `html` visual to animate it, `code` for the caller or config it meets.
-- The reviewer can add areas of their own. The map is fixed once the first part of the deck is published.
+- The reviewer can add areas of their own. Changing the map after they sent their concerns drops those on areas it no longer has, and takes them again.
 
 Example config:
 

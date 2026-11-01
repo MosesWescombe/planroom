@@ -11,8 +11,10 @@ rules persist across agent sessions and stay private to the machine running it.
 Opening a session for a change id SHALL create `openspec/changes/<change-id>/` as an OpenSpec change when it does not
 exist and start it in Phase 1 with no questions, or restore the session exactly as last persisted when it does. It
 SHALL return the page URL to the agent either way. A change id that is not kebab-case MUST be rejected with nothing
-created. Opening a new plan in the Markdown format SHALL keep it in `agent-plans/<change-id>/` and create no OpenSpec
-change. A plan's format SHALL be fixed once it exists: resuming it SHALL keep its format without being told, and
+created. Opening a new plan in the Markdown format SHALL keep it in `<change-id>/` in the repo's Markdown plans folder
+and create no OpenSpec change. A new plan opened without a format SHALL be an OpenSpec change in a repo with an `openspec/` directory and a
+Markdown plan in one without, and an OpenSpec plan in a repo without one MUST be refused with nothing created. A plan's
+format SHALL be fixed once it exists: resuming it SHALL keep its format without being told, and
 opening it in the other format MUST be refused with nothing created.
 
 #### Scenario: New change
@@ -28,8 +30,14 @@ opening it in the other format MUST be refused with nothing created.
 #### Scenario: New Markdown plan
 
 - **WHEN** the agent opens `add-api-rate-limiting` in the Markdown format and no plan exists for it
-- **THEN** its session is persisted under `agent-plans/add-api-rate-limiting/.planroom/`, and no folder is created
-  under `openspec/changes/`
+- **THEN** its session is persisted under `agent-plans/add-api-rate-limiting/.planroom/` (in a repo that keeps its
+  Markdown plans in `agent-plans/`), and no folder is created under `openspec/changes/`
+
+#### Scenario: No openspec/ directory
+
+- **WHEN** the agent opens `add-api-rate-limiting` without a format in a repo with no `openspec/` directory and an
+  `agent-plans/` one
+- **THEN** it opens as a Markdown plan under `agent-plans/add-api-rate-limiting/`, and no `openspec/` directory is created
 
 #### Scenario: Format fixed once created
 
@@ -41,10 +49,38 @@ opening it in the other format MUST be refused with nothing created.
 - **WHEN** the agent opens a session for `Add Rate Limiting`
 - **THEN** the call fails with an error naming the kebab-case rule and nothing is written
 
+### Requirement: Each repo has its own folder for Markdown plans
+
+Markdown plans SHALL live in the repo's Markdown plans folder: the folder remembered for the repo on this machine, in
+the registry beside the list of repos, or `agent-plans/` when none is. Opening a new Markdown plan when no folder is
+remembered and the repo, or the plain folder Planroom runs in, has no `agent-plans/` MUST be refused at `plansDir`
+with nothing created, telling the agent to ask the user where its Markdown plans go. A `plansDir` given to
+`planroom_open` SHALL be a folder relative to the repo root, normalised; an absolute one, one outside the repo, and
+one given for an OpenSpec plan MUST be refused with nothing created. A given folder SHALL be used for that plan and
+remembered for every later Markdown plan in the repo, a remembered folder SHALL be used without asking, and resuming
+an existing plan SHALL need neither. `planroom_open` and `planroom_state` SHALL return the plan's folder, and every
+place that lists, opens or names Markdown plans, in this repo or another, SHALL use the repo's folder.
+
+#### Scenario: No folder for Markdown plans yet
+
+- **WHEN** the agent opens a new Markdown plan in a folder with no `agent-plans/` and no folder remembered for it
+- **THEN** the call fails at `plansDir`, telling the agent to ask the user where Markdown plans go, and nothing is created
+
+#### Scenario: The chosen folder is remembered
+
+- **WHEN** the agent opens it again with `plansDir: "docs/plans"`, then opens a second new Markdown plan without one
+- **THEN** both plans live under `docs/plans/<change-id>/`, the registry remembers `docs/plans` for the repo, and the
+  page and the plan list name each plan's path there
+
+#### Scenario: A folder outside the repo
+
+- **WHEN** the agent opens a Markdown plan with `plansDir` set to `../plans` or `/tmp/plans`
+- **THEN** the call fails at `plansDir` and nothing is created
+
 ### Requirement: Session state is durable
 
 The system SHALL persist every accepted agent write and page event before acknowledging it, under
-`openspec/changes/<change-id>/.planroom/`, or a Markdown plan's `agent-plans/<change-id>/.planroom/`. A crash at any point MUST leave the last complete state readable, never a
+`openspec/changes/<change-id>/.planroom/`, or a Markdown plan's `<change-id>/.planroom/` in the repo's Markdown plans folder. A crash at any point MUST leave the last complete state readable, never a
 partial one.
 
 #### Scenario: Crash after an acknowledged answer
@@ -74,8 +110,8 @@ an error naming the live page URL. A hold left by a process that is no longer ru
 
 ### Requirement: Old plans can be reopened from the page
 
-The page SHALL list every plan in the repo, meaning each folder under `openspec/changes/` or `agent-plans/` with a
-persisted session (archived changes excluded), naming the Markdown ones, and SHALL mark the one it shows. Picking another plan SHALL switch the page to that plan
+The page SHALL list every plan in the repo, meaning each folder under `openspec/changes/` or the repo's Markdown plans
+folder with a persisted session (archived changes excluded), naming the Markdown ones, and SHALL mark the one it shows. Picking another plan SHALL switch the page to that plan
 under a new URL, without creating a change. After a switch, the agent's next write or wait MUST be refused, with
 nothing applied, until the agent reads the new plan. An accepted or ended plan SHALL open read-only with a Reopen
 action, which makes it editable again in the phase it had reached and notifies the agent. The list SHALL also show
@@ -166,12 +202,26 @@ what unlocks it. An unlocked earlier phase SHALL stay readable.
 ### Requirement: The page opens in the user's browser
 
 On opening a session the system SHALL try to open the page in the user's default browser, and SHALL return the URL
-whether or not a browser opened.
+whether or not a browser opened. When the agent opens another session than the open one, of any kind, the new session
+SHALL take over the open page at the same URL by default: the page's open tabs SHALL reload onto it, and the browser
+SHALL open only when no tab shows the page. When the agent asks for a new page, the session SHALL be served under a new
+URL that opens in the browser, and the previous page SHALL stop working. Picking a plan from the page SHALL still
+switch under a new URL.
 
 #### Scenario: No browser available
 
 - **WHEN** a session opens on a machine where no browser can be launched
 - **THEN** the call still succeeds and returns the URL for the agent to print
+
+#### Scenario: Another session takes over the page
+
+- **WHEN** the agent opens `add-audit-log` while `add-api-rate-limiting` is open in a browser tab
+- **THEN** `add-audit-log` is served at the same URL, the tab reloads onto it, and no new browser window opens
+
+#### Scenario: A separate page on request
+
+- **WHEN** the agent opens `add-audit-log` asking for a new page
+- **THEN** it is served under a new URL that opens in the browser, and the old URL stops working
 
 ### Requirement: A session has a kind and review is a third kind
 

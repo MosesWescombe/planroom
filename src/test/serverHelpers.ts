@@ -200,9 +200,13 @@ export async function eventually(check: () => void | Promise<void>, timeoutMs = 
     }
 }
 
-/** A Bitbucket stand-in that records every call; `fail` makes the nth comment creation (from 1) throw. */
+/**
+ * A Bitbucket stand-in that records every call; `open` names the open PR from each branch, and `fail` makes the nth
+ * comment creation (from 1) throw.
+ */
 export interface FakeBitbucket extends BitbucketClient {
     pr: PullRequestInfo;
+    open: Record<string, number>;
     thread: PullRequestComment[];
     created: { id: number; body: string; inline?: InlineAnchor; parent?: number; pending: boolean }[];
     tasks: { id: number; comment: number; body: string; pending: boolean }[];
@@ -225,6 +229,7 @@ export function fakeBitbucket(pr: Partial<PullRequestInfo> = {}): FakeBitbucket 
             destination: { branch: 'main', commit: '' },
             ...pr
         },
+        open: {},
         thread: [],
         created: [],
         tasks: [],
@@ -234,6 +239,10 @@ export function fakeBitbucket(pr: Partial<PullRequestInfo> = {}): FakeBitbucket 
         async pullRequest(ref) {
             fake.calls.push(`pullRequest ${ref.workspace}/${ref.repo}#${ref.number}`);
             return fake.pr;
+        },
+        async openPullRequest(repo, branch) {
+            fake.calls.push(`openPullRequest ${repo.workspace}/${repo.repo} ${branch}`);
+            return fake.open[branch];
         },
         async comments() {
             fake.calls.push('comments');

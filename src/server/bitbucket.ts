@@ -1,9 +1,9 @@
 import { git } from './worktree.js';
 
 /**
- * The Bitbucket Cloud REST API, as much of it as a review uses: a pull request, its comments, and creating comments
- * and tasks. Only the Planroom server holds the credentials: they are read from the environment and git, used in the
- * Authorization header, and never logged, stored, or sent to the page or the agent.
+ * The Bitbucket Cloud REST API, as much of it as a review uses: a pull request, the open one from a branch, its
+ * comments, and creating comments and tasks. Only the Planroom server holds the credentials: they are read from the
+ * environment and git, used in the Authorization header, and never logged, stored, or sent to the page or the agent.
  */
 
 /** A pull request by workspace, repo and number. */
@@ -41,6 +41,8 @@ export interface InlineAnchor {
 
 export interface BitbucketClient {
     pullRequest(pr: PullRequestRef): Promise<PullRequestInfo>;
+    /** The number of the newest open pull request from `branch` of the repo itself, not a fork, if there is one. */
+    openPullRequest(repo: { workspace: string; repo: string }, branch: string): Promise<number | undefined>;
     comments(pr: PullRequestRef): Promise<PullRequestComment[]>;
     /** Create a comment, a draft when `pending`, and resolve with its id. */
     createComment(
@@ -130,8 +132,9 @@ export function httpBitbucket(
             throw new BitbucketError(`Bitbucket answered ${response.status}: ${reason}`, response.status);
         }
     };
-    const path = (pr: PullRequestRef) =>
-        `/repositories/${encodeURIComponent(pr.workspace)}/${encodeURIComponent(pr.repo)}/pullrequests/${pr.number}`;
+    const pulls = (repo: { workspace: string; repo: string }) =>
+        `/repositories/${encodeURIComponent(repo.workspace)}/${encodeURIComponent(repo.repo)}/pullrequests`;
+    const path = (pr: PullRequestRef) => `${pulls(pr)}/${pr.number}`;
     const idOf = (raw: Raw): number => {
         if (typeof raw.id !== 'number') throw new BitbucketError('Bitbucket returned no id', 502);
         return raw.id;
@@ -152,6 +155,12 @@ export function httpBitbucket(
                 },
                 destination: { branch: raw.destination?.branch?.name ?? '', commit: raw.destination?.commit?.hash ?? '' }
             };
+        },
+        async openPullRequest(repo, branch) {
+            const query = `source.branch.name = "${branch.replace(/["\\]/g, '\\$&')}"`;
+            const page = await request('GET', `${pulls(repo)}?state=OPEN&sort=-updated_on&q=${encodeURIComponent(query)}`);
+            const own = `${repo.workspace}/${repo.repo}`;
+            return page.values?.find((raw) => (raw.source?.repository?.full_name ?? own) === own)?.id;
         },
         async comments(pr) {
             const comments: PullRequestComment[] = [];

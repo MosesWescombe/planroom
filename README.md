@@ -70,7 +70,10 @@ reach for tools that are gone, or skip the guidance for the ones that are left.
 
 ## Use
 
-In Claude Code, ask it to plan something ("plan adding rate limiting") in a repo with an `openspec/` directory. Once
+In Claude Code, ask it to plan something ("plan adding rate limiting") in any repo: one with an `openspec/` directory
+plans an OpenSpec change unless you ask for Markdown, and one without plans in Markdown. Markdown plans go in
+`agent-plans/`; in a repo or folder with none, Claude first asks you where they should go, and Planroom remembers your
+answer for it on this machine, beside its list of repos. Once
 it has more than one question for you mid-task, in any repo, it puts them on a page of question cards instead of in
 chat.
 
@@ -93,8 +96,10 @@ its next poll. Channels are a research preview; on claude.ai Team and Enterprise
 ## Planroom Review
 
 Ask Claude to review a pull request ("review PR 412", or its link) or a local branch ("walk me through feature/retry")
-from a checkout of the repo. It reads the change from a temporary git worktree at the PR's head, under
-`.planroom/reviews/<id>/worktree`, so your working copy is never touched, and removes it when the review ends.
+from a checkout of the repo. A branch with an open PR opens that PR's review, unless you ask for the local changes
+only. It reads the change from a temporary git worktree at the PR's head, under `.planroom/reviews/<id>/worktree`, so
+your working copy is never touched, and removes it when the review ends. Reviewing another PR or branch switches the
+open page to it, unless you ask for a separate page.
 
 As the page opens it asks how to review: the overview deck, the line-by-line read-through, or both with the deck first,
 and whether agents review the change too. Your choice is kept as the next review's default.

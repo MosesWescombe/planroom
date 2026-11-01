@@ -1709,32 +1709,34 @@ input[type="checkbox"] {
     flex-shrink: 0;
 }
 
-.message-box textarea {
+/* A borderless editor inside a bordered box: the box shows focus, so the editor does not draw a second, inner ring. */
+.message-box .markdown-editor .cm-editor,
+.note-field .markdown-editor .cm-editor {
     border: none;
-    padding: 0;
-    resize: none;
     background: transparent;
 }
 
-/* A borderless field inside a bordered box: the box shows focus, so the field does not draw a second, inner ring. */
-.message-box textarea,
-.note-field textarea {
+.message-box .markdown-editor .cm-editor.cm-focused,
+.note-field .markdown-editor .cm-editor.cm-focused {
     outline: none;
-    field-sizing: content;
-    min-height: 3em;
+}
+
+.message-box .markdown-editor .cm-scroller,
+.note-field .markdown-editor .cm-scroller {
     max-height: 40vh;
     overflow-y: auto;
+}
+
+.message-box .markdown-editor .cm-content,
+.note-field .markdown-editor .cm-content {
+    min-height: 3em;
+    padding: 0;
 }
 
 .message-box:focus-within,
 .note-field:focus-within {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
-}
-
-.message-box textarea::placeholder,
-.note-field textarea::placeholder {
-    color: var(--muted);
 }
 
 /* ------------------------------------------------------------ phase 1 */
@@ -2457,15 +2459,6 @@ button.rail-strip-item {
     color: var(--muted);
 }
 
-.grow-text {
-    field-sizing: content;
-    min-height: 44px;
-    resize: none;
-    padding: 12px 16px;
-    border-radius: 10px;
-    border-color: var(--line);
-}
-
 .chip-row {
     display: flex;
     flex-wrap: wrap;
@@ -2524,17 +2517,23 @@ button.rail-strip-item {
     color: var(--muted);
 }
 
-.note-field textarea {
-    border: none;
-    padding: 0;
-    resize: none;
-    background: transparent;
-}
-
 .your-answer {
     font-size: 14px;
     line-height: 1.5;
     color: var(--ink-2);
+}
+
+/* What the user wrote, rendered as Markdown, runs on in the sentence that shows it back. */
+.your-answer p,
+.conflict-box p,
+.reaction-status p {
+    display: inline;
+}
+
+.your-answer p + p::before,
+.conflict-box p + p::before,
+.reaction-status p + p::before {
+    content: " ";
 }
 
 .conflict-box {
@@ -3304,6 +3303,11 @@ button.rail-strip-item {
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.7;
+}
+
+/* What sits under a line sizes to the code's window: see .code-note. */
+.code-lines:has(.code-note) {
+    container-type: inline-size;
 }
 
 /* As wide as the longest line, so line backgrounds run the full width when scrolled. */
@@ -5482,7 +5486,8 @@ button.rail-strip-item {
 
 .selection-toolbar {
     position: fixed;
-    z-index: 40;
+    /* Over an open dialog, so text in one can be commented on too. */
+    z-index: 55;
     display: flex;
     gap: 2px;
     padding: 4px;
@@ -5511,7 +5516,8 @@ button.rail-strip-item {
 
 .composer {
     position: fixed;
-    z-index: 45;
+    /* Over an open dialog, whose buttons open it too ("Ask the agent" on a finding). */
+    z-index: 55;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -5874,6 +5880,10 @@ button.rail-strip-item {
 
 .segment.is-read {
     background: var(--accent-soft);
+}
+
+.segment.is-changed {
+    background: var(--agent-dot);
 }
 
 .segment.is-current {
@@ -6490,9 +6500,23 @@ button.nav-item {
     outline: 2px solid var(--accent);
 }
 
+.markdown-editor .cm-scroller {
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* At least the caller's rows tall, as a textarea is, and taller as the text grows. */
 .markdown-editor .cm-content {
-    min-height: 10em;
+    min-height: calc(var(--editor-rows) * 1lh + 20px);
     padding: 10px 12px;
+}
+
+.markdown-editor .cm-placeholder {
+    color: var(--muted);
+}
+
+.comment-editor .cm-content {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
@@ -6615,12 +6639,18 @@ button.nav-item {
     color: var(--agent-text);
 }
 
+/* Under a line, in the page's font: as wide as the code's window and held in it, so it wraps rather than widening the
+   code to one long line, and stays put while the code scrolls sideways. */
 .code-note {
+    position: sticky;
+    left: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    width: 100cqi;
     padding: 6px 12px 10px 64px;
     background: var(--agent-wash);
+    font: 15px / 1.5 var(--font-ui);
 }
 
 .diff-card {
@@ -6632,7 +6662,6 @@ button.nav-item {
     border-radius: 8px;
     background: var(--surface);
     text-align: left;
-    font-family: var(--font-ui);
     font-size: 14px;
 }
 
@@ -6741,7 +6770,11 @@ button.nav-item {
     padding-left: 20px;
 }
 
+/* Long lines scroll, each line's background as wide as the longest. */
 .bb-context {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr);
+    overflow-x: auto;
     border-bottom: 1px solid var(--line);
     font-family: var(--font-mono);
     font-size: 12px;
@@ -7256,8 +7289,7 @@ button.nav-item {
 }
 
 .code-viewer .line-text,
-.line-code,
-.was-popover {
+.line-code {
     user-select: text;
 }
 
@@ -7308,31 +7340,30 @@ button.nav-item {
     opacity: 1;
 }
 
-.code-line {
-    position: relative;
-}
-
+/* The old code a change replaced, or a marker's removed lines, as a code window in a box floating under the dot or
+   marker, placed and kept inside the window by the script; it scrolls for long code. */
 .was-popover {
-    position: absolute;
-    z-index: 5;
-    top: 100%;
-    left: 64px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 240px;
-    max-width: 640px;
-    padding: 8px 10px;
+    position: fixed;
+    z-index: 45;
+    inset: auto;
+    width: 560px;
+    max-width: calc(100vw - 24px);
+    max-height: 300px;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: var(--surface);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-    font-family: var(--font-mono);
-    white-space: pre;
+    color: var(--ink);
+    box-shadow: 0 6px 18px var(--shadow);
+    font-family: var(--font-ui);
+    white-space: normal;
 }
 
-.was-line {
-    color: var(--agent-text);
+.was-popover > .code-viewer {
+    border: none;
+    border-radius: 0;
 }
 
 .code-name {
@@ -7429,8 +7460,8 @@ button.nav-item {
     align-self: flex-start;
 }
 
-/* Pinned to the top of the page while its piece scrolls; it takes over the piece's top padding, so the code passes
-   under a bar that spans the piece. Above the code gutter and caret, below popovers. */
+/* Pinned to the top of the page, under its file's header, while its piece scrolls; it takes over the piece's top
+   padding, so the code passes under a bar that spans the piece. Above the code gutter and caret, below popovers. */
 .piece-head {
     position: sticky;
     top: 0;
@@ -7482,6 +7513,60 @@ button.nav-item {
     font-size: 13px;
 }
 
+/* Every piece of one file on a page, in one card under the file's header, which stays at the top of the page while any
+   of the file shows; each piece is a section of the card, its own header pinned under the file's. */
+.piece-file {
+    --file-head: 44px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.piece-file-head {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--file-head);
+    padding: 0 6px 0 12px;
+    border-bottom: 1px solid var(--line);
+    border-radius: 11px 11px 0 0;
+    background: var(--sunken);
+}
+
+.piece-file-head > :not(.piece-file-path) {
+    flex-shrink: 0;
+}
+
+.piece-file-path {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.piece-file-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 12px 0;
+}
+
+.piece-file > .piece {
+    border: none;
+    border-radius: 0;
+}
+
+.piece-file > .piece + .piece {
+    border-top: 1px solid var(--line);
+}
+
+.piece-file .piece-head {
+    top: var(--file-head);
+    border-radius: 0;
+}
+
 /* As tall as the segmented view switch beside it: its 32px buttons inside 3px of padding. */
 .read-tick {
     width: 38px;
@@ -7504,8 +7589,6 @@ button.nav-item {
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--surface);
-    font-family: var(--font-ui);
-    white-space: normal;
 }
 
 .page-addition {
@@ -7514,12 +7597,6 @@ button.nav-item {
 
 .page-addition .chip {
     align-self: flex-start;
-}
-
-/* A question on code lines, folded to a row under the last of them; it opens in a dialog. */
-.line-thread {
-    font-family: var(--font-ui);
-    white-space: normal;
 }
 
 .repeat-places ul,

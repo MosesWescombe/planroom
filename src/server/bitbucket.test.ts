@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defined } from '../test/serverHelpers.js';
 import { BitbucketError, bitbucketRepo, httpBitbucket, parseTarget } from './bitbucket.js';
 
 const PR = { workspace: 'acme', repo: 'api', number: 412 };
@@ -60,6 +61,28 @@ describe('the Bitbucket client', () => {
             .catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(BitbucketError);
         expect(String(error)).toMatch(/read:pullrequest:bitbucket.*write:pullrequest:bitbucket.*read:repository:bitbucket/);
+    });
+
+    it("finds the open PR from a branch of the repo itself, skipping a fork's", async () => {
+        const { asked, fetchStub } = scripted([
+            Response.json({
+                values: [
+                    { id: 9, source: { repository: { full_name: 'someone/api' } } },
+                    { id: 412, source: { repository: { full_name: 'acme/api' } } }
+                ]
+            }),
+            Response.json({ values: [] })
+        ]);
+        const client = httpBitbucket(undefined, { fetch: fetchStub });
+        expect(await client.openPullRequest({ workspace: 'acme', repo: 'api' }, 'feature/"x"')).toBe(412);
+        expect(await client.openPullRequest({ workspace: 'acme', repo: 'api' }, 'feature/y')).toBeUndefined();
+        const url = new URL(defined(asked[0]).url);
+        expect(url.pathname).toBe('/2.0/repositories/acme/api/pullrequests');
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+            state: 'OPEN',
+            sort: '-updated_on',
+            q: 'source.branch.name = "feature/\\"x\\""'
+        });
     });
 
     it('reads every page of comments with their parents', async () => {

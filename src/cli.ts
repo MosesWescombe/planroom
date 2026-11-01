@@ -12,7 +12,7 @@ import { openInBrowser } from './server/opener.js';
 import { findOpenSpecRoot, openSpecCli } from './server/openspec.js';
 import { listPlans } from './server/plans.js';
 import { preferencesFile } from './server/preferences.js';
-import { knownRepos, registryFile, rememberRepo } from './server/registry.js';
+import { plansDirOf, readRegistry, registryFile, rememberRepo } from './server/registry.js';
 import { PlanViewer } from './server/viewer.js';
 
 /**
@@ -71,13 +71,13 @@ async function stop(code: number): Promise<void> {
 }
 
 /** The repo to work in, recorded so pages and `planroom list` elsewhere can find its plans. */
-function repo(): { repoRoot: string; openSpecRoot?: string } {
+function repo(): { repoRoot: string } {
     const startDir = resolve(values.dir ?? process.cwd());
     if (!statSync(startDir, { throwIfNoEntry: false })?.isDirectory()) fail(`--dir ${values.dir} is not a directory`);
     const openSpecRoot = findOpenSpecRoot(startDir);
     // A failure only hides this repo's plans elsewhere.
     if (openSpecRoot) void rememberRepo(registry, openSpecRoot).catch(() => undefined);
-    return { repoRoot: openSpecRoot ?? startDir, openSpecRoot };
+    return { repoRoot: openSpecRoot ?? startDir };
 }
 
 /**
@@ -109,10 +109,10 @@ async function mcp(): Promise<void> {
  * Claude Code session already has it open, open that session's live page instead.
  */
 async function open(changeId: string | undefined): Promise<void> {
-    const { repoRoot, openSpecRoot } = repo();
-    if (!openSpecRoot) fail(`no openspec/ directory in ${repoRoot} or above it`);
+    const { repoRoot } = repo();
+    const plansRoot = await plansDirOf(registry, repoRoot);
     if (changeId) {
-        const plan = (await listPlans(repoRoot)).find((candidate) => candidate.changeId === changeId);
+        const plan = (await listPlans(repoRoot, plansRoot)).find((candidate) => candidate.changeId === changeId);
         if (!plan) fail(`${changeId} has no plan in ${repoRoot}`);
         if (plan.liveUrl) {
             console.log(`${changeId} is open in a Claude Code session:\n${plan.liveUrl}`);
@@ -125,10 +125,10 @@ async function open(changeId: string | undefined): Promise<void> {
         repoRoot,
         registryFile: registry,
         readOnly: true,
-        openPlan: async (id) => pages.add(await PlanViewer.open(repoRoot, id))
+        openPlan: async (id) => pages.add(await PlanViewer.open(repoRoot, id, false, plansRoot))
     });
     closeAll = () => pages.close();
-    const url = changeId ? pages.add(await PlanViewer.open(repoRoot, changeId)) : pages.browseUrl;
+    const url = changeId ? pages.add(await PlanViewer.open(repoRoot, changeId, false, plansRoot)) : pages.browseUrl;
     console.log(
         `Planroom ${changeId ? `plan ${changeId}` : 'plan browser'} for ${repoRoot}, read-only:\n${url}\nPress Ctrl+C to stop.`
     );
@@ -137,7 +137,8 @@ async function open(changeId: string | undefined): Promise<void> {
 
 /** Print every known repo's plans, most recently changed first, with the live page of any a session has open. */
 async function list(): Promise<void> {
-    const repos = await Promise.all((await knownRepos(registry)).map(async (root) => ({ root, plans: await listPlans(root) })));
+    const { repos: roots, plansDirs } = await readRegistry(registry);
+    const repos = await Promise.all(roots.map(async (root) => ({ root, plans: await listPlans(root, plansDirs[root]) })));
     const listed = repos.filter((entry) => entry.plans.length > 0);
     if (listed.length === 0) {
         console.log('No plans yet. Planroom lists the repos it has run in.');

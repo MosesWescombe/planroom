@@ -3,6 +3,7 @@ import type { Answer, QuestionRecord } from '../../shared/questions';
 import { BlockView } from '../blocks/Block';
 import { CheckIcon } from '../components/icons';
 import { Markdown } from '../components/Markdown';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 import type { AnswerDraft } from './drafts';
 
 const LETTERS = 'ABCDEFGHIJKL';
@@ -114,17 +115,17 @@ export function DirectionsInput({
             ))}
             {question.allowOther && (!disabled || draft.text) && (
                 <>
-                    <label className="visually-hidden" htmlFor={`${name}-other`}>
+                    <label className="visually-hidden" id={`${name}-other-label`} htmlFor={`${name}-other`}>
                         Another direction
                     </label>
-                    <textarea
+                    <MarkdownEditor
                         id={`${name}-other`}
-                        className="grow-text"
+                        labelId={`${name}-other-label`}
                         rows={1}
                         placeholder="Or suggest another direction…"
                         value={draft.text ?? ''}
                         disabled={disabled}
-                        onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+                        onChange={(text) => setDraft({ ...draft, text })}
                     />
                 </>
             )}

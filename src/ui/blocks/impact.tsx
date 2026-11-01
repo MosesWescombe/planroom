@@ -207,7 +207,13 @@ export function ImpactMapBlock({ id, config, placement }: BlockProps<'impactMap'
     const [draft, setDraft] = useState(saved);
     const mine = editable ? draft : saved;
     const [open, setOpen] = useState<string>();
-    const update = (next: ImpactConcerns) => {
+    const update = (changed: ImpactConcerns) => {
+        // An area the agent has since taken off the map takes its concerns with it, as the server dropped them.
+        const areas = new Set(config.areas.map((area) => area.id));
+        const next = {
+            ...changed,
+            concerns: Object.fromEntries(Object.entries(changed.concerns).filter(([key]) => areas.has(key)))
+        };
         setDraft(next);
         saving = saving.then(() => send({ type: 'impact.save', ...next })).catch(() => undefined);
     };

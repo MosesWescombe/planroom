@@ -33,7 +33,8 @@ function placement(kind: SessionKind): string[] {
         '',
         "- An entry in a slide's `blocks` can be a list of two or three ids instead of one: those blocks sit side by side as columns, and",
         '  stack on a narrow screen. `"blocks": ["how-text", ["how-before", "how-after"]]` puts two diagrams next to each other.',
-        '- A block on a published slide is fixed for the round: re-sending it is refused.'
+        '- A block on a published slide can change at any time: re-send it, and its slide shows as changed until the reviewer sees it.',
+        "  A your-take card that changes asks the reviewer again. A block on an earlier round's slide is fixed: re-sending it is refused."
     ];
 }
 

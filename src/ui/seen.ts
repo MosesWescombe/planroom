@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import type { ActivityEntry } from '../shared/view';
 import { readJson, storageScope, writeJson } from './local';
@@ -59,6 +59,16 @@ export function useSeen(): Seen {
     return seen;
 }
 
+/** The targets of entries this browser has not seen yet, such as `slide:why` once the agent changed that slide. */
+export function useUnseen(): ReadonlySet<string> {
+    const activity = useSelector((view) => view.activity);
+    const seen = useSeen();
+    return useMemo(
+        () => new Set(activity.filter((entry) => tracked(entry) && !isSeen(seen, entry)).map((entry) => entry.ref ?? '')),
+        [activity, seen]
+    );
+}
+
 /** Whether the page is in front, so nothing counts as seen while the user is in another tab. */
 function useInFront(): boolean {
     const [inFront, setInFront] = useState(() => document.visibilityState !== 'hidden');
@@ -71,15 +81,15 @@ function useInFront(): boolean {
 }
 
 /**
- * Mark unread entries seen once their target is on screen: a question or section once it scrolls into view. A reply
- * is left to its thread's dialog, since a thread's row shows only the ask. Re-observes whenever the tabs change,
- * since that mounts different targets.
+ * Mark unread entries seen once their target is on screen: a question or section once it scrolls into view, a slide
+ * once it shows. A reply is left to its thread's dialog, since a thread's row shows only the ask. Re-observes whenever
+ * the tabs or the slide on show change, since that mounts different targets.
  */
 export function useTrackSeen(): void {
     const scope = useSelector(storageScope);
     const activity = useSelector((view) => view.activity);
     const seen = useSeen();
-    const { tab, panelTab, panelCollapsed, drawer } = useUiState();
+    const { tab, panelTab, panelCollapsed, drawer, slide } = useUiState();
     const inFront = useInFront();
     useEffect(() => {
         if (!inFront || typeof IntersectionObserver === 'undefined') return undefined;
@@ -105,5 +115,5 @@ export function useTrackSeen(): void {
             observer.observe(element);
         });
         return () => observer.disconnect();
-    }, [scope, activity, seen, tab, panelTab, panelCollapsed, drawer, inFront]);
+    }, [scope, activity, seen, tab, panelTab, panelCollapsed, drawer, slide, inFront]);
 }

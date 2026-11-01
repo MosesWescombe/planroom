@@ -437,19 +437,31 @@ export function decisionRows(state: Pick<SessionState, 'questions' | 'phases'>):
 
 export type ThreadScope = 'interrogate' | 'writeup' | 'proposal' | 'review' | 'message';
 
+/** Where a comment on text outside any card (`tab:<name>`) is filed, by its tab; any other tab is Phase 1. */
+const TAB_SCOPES: Partial<Record<string, ThreadScope>> = {
+    writeup: 'writeup',
+    proposal: 'proposal',
+    walkthrough: 'review',
+    readthrough: 'review',
+    findings: 'review',
+    comments: 'review'
+};
+
 /**
  * Which phase a thread belongs to, from its anchor target:
  * `question:Q-1`, `qblock:Q-1:0` and `understanding` are Phase 1,
- * `section:s1` and `block:b1` are the write-up, `file:<path>` is the proposal, and a review's `slide:` and `item:`, and
- * its blocks, are the review.
+ * `section:s1` and `block:b1` are the write-up, `file:<path>` is the proposal, a review's `slide:`, `page:`, `item:`
+ * and `comment:`, and its blocks, are the review, and `tab:<name>` goes with its tab.
  */
 export function threadScope(thread: Pick<ThreadRecord, 'kind' | 'anchor'>, kind: SessionKind = 'plan'): ThreadScope {
     if (thread.kind === 'message' || !thread.anchor) return 'message';
     const target = thread.anchor.target;
+    if (target.startsWith('tab:')) return TAB_SCOPES[target.slice(4)] ?? 'interrogate';
     if (
         target.startsWith('slide:') ||
         target.startsWith('page:') ||
         target.startsWith('item:') ||
+        target.startsWith('comment:') ||
         (kind === 'review' && target.startsWith('block:'))
     )
         return 'review';

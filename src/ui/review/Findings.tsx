@@ -8,6 +8,7 @@ import {
     findingsUnlocked,
     type ItemKind,
     type ItemRecord,
+    placement,
     type RoundRecord,
     roundItems,
     SEVERITIES
@@ -18,7 +19,8 @@ import { type CodeRow, CodeViewer } from '../code/CodeViewer';
 import { resolveLanguage } from '../code/highlight';
 import { commentOnWhole } from '../comments/composer';
 import { CheckIcon, LockIcon } from '../components/icons';
-import { Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
+import { InlineMarkdown, Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
 import { plural } from '../format';
@@ -60,11 +62,21 @@ function Reaction({ item }: { item: ItemRecord }) {
     const look = (verdict: string) =>
         reaction?.verdict === verdict ? 'button-primary button-small' : 'button-secondary button-small';
     const status = reaction && (
-        <p className={`reaction-status is-${reaction.verdict}`} role="status">
-            <CheckIcon /> {DONE[reaction.verdict]}
-            {reaction.verdict === 'reject' && reaction.reason ? `: ${reaction.reason}` : '.'}
+        <div className={`reaction-status is-${reaction.verdict}`} role="status">
+            <CheckIcon />
+            <span>
+                {DONE[reaction.verdict]}
+                {reaction.verdict === 'reject' && reaction.reason ? (
+                    <>
+                        {': '}
+                        <InlineMarkdown source={reaction.reason} />
+                    </>
+                ) : (
+                    '.'
+                )}
+            </span>
             {reaction.itemVersion < item.version && <span className="chip chip-attention">changed since you reacted</span>}
-        </p>
+        </div>
     );
     if (readOnly || !current || posted) return status ?? null;
     return (
@@ -98,7 +110,11 @@ function Reaction({ item }: { item: ItemRecord }) {
                 >
                     Reject
                 </button>
-                <button type="button" className="button-link" onClick={() => commentOnWhole(`item:${item.id}`, 'question')}>
+                <button
+                    type="button"
+                    className="button-link"
+                    onClick={(event) => commentOnWhole(`item:${item.id}`, 'question', event.currentTarget)}
+                >
                     Ask the agent
                 </button>
             </div>
@@ -130,14 +146,15 @@ function Reaction({ item }: { item: ItemRecord }) {
                         if (reason.trim()) react({ verdict: 'reject', reason });
                     }}
                 >
-                    <label className="field-label" htmlFor={`reject-${item.id}`}>
+                    <label className="field-label" id={`reject-${item.id}-label`} htmlFor={`reject-${item.id}`}>
                         Why? The agent reads this and may soften related findings.
                     </label>
-                    <textarea
+                    <MarkdownEditor
                         id={`reject-${item.id}`}
+                        labelId={`reject-${item.id}-label`}
                         rows={2}
                         value={reason}
-                        onChange={(event) => setReason(event.target.value)}
+                        onChange={setReason}
                     />
                     <button type="submit" className="button-primary button-small" disabled={busy || !reason.trim()}>
                         Reject it
@@ -186,9 +203,14 @@ function AnchorLink({ item, anchor }: { item: ItemRecord; anchor: CodeAnchor }) 
     );
 }
 
-/** The comment a finding drafts, opened over the page as Bitbucket will show it once agreed. */
+/**
+ * The comment a finding drafts, opened over the page as Bitbucket will show it once agreed: placed as posting places it,
+ * so a range opens with its lines and a line off Bitbucket's diff becomes a comment on the file quoting it.
+ */
 function DraftPreview({ item }: { item: ItemRecord }) {
     const [open, setOpen] = useState(false);
+    const index = useSelector((view) => view.review?.rounds.find((round) => round.n === item.round)?.index);
+    const { placed, opening } = placement(index, item.anchor, item.code);
     return (
         <>
             <button type="button" className="button-link small finding-draft" onClick={() => setOpen(true)}>
@@ -197,7 +219,7 @@ function DraftPreview({ item }: { item: ItemRecord }) {
             {open && (
                 <Modal label={`The comment ${item.id} drafts`} onClose={() => setOpen(false)} className="dialog dialog-wide">
                     <h2 className="dialog-title">The comment it drafts</h2>
-                    <BitbucketComment round={item.round} anchor={item.anchor} body={commentBody(item.draft, true)} />
+                    <BitbucketComment round={item.round} anchor={placed} body={commentBody(`${opening}${item.draft}`, true)} />
                 </Modal>
             )}
         </>
@@ -216,7 +238,11 @@ const Finding = memo(function Finding({ id }: { id: string }) {
     });
     if (!item) return null;
     return (
-        <article id={`item-${id}`} className={`finding is-${item.kind}${item.severity ? ` is-${item.severity}` : ''}`}>
+        <article
+            id={`item-${id}`}
+            className={`finding is-${item.kind}${item.severity ? ` is-${item.severity}` : ''}`}
+            data-anchor-target={`item:${id}`}
+        >
             <div className="finding-meta">
                 <span className="badge badge-kind">{KIND_NAMES[item.kind]}</span>
                 {item.severity && <span className={`badge severity-${item.severity}`}>{item.severity}</span>}
@@ -225,9 +251,7 @@ const Finding = memo(function Finding({ id }: { id: string }) {
                 <span className="mono small muted">{item.id}</span>
             </div>
             <h3 className="finding-title">
-                <span data-anchor-target={`item:${id}`}>
-                    <TitleMarkdown source={item.title} />
-                </span>
+                <TitleMarkdown source={item.title} />
             </h3>
             {item.anchor && <AnchorLink item={item} anchor={item.anchor} />}
             <div className="prose">
@@ -264,6 +288,11 @@ export function underRow(anchor: CodeAnchor | undefined, row: CodeRow): boolean 
     return anchor.side === 'old'
         ? row.kind !== 'add' && row.kind !== 'gone' && row.oldNumber === line
         : row.kind !== 'remove' && row.kind !== 'gone' && row.number === line;
+}
+
+/** Whether a comment on `anchor` is on the whole of `file` rather than on lines of it. */
+export function onWholeFile(anchor: CodeAnchor | undefined, file: string): boolean {
+    return anchor?.file === file && anchor.start === undefined;
 }
 
 /** The findings on `file` whose comment sits under `row`. */

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { ActivityEntry, AgentStatus, PlanSummary, RepoPlans } from '../../shared/view';
 import { AGREED, commentThread, NOW, phasesWith, questionRecord } from '../../test/fixtures';
-import { instance, makeView, posted, storeWith } from '../../test/harness';
+import { defined, instance, makeView, OnScreen, posted, storeWith } from '../../test/harness';
 import { App } from '../App';
 import { keepScroll } from '../scrollKeeper';
 import { ViewStore } from '../store';
@@ -235,6 +235,23 @@ describe('old plans', () => {
         await userEvent.click(old);
         expect(opened).toEqual([{ changeId: 'add-centralised-logs' }]);
         expect(await screen.findByText('Held elsewhere')).toBeInTheDocument();
+    });
+
+    it("a Markdown plan in the repo's own plans folder: the switcher shows its path there, and the list says where it looks", async () => {
+        const plansRoot = 'docs/plans';
+        const listed: PlanSummary = { ...defined(plans[0]), format: 'markdown', plansRoot };
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => new Response(JSON.stringify({ plans: [listed], elsewhere: [], plansRoot, readOnly: false })))
+        );
+        renderApp(storeWith(makeView({}, { format: 'markdown', plansRoot })));
+        const switcher = screen.getByRole('button', { name: 'Switch plan: add-x' });
+        expect(within(switcher).getByText('add-x')).toHaveAttribute('title', 'docs/plans/add-x');
+        await userEvent.click(switcher);
+        const dialog = await screen.findByRole('dialog', { name: 'Plans' });
+        const here = await within(dialog).findByRole('button', { name: /Add X/ });
+        expect(within(here).getByText('add-x')).toHaveAttribute('title', 'docs/plans/add-x');
+        expect(dialog).toHaveTextContent('Every plan under openspec/changes/ and docs/plans/.');
     });
 
     it("other repos' plans: a live one links to its page, an idle one asks Planroom to show it read-only", async () => {
@@ -471,38 +488,6 @@ describe('activity feed', () => {
         expect(screen.queryByText('Unread:')).not.toBeInTheDocument();
     });
 });
-
-/** An IntersectionObserver that reports every observed element as fully on screen, since jsdom has none. */
-class OnScreen implements IntersectionObserver {
-    readonly root = null;
-    readonly rootMargin = '0px';
-    readonly scrollMargin = '0px';
-    readonly thresholds = [0];
-
-    constructor(private readonly callback: IntersectionObserverCallback) {}
-
-    observe(target: Element): void {
-        const rect = target.getBoundingClientRect();
-        const entry: IntersectionObserverEntry = {
-            target,
-            time: 0,
-            intersectionRatio: 1,
-            isIntersecting: true,
-            boundingClientRect: rect,
-            intersectionRect: rect,
-            rootBounds: null
-        };
-        this.callback([entry], this);
-    }
-
-    unobserve(): void {}
-
-    disconnect(): void {}
-
-    takeRecords(): IntersectionObserverEntry[] {
-        return [];
-    }
-}
 
 /** WCAG relative luminance and contrast ratio. */
 function contrast(foreground: string, background: string): number {

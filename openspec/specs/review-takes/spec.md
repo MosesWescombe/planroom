@@ -33,6 +33,11 @@ A your-take card SHALL log the reviewer's answer as a page event the agent recei
 - **WHEN** a your-take card has not been answered
 - **THEN** the agent's view is not in the page's rendered content
 
+#### Scenario: The agent changes an answered card
+
+- **WHEN** the reviewer answered a predict card and the agent then changes the card
+- **THEN** the card asks again with the agent's view hidden, shows the reviewer's last answer, and takes a new answer that reaches the agent as another page event
+
 #### Scenario: Pros and cons overlap
 
 - **WHEN** the reviewer lists "adds a retry" and the agent lists the same pro and one other

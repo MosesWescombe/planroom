@@ -14,7 +14,7 @@ import {
     sequenceConfig
 } from '../../shared/blocks';
 import { blockRecord, sectionRecord } from '../../test/fixtures';
-import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
+import { defined, instance, makeView, posted, renderWith, storeWith, typeInto } from '../../test/harness';
 import { parsePatch } from '../code/CodeViewer';
 import { CommentLayer } from '../comments/CommentLayer';
 import { formatValue } from '../format';
@@ -357,16 +357,19 @@ describe('block interactions', () => {
         await waitFor(() => expect(posted).toEqual([{ type: 'checklist.tick', blockId: 'list', item: '2', done: true }]));
     });
 
-    it('confirm an assumption: tells the agent, then shows it as confirmed', async () => {
+    it('confirm an assumption: tells the agent, shows it as confirmed, and takes it back on Undo', async () => {
         const { store } = renderBlock({
             id: 'a1',
             type: 'callout',
             config: { tone: 'assumption', title: 'Limits are per region, not global' }
         });
         await userEvent.setup().click(screen.getByRole('button', { name: 'Confirm' }));
-        await waitFor(() => expect(posted).toEqual([{ type: 'assumption.confirm', blockId: 'a1' }]));
+        await waitFor(() => expect(posted).toEqual([{ type: 'assumption.confirm', blockId: 'a1', confirmed: true }]));
         store.apply([{ field: 'confirmedAssumptions', id: 'a1', value: 1 }]);
         await waitFor(() => expect(screen.getByText('Confirmed')).toBeInTheDocument());
+        expect(screen.getByRole('button', { name: 'Correct it' })).toBeInTheDocument();
+        await userEvent.setup().click(screen.getByRole('button', { name: 'Undo' }));
+        await waitFor(() => expect(posted.at(-1)).toEqual({ type: 'assumption.confirm', blockId: 'a1', confirmed: false }));
     });
 
     it('correct an assumption: the composer anchors to the whole block, quoting and highlighting nothing', async () => {
@@ -387,7 +390,7 @@ describe('block interactions', () => {
         await user.click(screen.getByRole('button', { name: 'Correct it' }));
         const composer = screen.getByRole('dialog', { name: 'Comment' });
         expect(composer.querySelector('.composer-quote')).not.toHaveTextContent('per region');
-        await user.type(within(composer).getByLabelText('Comment'), 'Limits are per org');
+        typeInto(within(composer).getByLabelText('Comment'), 'Limits are per org');
         await user.click(within(composer).getByRole('button', { name: 'Send to agent' }));
         await waitFor(() =>
             expect(posted).toEqual([
@@ -523,7 +526,7 @@ describe('block interactions', () => {
         await user.click(screen.getByRole('button', { name: 'Comment on this block' }));
         const composer = screen.getByRole('dialog', { name: 'Comment' });
         expect(within(composer).getByText('Comment on block:img')).toBeInTheDocument();
-        await user.type(within(composer).getByLabelText('Comment'), 'Pin 2 is on the wrong field');
+        typeInto(within(composer).getByLabelText('Comment'), 'Pin 2 is on the wrong field');
         await user.click(within(composer).getByRole('button', { name: 'Send to agent' }));
         await waitFor(() =>
             expect(posted).toEqual([

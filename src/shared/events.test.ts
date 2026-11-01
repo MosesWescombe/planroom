@@ -32,6 +32,7 @@ const agentSamples: Record<AgentEventType, unknown> = {
     'proposal.trace': { type: 'proposal.trace', spec: 'rate-limits', requirement: 'Fail open', questions: ['Q-12'] },
     'proposal.ready': { type: 'proposal.ready' },
     'slide.upsert': { type: 'slide.upsert', slide: { id: 'why-1', chapter: 'why', order: 1, title: 'Why', blocks: ['b1'] } },
+    'slide.remove': { type: 'slide.remove', id: 'why-1' },
     'deck.progress': { type: 'deck.progress', pictures: { drawn: 2, total: 4 }, review: '3 of 5 reviewers done' },
     'deck.publish': { type: 'deck.publish' },
     'item.upsert': {
@@ -107,6 +108,7 @@ const pageSamples: Record<PageRequestType, unknown> = {
         reviewers: { strength: 'none', model: 'haiku', effort: 'low' }
     },
     'read.tick': { type: 'read.tick', piece: 'send', read: true, how: 'auto' },
+    'read.mark': { type: 'read.mark', pieces: ['send', 'retry'] },
     'comments.handoff': { type: 'comments.handoff' },
     'item.react': { type: 'item.react', itemId: 'I-1', verdict: 'reject', reason: 'Handled in the caller' },
     'comment.choose': { type: 'comment.choose', key: 'item:I-1', task: true },

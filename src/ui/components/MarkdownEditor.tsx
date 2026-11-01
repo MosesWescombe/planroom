@@ -1,8 +1,16 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxTree } from '@codemirror/language';
-import { Prec, type Range } from '@codemirror/state';
-import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { Compartment, EditorState, Prec, type Range } from '@codemirror/state';
+import {
+    Decoration,
+    type DecorationSet,
+    EditorView,
+    keymap,
+    placeholder as placeholderText,
+    ViewPlugin,
+    type ViewUpdate
+} from '@codemirror/view';
 import { useEffect, useRef } from 'react';
 import { isSendKey, useSendKey } from '../sendKey';
 
@@ -80,6 +88,12 @@ const livePreviewPlugin = ViewPlugin.fromClass(
     { decorations: (plugin) => plugin.decorations }
 );
 
+/** Whether the text can be changed, reconfigured as `disabled` changes. */
+const editability = new Compartment();
+
+/** The extensions that make an editor read-only while `disabled`, as a disabled textarea is. */
+const editableUnless = (disabled: boolean) => [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)];
+
 /**
  * Submit the form `editor` sits in through its default button, as Enter does in a form's text field, and nothing while
  * that button is disabled. False when the editor is in no form, so the key types a new line.
@@ -97,29 +111,46 @@ function submitForm(editor: EditorView): boolean {
 
 /**
  * One Markdown editor with no preview beside it: text is shown rendered, and the part under the caret shows its
- * Markdown syntax so it can be edited, then renders again when the caret leaves. Labelled by the element `labelId`.
- * The chosen send key submits the form it sits in, as in every other message box.
+ * Markdown syntax so it can be edited, then renders again when the caret leaves. Labelled by the element `labelId`,
+ * and at least `rows` lines tall, growing with its text. The chosen send key calls `onSend`, or without it submits the
+ * form the editor sits in, as in every other message box; `onPaste` sees each paste before the editor takes it.
  */
 export function MarkdownEditor({
     id,
     labelId,
     value,
-    onChange
+    onChange,
+    placeholder,
+    rows = 6,
+    autoFocus = false,
+    disabled = false,
+    onSend,
+    onPaste
 }: {
     id: string;
     labelId: string;
     value: string;
     onChange: (value: string) => void;
+    placeholder?: string;
+    rows?: number;
+    autoFocus?: boolean;
+    disabled?: boolean;
+    onSend?: () => void;
+    onPaste?: (event: ClipboardEvent) => void;
 }) {
     const host = useRef<HTMLDivElement>(null);
     const view = useRef<EditorView>(null);
     const changed = useRef(onChange);
     changed.current = onChange;
+    const sent = useRef(onSend);
+    sent.current = onSend;
+    const pasted = useRef(onPaste);
+    pasted.current = onPaste;
     const chosen = useSendKey();
     const sendKey = useRef(chosen);
     sendKey.current = chosen;
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the editor is built once; `value` is synced below
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the editor is built once; `value` and `disabled` are synced below
     useEffect(() => {
         const editor = new EditorView({
             parent: host.current!,
@@ -128,13 +159,24 @@ export function MarkdownEditor({
                 history(),
                 Prec.highest(
                     EditorView.domEventHandlers({
-                        keydown: (event, editor) => isSendKey(event, sendKey.current) && submitForm(editor)
+                        keydown: (event, editor) => {
+                            if (!isSendKey(event, sendKey.current)) return false;
+                            if (!sent.current) return submitForm(editor);
+                            sent.current();
+                            return true;
+                        },
+                        paste: (event) => {
+                            pasted.current?.(event);
+                            return event.defaultPrevented;
+                        }
                     })
                 ),
                 keymap.of([...defaultKeymap, ...historyKeymap]),
                 markdown(),
                 EditorView.lineWrapping,
                 livePreviewPlugin,
+                editability.of(editableUnless(disabled)),
+                placeholder ? placeholderText(placeholder) : [],
                 EditorView.contentAttributes.of({ id, role: 'textbox', 'aria-multiline': 'true', 'aria-labelledby': labelId }),
                 EditorView.updateListener.of((update) => {
                     if (update.docChanged) changed.current(update.state.doc.toString());
@@ -142,8 +184,9 @@ export function MarkdownEditor({
             ]
         });
         view.current = editor;
+        if (autoFocus) editor.focus();
         return () => editor.destroy();
-    }, [id, labelId]);
+    }, [id, labelId, placeholder]);
 
     useEffect(() => {
         const editor = view.current;
@@ -151,5 +194,8 @@ export function MarkdownEditor({
             editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
     }, [value]);
 
-    return <div className="markdown-editor" ref={host} />;
+    useEffect(() => view.current?.dispatch({ effects: editability.reconfigure(editableUnless(disabled)) }), [disabled]);
+
+    // Text being written, its placeholder or a read-only answer is no passage to comment on or anchor in.
+    return <div className="markdown-editor" data-no-comment ref={host} style={{ ['--editor-rows' as string]: rows }} />;
 }

@@ -45,9 +45,10 @@ export function useComposition(): Composition | undefined {
 
 /**
  * Comment on a whole target, anchored to its id rather than a quote of its text: what every comment button opens
- * ("Ask to clarify", a block's comment, "Correct it"). Nothing is highlighted; only a comment on selected text is.
+ * ("Ask to clarify", a block's comment, "Correct it"). Nothing is highlighted; only a comment on selected text is. The
+ * composer opens by `from`, the button pressed, else by the target, which can be scrolled out of sight.
  */
-export function commentOnWhole(target: string, intent: CommentIntent): void {
-    const rect = document.querySelector(targetSelector(target))?.getBoundingClientRect();
+export function commentOnWhole(target: string, intent: CommentIntent, from?: Element): void {
+    const rect = (from ?? document.querySelector(targetSelector(target)))?.getBoundingClientRect();
     openComposer({ anchor: { target }, intent, at: rect && { top: rect.top, left: rect.left, bottom: rect.bottom } });
 }

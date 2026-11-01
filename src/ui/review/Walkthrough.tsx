@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
     CHAPTER_TITLES,
@@ -25,6 +25,7 @@ import { AgentNow } from '../components/SidePanel';
 import { plural } from '../format';
 import { usePrinting, useReducedMotion } from '../hooks';
 import { useReadOnly } from '../readOnly';
+import { useUnseen } from '../seen';
 import { StepperContext, useSteppers } from '../stepper';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy, useUiState } from '../ui';
@@ -191,8 +192,12 @@ function PrintedDeck({ slides }: { slides: string[] }) {
     );
 }
 
-/** The chapter progress bar: a segment per slide, grouped by chapter, the one on show filled, Trade-offs while pending too. */
+/**
+ * The chapter progress bar: a segment per slide, grouped by chapter, the one on show filled, Trade-offs while pending
+ * too. A slide the agent changed reads as unread until the reviewer has seen it.
+ */
 function ChapterBar({ slides, index, onJump }: { slides: string[]; index: number; onJump: (index: number) => void }) {
+    const unseen = useUnseen();
     const chapters = useSelector(
         (view) => slides.map((id) => view.slides[id]?.chapter ?? (id === PENDING ? 'tradeoffs' : 'why')),
         deepEqual
@@ -207,18 +212,21 @@ function ChapterBar({ slides, index, onJump }: { slides: string[]; index: number
                 <div key={chapter} className="chapter">
                     <span className="chapter-name">{CHAPTER_TITLES[chapter]}</span>
                     <div className="chapter-segments">
-                        {slides.map((id, position) =>
-                            chapters[position] === chapter ? (
+                        {slides.map((id, position) => {
+                            const changed = unseen.has(`slide:${id}`);
+                            const state =
+                                position === index ? ' is-current' : changed ? ' is-changed' : position < index ? ' is-read' : '';
+                            return chapters[position] === chapter ? (
                                 <button
                                     key={id}
                                     type="button"
-                                    className={`segment${position === index ? ' is-current' : position < index ? ' is-read' : ''}`}
-                                    aria-label={`Slide ${position + 1}: ${plainTitle(titles[position] ?? '')}`}
+                                    className={`segment${state}`}
+                                    aria-label={`Slide ${position + 1}: ${plainTitle(titles[position] ?? '')}${changed ? ', changed by the agent' : ''}`}
                                     aria-current={position === index ? 'step' : undefined}
                                     onClick={() => onJump(position)}
                                 />
-                            ) : null
-                        )}
+                            ) : null;
+                        })}
                     </div>
                 </div>
             ))}
@@ -282,13 +290,21 @@ function Deck({ round }: { round: RoundRecord }) {
     const printing = usePrinting();
     const [overview, setOverview] = useState(false);
     const [busy, track] = useBusy();
-    // On Trade-offs' place when the agent publishes it, the reviewer moves on to its first slide.
+    // On Trade-offs' place when the agent publishes it, the reviewer moves on to its first slide; on a slide the agent
+    // removed, to the one that took its place.
+    const last = useRef(0);
+    const found = slide === undefined ? 0 : slides.indexOf(slide);
     const index =
         slide === PENDING
             ? pending
                 ? slides.length
                 : Math.max(0, chapters.indexOf('tradeoffs'))
-            : Math.max(0, slide === undefined ? 0 : slides.indexOf(slide));
+            : found >= 0
+              ? found
+              : Math.min(last.current, Math.max(0, steps.length - 1));
+    useEffect(() => {
+        last.current = index;
+    });
     const impactAt = impactSlide === undefined ? -1 : slides.indexOf(impactSlide);
     const unsent = impactAt >= 0 && current && !readOnly && !round.impact?.sentAt;
     const { register, move } = useSteppers();
@@ -336,7 +352,7 @@ function Deck({ round }: { round: RoundRecord }) {
                 (unsent ? sendImpact(send) : Promise.resolve()).then(() => send({ type: 'walkthrough.done', how: 'skipped' }))
             ).then(() => setTab('findings'))
         );
-    const last = index === steps.length - 1;
+    const atEnd = index === steps.length - 1;
     const id = steps[index];
     return (
         <>
@@ -374,12 +390,12 @@ function Deck({ round }: { round: RoundRecord }) {
                     <span className="mono small muted">
                         {index + 1} / {steps.length}
                     </span>
-                    {last && !pending && current && !done && !readOnly ? (
+                    {atEnd && !pending && current && !done && !readOnly ? (
                         <button type="button" className="button-primary" disabled={busy} onClick={finish}>
                             Finish walkthrough
                         </button>
                     ) : (
-                        <button type="button" className="button-secondary" disabled={last} onClick={() => go(index + 1)}>
+                        <button type="button" className="button-secondary" disabled={atEnd} onClick={() => go(index + 1)}>
                             Next
                         </button>
                     )}
@@ -408,8 +424,12 @@ function Deck({ round }: { round: RoundRecord }) {
     );
 }
 
-/** The rail: the deck's chapters and slides, the one on show marked, and Trade-offs' place while it is written. */
+/**
+ * The rail: the deck's chapters and slides, the one on show marked, each the agent changed flagged until seen, and
+ * Trade-offs' place while it is written.
+ */
 function DeckContents({ round }: { round: RoundRecord }) {
+    const unseen = useUnseen();
     const entries = useSelector(
         (view) => shownSlides(view, round).map((slide) => ({ id: slide.id, chapter: slide.chapter, title: slide.title })),
         deepEqual
@@ -446,6 +466,13 @@ function DeckContents({ round }: { round: RoundRecord }) {
                                         <span className="nav-name">
                                             <TitleMarkdown source={entry.title} />
                                         </span>
+                                        {unseen.has(`slide:${entry.id}`) && (
+                                            <span
+                                                className="dot dot-agent"
+                                                role="img"
+                                                aria-label="changed by the agent, not seen yet"
+                                            />
+                                        )}
                                     </button>
                                 </li>
                             ))}

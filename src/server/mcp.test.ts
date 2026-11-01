@@ -7,7 +7,7 @@ import { emptyState } from '../shared/state.js';
 import { askInput, openInput, stateInput, waitInput } from '../shared/tools.js';
 import { CHANGE, connect, defined, eventually, rejection, section, tempRepo, textBlock, upsert } from '../test/serverHelpers.js';
 import { openerCommand, openInBrowser } from './opener.js';
-import { rememberRepo } from './registry.js';
+import { plansDirOf, rememberRepo } from './registry.js';
 
 describe('MCP tools', () => {
     it('lists the four planning tools with generated schemas, the channel capability and instructions', async () => {
@@ -57,19 +57,32 @@ describe('MCP tools', () => {
         expect(body).toMatchObject({ browserOpened: false, url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:/) });
     });
 
-    it('re-opening the same change keeps its URL; another change gets a new one', async () => {
-        const { call } = await connect();
+    it('re-opening the same change keeps its URL; another change takes it over, or with newPage gets a new one', async () => {
+        const { call, planroom, openBrowser } = await connect();
         const first = (await call('planroom_open', { changeId: CHANGE })).body;
-        expect((await call('planroom_open', { changeId: CHANGE })).body).toMatchObject({ url: first.url, resumed: true });
-        const other = (await call('planroom_open', { changeId: 'add-audit-log' })).body;
-        expect(other.url).not.toBe(first.url);
+        expect((await call('planroom_open', { changeId: CHANGE })).body).toMatchObject({
+            url: first.url,
+            resumed: true,
+            browserOpened: false
+        });
+        // No tab has the page open, so the browser opens on it again.
+        expect((await call('planroom_open', { changeId: 'add-audit-log' })).body).toMatchObject({
+            url: first.url,
+            browserOpened: true
+        });
+        expect(planroom.session?.changeId).toBe('add-audit-log');
+        expect(openBrowser).toHaveBeenCalledTimes(2);
+        const separate = (await call('planroom_open', { changeId: CHANGE, newPage: true })).body;
+        expect(separate.url).not.toBe(first.url);
+        expect(openBrowser).toHaveBeenLastCalledWith(separate.url);
         expect((await fetch(first.url)).status).toBe(404);
     });
 
-    it('opens a Markdown plan in agent-plans/, and refuses re-opening it as the other format', async () => {
+    it('opens a Markdown plan in an existing agent-plans/, and refuses re-opening it as the other format', async () => {
         const { call, repo } = await connect();
+        await mkdir(join(repo, 'agent-plans'));
         const { body } = await call('planroom_open', { changeId: CHANGE, format: 'markdown' });
-        expect(body).toMatchObject({ resumed: false, format: 'markdown' });
+        expect(body).toMatchObject({ resumed: false, format: 'markdown', planDir: `agent-plans/${CHANGE}` });
         expect(existsSync(join(repo, 'agent-plans', CHANGE, '.planroom', 'state.json'))).toBe(true);
         expect(existsSync(join(repo, 'openspec', 'changes', CHANGE))).toBe(false);
         expect((await call('planroom_open', { changeId: CHANGE })).body).toMatchObject({ resumed: true, format: 'markdown' });
@@ -77,6 +90,51 @@ describe('MCP tools', () => {
             isError: true,
             body: { issues: [{ path: 'format' }] }
         });
+    });
+
+    it('asks where Markdown plans go when the repo has no agent-plans/, then remembers the chosen folder', async () => {
+        const registryFile = join(await tempRepo(), 'state', 'repos.json');
+        const { call, repo } = await connect({ registryFile });
+        await rm(join(repo, 'openspec'), { recursive: true });
+        expect(await call('planroom_open', { changeId: CHANGE })).toMatchObject({
+            isError: true,
+            body: { issues: [{ path: 'plansDir', message: expect.stringMatching(/ask the user.*plansDir/) }] }
+        });
+        expect(await readdir(repo)).toEqual([]);
+
+        const { body } = await call('planroom_open', { changeId: CHANGE, plansDir: './docs//plans/' });
+        expect(body).toMatchObject({ resumed: false, format: 'markdown', planDir: `docs/plans/${CHANGE}` });
+        const stateFile = join(repo, 'docs', 'plans', CHANGE, '.planroom', 'state.json');
+        expect(JSON.parse(await readFile(stateFile, 'utf8')).plansRoot).toBe('docs/plans');
+        expect(await plansDirOf(registryFile, repo)).toBe('docs/plans');
+        expect((await call('planroom_state')).body).toMatchObject({ planDir: `docs/plans/${CHANGE}` });
+
+        const other = (await call('planroom_open', { changeId: 'add-audit-log' })).body;
+        expect(other).toMatchObject({ resumed: false, planDir: 'docs/plans/add-audit-log' });
+        expect(existsSync(join(repo, 'agent-plans'))).toBe(false);
+        const listing = await (await fetch(`${other.url}api/plans`)).json();
+        expect(listing.plansRoot).toBe('docs/plans');
+        expect(listing.plans.map((plan: { changeId: string }) => plan.changeId).sort()).toEqual([CHANGE, 'add-audit-log']);
+        expect((await call('planroom_open', { changeId: CHANGE })).body).toMatchObject({
+            resumed: true,
+            planDir: `docs/plans/${CHANGE}`
+        });
+    });
+
+    it('refuses a plansDir outside the repo, or for an OpenSpec plan, creating nothing', async () => {
+        const { call, repo } = await connect();
+        for (const plansDir of ['/tmp/plans', '../plans', 'docs/../../plans', '.', 'docs\\plans']) {
+            expect(await call('planroom_open', { changeId: CHANGE, format: 'markdown', plansDir })).toMatchObject({
+                isError: true,
+                body: { issues: [{ path: 'plansDir', message: expect.stringMatching(/inside the repo/) }] }
+            });
+        }
+        expect(await call('planroom_open', { changeId: CHANGE, plansDir: 'docs/plans' })).toMatchObject({
+            isError: true,
+            body: { issues: [{ path: 'plansDir', message: expect.stringMatching(/opens as an OpenSpec change/) }] }
+        });
+        expect(await readdir(repo)).toEqual(['openspec']);
+        expect(await readdir(join(repo, 'openspec', 'changes'))).toEqual([]);
     });
 
     it('reports an invalid change id and every tool before open as errors', async () => {

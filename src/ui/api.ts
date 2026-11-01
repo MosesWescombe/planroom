@@ -125,9 +125,10 @@ export function assetUrl(src: string, still = false): string {
 /**
  * Follow the server's event stream: a snapshot on every (re)connect, then patches.
  * EventSource reconnects by itself until the server says the session is closed; this reports each state change.
+ * When the page's URL starts serving another session, the page reloads onto it.
  */
 export function openStream(handlers: {
-    onMessage: (message: Exclude<StreamMessage, { type: 'closed' }>) => void;
+    onMessage: (message: Exclude<StreamMessage, { type: 'closed' | 'reload' }>) => void;
     onState: (state: 'live' | 'reconnecting' | 'closed') => void;
 }): () => void {
     const source = new EventSource('api/stream');
@@ -139,6 +140,11 @@ export function openStream(handlers: {
             message = JSON.parse(event.data) as StreamMessage;
         } catch {
             // A malformed frame is skipped; the next snapshot corrects any gap.
+            return;
+        }
+        if (message.type === 'reload') {
+            source.close();
+            window.location.reload();
             return;
         }
         if (message.type !== 'closed') {

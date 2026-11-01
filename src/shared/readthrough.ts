@@ -585,12 +585,16 @@ export interface ReadProgress {
     lines: { read: number; total: number };
 }
 
-/** The reviewer's progress through a round's read-through. */
-export function readProgress(parts: ReadParts, index: LineIndex | undefined, round: number): ReadProgress {
+/** The reviewer's progress through a round's read-through, from its read pieces (`done`) when already worked out. */
+export function readProgress(
+    parts: ReadParts,
+    index: LineIndex | undefined,
+    round: number,
+    done: ReadonlySet<string> = readPieces(parts, index, round)
+): ReadProgress {
     const pages: ReadProgress['pages'] = {};
     if (!index) return { pages, lines: { read: 0, total: 0 } };
     const read: Lines = housekeepingRead(parts, round) ? housekeepingLines(index) : new Map();
-    const done = readPieces(parts, index, round);
     for (const page of roundPages(parts, round)) {
         const pieces = page.pieces.filter((piece) => done.has(piece.id));
         for (const piece of pieces) mergeLines(read, pieceLines(index, piece));

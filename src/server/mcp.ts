@@ -21,7 +21,7 @@ import { emitBatch, type LoggedEvent, type LoggedEventType } from '../shared/eve
 import { toIssues } from '../shared/issues.js';
 import { roundPages } from '../shared/readthrough.js';
 import { currentRound, deckSlides, deriveComments, reviewStage, roundItems, slideShown } from '../shared/review.js';
-import { type PlanFormat, type SessionKind, StateFileError } from '../shared/state.js';
+import { type PlanFormat, planDir, type SessionKind, StateFileError } from '../shared/state.js';
 import { askInput, DEFAULT_WAIT_SEC, openInput, reviewInput, stateInput, waitInput } from '../shared/tools.js';
 import { BitbucketError } from './bitbucket.js';
 import type { ChannelNotifier } from './delivery.js';
@@ -31,8 +31,9 @@ import { ChangeLockedError } from './lock.js';
 import type { BrowserOpener } from './opener.js';
 import type { OpenSpecRunner } from './openspec.js';
 import { hasPlan } from './plans.js';
+import { plansDirOf, rememberRepo } from './registry.js';
 import { type ReviewHost, resolveTarget } from './review.js';
-import { Session } from './session.js';
+import { plansRootFor, Session } from './session.js';
 import { GitError } from './worktree.js';
 
 export { DEFAULT_WAIT_SEC };
@@ -46,14 +47,23 @@ function inputSchema(schema: z.ZodType): Tool['inputSchema'] {
     return { ...json, type: 'object' } as Tool['inputSchema'];
 }
 
+/** How an opener serves a session other than the open one, which every opener's description says. */
+const TAKES_OVER =
+    'Opening another session than the open one serves it on the page already open, at the same URL, whose tab reloads onto ' +
+    'it, and opens the browser only when no tab shows it; newPage: true serves it under a new URL in a new window instead. ';
+
 /** The planning server's opener. */
 const OPEN_TOOL: Tool = {
     name: 'planroom_open',
     description:
         'Open or resume the Planroom planning page for a change. A new plan becomes an OpenSpec change in openspec/changes/<changeId>/ ' +
-        '(created when it does not exist), or with format "markdown" a plan at agent-plans/<changeId>/<changeId>.md. ' +
-        'Returns { url, resumed, phase, format, cursor, repoRoot }: print the url for the user, and pass cursor as `after` to planroom_wait. ' +
+        '(created when it does not exist), or with format "markdown", the default in a repo with no openspec/ directory, a plan at ' +
+        "<plans folder>/<changeId>/<changeId>.md, in the repo's folder for Markdown plans: the one remembered for it on this machine, else agent-plans/. " +
+        'When the repo has neither, a new Markdown plan is refused at `plansDir`: ask the user where its Markdown plans should go, then call again with plansDir. ' +
+        'Returns { url, resumed, phase, format, planDir, cursor, repoRoot }: print the url for the user, and pass cursor as `after` to planroom_wait. ' +
+        "planDir is the plan's folder, where its files are written. " +
         'Plan paths are relative to repoRoot, the repo the server plans in, which is not your working directory when the server was started with --dir. ' +
+        TAKES_OVER +
         "Without a changeId it opens the plan browser instead, where the user picks one of the repo's plans, and returns { url, browsing: true, repoRoot }: " +
         'print the url, then call planroom_wait with after 0. Once the user picks a plan it is refused naming that plan: call planroom_state to load it.',
     inputSchema: inputSchema(openInput)
@@ -70,7 +80,8 @@ const ASK_TOOL: Tool = {
         'and planroom_wait from `cursor` for answers. When the user sends their answers, planroom_wait returns an ask.done ' +
         'event whose `context` is every question, answer and thread as Markdown, and whose `file` is the `output` path it was ' +
         'also written to. The ask is then read-only: call planroom_ask with the same askId to ask more, which reopens it once ' +
-        'you have had its ask.done. Until then it returns `sent: true` and the ask stays read-only: planroom_wait from `cursor` for the ask.done first.',
+        'you have had its ask.done. Until then it returns `sent: true` and the ask stays read-only: planroom_wait from `cursor` for the ask.done first. ' +
+        TAKES_OVER,
     inputSchema: inputSchema(askInput)
 };
 
@@ -78,8 +89,10 @@ const ASK_TOOL: Tool = {
 const REVIEW_TOOL: Tool = {
     name: 'planroom_review',
     description:
-        'Open or resume a Planroom Review of a Bitbucket Cloud PR (a link or a number of the origin repo) or a local branch (nothing is ' +
-        'posted for a branch). The server fetches the PR, adds a temporary git worktree at its head under .planroom/reviews/<id>/worktree, ' +
+        'Open or resume a Planroom Review of a Bitbucket Cloud PR (a link or a number of the origin repo) or a branch: a branch with an ' +
+        'open PR in the origin repo reviews that PR, otherwise or with local: true the local branch (nothing is posted for it). ' +
+        TAKES_OVER +
+        'The server fetches the PR, adds a temporary git worktree at its head under .planroom/reviews/<id>/worktree, ' +
         'and opens the review page. Returns { url, reviewId, resumed, stage, round, pr, files, worktree, diff, index, preferences, postable, cursor, repoRoot }: ' +
         'print the url, read the code in `worktree` (never in your working directory), and planroom_wait from `cursor`. `diff` is the ' +
         'commit range under review: run `git diff <base> <head>` in the worktree. `index` is the diff line by line, for a read-through: ' +
@@ -97,7 +110,8 @@ const SESSION_TOOLS: Tool[] = [
         description:
             'Apply a batch of agent events to the open page, atomically: question.upsert/close/merge, understanding.update, ' +
             'doc.section.upsert, doc.block.upsert, comment.reply (markdown `text`, optionally with diagram, table or other `blocks`), comment.edit (rewrite your reply in place), suggestion.decline, proposal.trace, proposal.ready; ' +
-            'in a review, slide.upsert, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft, earlier.label, and for the read-through read.outline, read.page.upsert and read.page.add. Each session kind refuses the events of the others. ' +
+            'in a review, slide.upsert, slide.remove, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft, earlier.label, and for the read-through read.outline, read.page.upsert and read.page.add. ' +
+            'Slides and their blocks can change or go at any time, also once published, and read.outline can be sent again to restructure the read-through. Each session kind refuses the events of the others. ' +
             'A malformed batch applies nothing and lists every problem by path. A block whose config fails its type is still stored, ' +
             'shown as an error card, and listed in blockProblems: fix it in place by re-sending it, never by adding a new one. `summary` labels the write-up revision. `doing` tells the user what you are on next, ' +
             'e.g. "researching how alarms are indexed", until your next planroom_wait. `subagents` lists what each subagent you are waiting on is doing, ' +
@@ -119,7 +133,8 @@ const SESSION_TOOLS: Tool[] = [
     {
         name: 'planroom_state',
         description:
-            'Return the whole planning session: questions and answers, the write-up, comment threads, phases, validation and your event cursor. ' +
+            'Return the whole planning session: questions and answers, the write-up, comment threads, phases, validation and your event cursor, ' +
+            'and for a plan its folder, planDir. ' +
             'For an ask, `context` is its questions, answers and threads as Markdown so far. ' +
             'Use it to rebuild context after a compaction or in a resumed session.',
         inputSchema: inputSchema(stateInput)
@@ -154,7 +169,7 @@ const delivery = (source: string) =>
  */
 export const INSTRUCTIONS: Record<SessionKind, string> = {
     plan: [
-        'Planroom is the live planning page for changes in any repo with an openspec/ directory, proposed as an OpenSpec change or a Markdown plan.',
+        'Planroom is the live planning page for changes in any repo, proposed as an OpenSpec change or, in any repo and by default in one with no openspec/ directory, a Markdown plan.',
         'Load the planroom skill before calling these tools.',
         'planroom_open returns the page URL: always print it for the user.',
         delivery(SERVER_NAMES.plan)
@@ -325,23 +340,39 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
     /** What every session opens with besides its own id and title. */
     const base = { repoRoot: options.repoRoot, cli: options.cli, ...(options.now ? { now: options.now } : {}) };
 
-    /** Open a change's plan, for `serve`. */
-    const openPlan = (changeId: string, title?: string, format?: PlanFormat) =>
-        Session.open({ ...base, changeId, ...(title ? { title } : {}), ...(format ? { format } : {}) });
+    /** The repo's Markdown plans folder, as remembered on this machine. */
+    const rememberedPlansRoot = async () =>
+        options.registryFile ? await plansDirOf(options.registryFile, options.repoRoot) : undefined;
+
+    /** Open a change's plan, its Markdown one under `plansRoot`, for `serve`. */
+    const openPlan = (changeId: string, plansRoot: string | undefined, title?: string, format?: PlanFormat) =>
+        Session.open({
+            ...base,
+            changeId,
+            ...(plansRoot ? { plansRoot } : {}),
+            ...(title ? { title } : {}),
+            ...(format ? { format } : {})
+        });
 
     /**
-     * Open a session and serve it in place of the open one. The new session is opened (id checked, lock taken) and
-     * served before the previous one closes, so a failed open leaves the previous session as it was.
+     * Open a session and serve it in place of the open one: on the open one's page, whose tabs reload onto it, or with
+     * `newPage` under a new URL. The new session is opened (id checked, lock taken) and served before the previous one
+     * closes, so a failed open leaves the previous session as it was. `shown` says a tab had the page it took over open.
      */
     const serve = async (
-        opening: () => Promise<{ session: Session; resumed: boolean }>
-    ): Promise<{ live: Session; url: string; resumed: boolean }> => {
+        opening: () => Promise<{ session: Session; resumed: boolean }>,
+        newPage: boolean
+    ): Promise<{ live: Session; url: string; resumed: boolean; shown: boolean }> => {
         const opened = await opening();
         const { changeId } = opened.session;
+        const taken = !newPage && session && url ? { previous: session, url } : undefined;
         let openedUrl: string;
+        let shown = false;
         try {
-            openedUrl = (await pageServer()).add(opened.session);
+            const page = await pageServer();
+            openedUrl = taken?.url ?? page.add(opened.session);
             await opened.session.publishUrl(openedUrl);
+            if (taken) shown = page.swap(taken.previous, opened.session);
             await closeSession();
         } catch (error) {
             pages?.remove(opened.session);
@@ -351,7 +382,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         session = opened.session;
         url = openedUrl;
         session.setNotifier(notifierFor(changeId));
-        return { live: opened.session, url: openedUrl, resumed: opened.resumed };
+        return { live: opened.session, url: openedUrl, resumed: opened.resumed, shown };
     };
 
     /** The open session and its page URL when it is the `wanted` kind's `id`, which opening again returns as it is. */
@@ -372,9 +403,12 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         };
     };
 
-    /** Open a change for the agent, or return the open one, and open its page in the browser. Without one, browse. */
+    /**
+     * Open a change for the agent, or return the open one, and open its page in the browser unless a tab shows it
+     * already. Without one, browse.
+     */
     const open = async (input: unknown) => {
-        const { changeId, title, format } = parseArgs(openInput, input);
+        const { changeId, title, format, plansDir, newPage } = parseArgs(openInput, input);
         if (!changeId) return browse();
         switchedTo = undefined;
         const here = openHere('plan', changeId);
@@ -388,39 +422,56 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
                 ],
                 409
             );
+        const plansRoot = plansRootFor(options.repoRoot, changeId, format, plansDir, await rememberedPlansRoot());
         const {
             live,
             url: openedUrl,
-            resumed
-        } = here ? { ...here, resumed: true } : await serve(() => openPlan(changeId, title, format));
+            resumed,
+            shown
+        } = here
+            ? { ...here, resumed: true, shown: true }
+            : await serve(() => openPlan(changeId, plansRoot, title, format), Boolean(newPage));
         live.delivery.touch();
+        // A repo with no openspec/ is only known once it has a plan, and its plans folder once it is chosen. A failure only
+        // hides its plans elsewhere, or asks for the folder again.
+        if (options.registryFile) await rememberRepo(options.registryFile, options.repoRoot, plansDir).catch(() => undefined);
         return {
             url: openedUrl,
             resumed,
             phase: currentPhase(live.current),
             format: live.current.format,
+            planDir: planDir(live.current.format, live.changeId, live.current.plansRoot),
             cursor: live.current.agentCursor,
             repoRoot: options.repoRoot,
-            browserOpened: here ? false : await options.openBrowser(openedUrl)
+            browserOpened: shown ? false : await options.openBrowser(openedUrl)
         };
     };
 
     /**
-     * Open an ask for the agent, or return the open one, and open its page in the browser. A sent ask reopens for more
-     * questions once the agent has had its answers; until then it stays read-only and says `sent`.
+     * Open an ask for the agent, or return the open one, and open its page in the browser unless a tab shows it
+     * already. A sent ask reopens for more questions once the agent has had its answers; until then it stays read-only
+     * and says `sent`.
      */
     const ask = async (input: unknown) => {
-        const { askId, title, output } = parseArgs(askInput, input);
+        const { askId, title, output, newPage } = parseArgs(askInput, input);
         switchedTo = undefined;
         const here = openHere('ask', askId);
         const {
             live,
             url: openedUrl,
-            resumed
+            resumed,
+            shown
         } = here
-            ? { ...here, resumed: true }
-            : await serve(() =>
-                  Session.openAsk({ ...base, askId, ...(title ? { title } : {}), ...(output !== undefined ? { output } : {}) })
+            ? { ...here, resumed: true, shown: true }
+            : await serve(
+                  () =>
+                      Session.openAsk({
+                          ...base,
+                          askId,
+                          ...(title ? { title } : {}),
+                          ...(output !== undefined ? { output } : {})
+                      }),
+                  Boolean(newPage)
               );
         if (output !== undefined) await live.setOutput(output);
         const sent = !(await live.reopenAsk());
@@ -432,7 +483,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             ...(sent ? { sent: true } : {}),
             cursor: live.current.agentCursor,
             repoRoot: options.repoRoot,
-            browserOpened: here ? false : await options.openBrowser(openedUrl)
+            browserOpened: shown ? false : await options.openBrowser(openedUrl)
         };
     };
 
@@ -472,23 +523,27 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
     };
 
     /**
-     * Open a review for the agent, or return the open one, and open its page in the browser. Opening resolves the
-     * target first, so a resumed review whose PR head moved since it was posted starts its next round.
+     * Open a review for the agent, or return the open one, and open its page in the browser unless a tab shows it
+     * already. Opening resolves the target first, so a resumed review whose PR head moved since it was posted starts its
+     * next round.
      */
     const review = async (input: unknown) => {
-        const { target, title } = parseArgs(reviewInput, input);
+        const { target, title, local, newPage } = parseArgs(reviewInput, input);
         switchedTo = undefined;
         const reviewHost = await (host ??= (
             options.reviewHost ?? (() => Promise.reject(new Error('This Planroom has no review host')))
         )());
-        const resolved = await resolveTarget(options.repoRoot, target, reviewHost.access);
+        const resolved = await resolveTarget(options.repoRoot, target, reviewHost.access, local);
         if (title) resolved.title = title;
         const here = openHere('review', resolved.id);
         const {
             live,
             url: openedUrl,
-            resumed
-        } = here ? { ...here, resumed: true } : await serve(() => Session.openReview({ ...base, resolved, host: reviewHost }));
+            resumed,
+            shown
+        } = here
+            ? { ...here, resumed: true, shown: true }
+            : await serve(() => Session.openReview({ ...base, resolved, host: reviewHost }), Boolean(newPage));
         await live.syncReview(resolved);
         live.delivery.touch();
         return {
@@ -497,7 +552,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             ...reviewContext(live),
             cursor: live.current.agentCursor,
             repoRoot: options.repoRoot,
-            browserOpened: here ? false : await options.openBrowser(openedUrl)
+            browserOpened: shown ? false : await options.openBrowser(openedUrl)
         };
     };
 
@@ -516,11 +571,12 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
                 ],
                 404
             );
-        if (!(await hasPlan(options.repoRoot, changeId)))
+        const plansRoot = await rememberedPlansRoot();
+        if (!(await hasPlan(options.repoRoot, changeId, plansRoot)))
             throw new RejectedError([{ path: 'changeId', message: `${changeId} has no plan to open` }], 404);
         const here = openHere('plan', changeId);
         if (here) return here.url;
-        const served = await serve(() => openPlan(changeId));
+        const served = await serve(() => openPlan(changeId, plansRoot), true);
         switchedTo = changeId;
         picks.emit('picked');
         return served.url;
@@ -599,6 +655,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
             return {
                 url,
                 phase: currentPhase(state),
+                planDir: planDir(state.format, state.changeId, state.plansRoot),
                 ...cursor,
                 phase1: {
                     stage: phase1Stage(state),

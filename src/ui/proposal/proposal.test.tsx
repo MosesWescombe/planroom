@@ -5,7 +5,7 @@ import type { ThreadRecord } from '../../shared/records';
 import { parseSpecDelta, parseTasks } from '../../shared/specDelta';
 import type { ProposalFile, View } from '../../shared/view';
 import { commentThread, NOW, questionRecord } from '../../test/fixtures';
-import { instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
+import { instance, makeView, posted, renderWith, storeWith, typeInto } from '../../test/harness';
 import { EndSessionButton } from '../components/EndSession';
 import { Proposal } from './Proposal';
 import { proposingSteps } from './Proposing';
@@ -301,7 +301,7 @@ describe('the review panel', () => {
         await user.click(screen.getByRole('button', { name: 'Request changes' }));
         const send = screen.getByRole('button', { name: 'Send to agent' });
         expect(send).toBeDisabled();
-        await user.type(screen.getByLabelText('What should change?'), 'Split the spec in two');
+        typeInto(screen.getByLabelText('What should change?'), 'Split the spec in two');
         await user.click(send);
         await waitFor(() => expect(posted).toEqual([{ type: 'proposal.requestChanges', text: 'Split the spec in two' }]));
     });

@@ -7,7 +7,7 @@ The Walkthrough tab of a review: a cohesive deck of slides the agent builds priv
 
 ### Requirement: Slides are staged and published in two parts
 
-The agent SHALL send each slide with `slide.upsert { id, chapter, order, title, blocks }` after the blocks it lists. Slides SHALL stay staged and invisible on the page until the agent publishes their part. The first `deck.publish` SHALL release Why, How it works and What it might impact at once. Trade-offs SHALL stay staged until the reviewer has sent their concerns on the impact map or skipped the walkthrough, and a second `deck.publish` SHALL then release it. A published part MUST NOT change within the same round.
+The agent SHALL send each slide with `slide.upsert { id, chapter, order, title, blocks }` after the blocks it lists. Slides SHALL stay staged and invisible on the page until the agent publishes their part. The first `deck.publish` SHALL release Why, How it works and What it might impact at once. Trade-offs SHALL stay staged until the reviewer has sent their concerns on the impact map or skipped the walkthrough, and a second `deck.publish` SHALL then release it. A published part MAY still change, as the next requirement says.
 
 #### Scenario: Staged slides are not shown
 
@@ -27,7 +27,36 @@ The agent SHALL send each slide with `slide.upsert { id, chapter, order, title, 
 #### Scenario: Edit after publishing
 
 - **WHEN** the agent sends `slide.upsert` for a How it works slide after the first part was published
+- **THEN** the slide changes on the page at once
+
+### Requirement: The agent can change the deck at any time
+
+Within the round, the agent SHALL be able to add, change, move, reorder and remove slides and their blocks at any time, staged or published, with `slide.upsert`, `slide.remove { id }` and `doc.block.upsert`. `slide.remove` SHALL be refused for a slide the round does not have. A slide of an earlier round, and its blocks, MUST NOT change. A slide added to or changed in a published part, one of its blocks included, SHALL show as changed by the agent, in the chapter bar, the slide list and the activity feed, until the reviewer has had it on screen. A published part SHALL stay whole: the server SHALL refuse a batch that leaves a published chapter without a slide, the first part without its one valid impact map whose blocks were all sent, or a published block that does not render. A your-take card the agent changes after it was answered SHALL ask again, showing the reviewer's last answer. Changing the impact map after the reviewer sent their concerns SHALL drop the concerns on areas it no longer has and let the reviewer send them again. Comments on a removed slide SHALL stay and show as detached; a finding pinned to a diagram no longer on a slide SHALL simply show no pin. A reviewer on a removed slide SHALL stay at its place in the deck, on the slide that took it.
+
+#### Scenario: A read slide changes
+
+- **WHEN** the reviewer has read past slide 3 and the agent changes a block on it
+- **THEN** slide 3's segment in the chapter bar and its entry in the slide list show it changed by the agent until the reviewer opens it again
+
+#### Scenario: Removing a slide
+
+- **WHEN** the agent sends `slide.remove` for a How it works slide while the reviewer is on it
+- **THEN** the slide leaves the deck, the reviewer sees the slide that took its place, and a comment on the removed slide shows as detached
+
+#### Scenario: Removing an unknown slide
+
+- **WHEN** the agent sends `slide.remove` for an id the round has no slide for
 - **THEN** the call is refused and the deck is unchanged
+
+#### Scenario: Breaking a published part
+
+- **WHEN** the agent removes the only Why slide after the first part was published
+- **THEN** the call is refused naming the chapter left without a slide
+
+#### Scenario: The impact map changes after the concerns were sent
+
+- **WHEN** the reviewer sent concerns on Billing exports and On-call alerts, and the agent removes the On-call alerts area
+- **THEN** the concerns on On-call alerts are dropped, the map takes concerns again, and moving on sends them as a new `impact.send`
 
 ### Requirement: Progress is shown while the deck builds
 
@@ -54,7 +83,7 @@ A deck SHALL be organised into the chapters Why, How it works, What it might imp
 
 ### Requirement: What it might impact maps the change's spread and takes the reviewer's concerns
 
-What it might impact SHALL be one slide holding one impact map: 2 to 8 areas the change might reach beyond its diff, drawn around it, each with a line on how the change reaches it and up to four blocks that explain it, such as diagrams, step-throughs and interactive visuals. Opening an area SHALL show its explanation and a box for the reviewer's questions and concerns under it. The reviewer SHALL be able to add areas of their own. Their concerns SHALL be saved as they write them, and moving on from the slide, or skipping the walkthrough, SHALL send them all to the agent once, after which they are read-only. The first part MUST NOT publish without a valid impact map whose blocks were all sent.
+What it might impact SHALL be one slide holding one impact map: 2 to 8 areas the change might reach beyond its diff, drawn around it, each with a line on how the change reaches it and up to four blocks that explain it, such as diagrams, step-throughs and interactive visuals. Opening an area SHALL show its explanation and a box for the reviewer's questions and concerns under it. The reviewer SHALL be able to add areas of their own. Their concerns SHALL be saved as they write them, and moving on from the slide, or skipping the walkthrough, SHALL send them all to the agent once, after which they are read-only until the agent changes the map. The first part MUST NOT publish without a valid impact map whose blocks were all sent.
 
 #### Scenario: Opening an area
 

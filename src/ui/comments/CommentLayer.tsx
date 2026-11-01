@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { describeAnchor } from '../../shared/anchors';
 import type { CommentIntent, ThreadRecord } from '../../shared/records';
+import type { View } from '../../shared/view';
 import { Attachments, usePastes } from '../components/Attachments';
 import { CommentIcon } from '../components/icons';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 import { useReadOnly } from '../readOnly';
-import { sendHint, useSendKey, useSendOnKey } from '../sendKey';
+import { sendHint, useSendKey } from '../sendKey';
 import { useStore } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 import { type AnchorState, setAnchorStates } from './anchorStatus';
@@ -28,10 +30,19 @@ function supportsHighlights(): boolean {
     return typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined';
 }
 
+/** Whether a comment's target is gone for good: a slide or read-through page the agent removed. */
+function removedTarget(view: View, target: string): boolean {
+    const [kind, id = ''] = target.split(/:(.*)/s);
+    if (kind === 'slide') return !Object.hasOwn(view.slides, id);
+    if (kind === 'page') return !Object.values(view.pages).some((page) => page.id === id);
+    return false;
+}
+
 /**
  * Paint every open comment's anchor with the CSS Custom Highlight API, so React's DOM
  * is never touched, and record which anchors are attached, detached or not on screen.
- * Re-resolves whenever the threads or the rendered text change.
+ * One on a slide or page the agent removed is detached. Re-resolves whenever the
+ * threads or the rendered text change.
  */
 function useHighlights(): void {
     const store = useStore();
@@ -48,6 +59,10 @@ function useHighlights(): void {
                     Boolean(thread.kind === 'comment' && thread.anchor)
             );
             for (const thread of open) {
+                if (removedTarget(view, thread.anchor.target)) {
+                    states.set(thread.id, 'detached');
+                    continue;
+                }
                 const located = locateAnchor(thread.anchor);
                 if (!located) {
                     states.set(thread.id, 'hidden');
@@ -104,7 +119,6 @@ function Composer() {
     const [intent, setIntent] = useState<CommentIntent>('question');
     const [busy, track] = useBusy();
     const sendKey = useSendKey();
-    const sendOnKey = useSendOnKey();
     const pastes = usePastes();
     const clearPastes = pastes.clear;
     usePendingHighlight(composition);
@@ -132,7 +146,18 @@ function Composer() {
         );
     };
     return (
-        <div className="composer" role="dialog" aria-label="Comment" style={place(composition.at, 360, true)}>
+        <div
+            className="composer"
+            role="dialog"
+            aria-label="Comment"
+            style={place(composition.at, 360, true)}
+            onKeyDown={(event) => {
+                if (event.key !== 'Escape') return;
+                // The box can sit over a dialog: Escape closes only the box.
+                event.stopPropagation();
+                closeComposer();
+            }}
+        >
             <blockquote className={`composer-quote${composition.anchor.lines?.text ? ' is-code' : ''}`}>
                 {composition.anchor.quote?.exact ??
                     composition.anchor.lines?.text ??
@@ -152,19 +177,17 @@ function Composer() {
                     </button>
                 ))}
             </div>
-            <label className="visually-hidden" htmlFor="composer-text">
+            <label className="visually-hidden" id="composer-text-label" htmlFor="composer-text">
                 Comment
             </label>
-            <textarea
+            <MarkdownEditor
                 id="composer-text"
+                labelId="composer-text-label"
                 rows={4}
                 value={text}
                 autoFocus
-                onChange={(event) => setText(event.target.value)}
-                onKeyDown={(event) => {
-                    sendOnKey(event, submit);
-                    if (event.key === 'Escape') closeComposer();
-                }}
+                onChange={setText}
+                onSend={submit}
                 onPaste={pastes.onPaste}
             />
             <Attachments items={pastes.items} onRemove={pastes.remove} />

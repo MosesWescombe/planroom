@@ -17,8 +17,12 @@ never post comments yourself.
 ## Start
 
 1. Call `planroom_review({ target })`. `target` is a Bitbucket PR link, a PR number of this checkout's `origin` repo,
-   or a local branch name (reviewed against its merge base with the default branch; nothing is posted for a branch).
-   Print the returned `url` every time. Keep `cursor`: it is your `after` for the first `planroom_wait`.
+   or a branch name. A branch with an open PR in the `origin` repo opens that PR's review; with none, or with
+   `local: true` when the reviewer asks for the local changes only or to resume an earlier review of the branch, it is
+   the local branch, reviewed against its merge base with the default branch (nothing is posted for a branch). Print the returned `url` every time. Keep `cursor`:
+   it is your `after` for the first `planroom_wait`.
+   To review another PR or branch, call `planroom_review` with it: the open page switches to it at the same URL, and
+   no new window opens while a tab shows it. Pass `newPage: true` only when the reviewer wants it on a separate page.
 2. Read the code in `worktree`, never in your working directory: it is a temporary checkout of the commit under review,
    and the reviewer's working copy may be on another branch. The change is `git diff <diff.base> <diff.head>`, run in
    the worktree. `files` lists what changed, with line counts.
@@ -83,13 +87,24 @@ only the review (step 2) beside it.
 4. **Write the slides** in one voice: `doc.block.upsert` each block, then `slide.upsert { id, chapter, order, title,
    blocks }` listing it. Slides stay off the page until you publish.
 5. **Publish the first part**, Why to What it might impact, once those slides are written and their pictures drawn:
-   `deck.publish`. It is then fixed for the round. Trade-offs is written after the reviewer's concerns, so stage none
-   yet.
+   `deck.publish`. Trade-offs is written after the reviewer's concerns, so stage none yet.
 6. **On `impact.send`**, investigate every area and every concern the reviewer wrote, theirs and the areas they added:
    hand each area to a `planroom-researcher` subagent with the worktree path, the area, how the change reaches it and
    the concerns under it, and check what it reports before you rely on it. A concern that holds up as a real problem also becomes a finding
    (`item.upsert`, anchored to the code).
-7. **Write and publish Trade-offs**: `slide.upsert` its slides, then `deck.publish` again. That fixes the whole deck.
+7. **Write and publish Trade-offs**: `slide.upsert` its slides, then `deck.publish` again.
+
+### Changing the deck
+
+The round's deck stays yours to change, also once published: re-send a slide with `slide.upsert` to retitle it, move
+it to another chapter or `order`, or add, drop or reorder its blocks; re-send a block with `doc.block.upsert` to change
+it; take a slide out with `slide.remove { id }`. A change to a published slide shows at once, and the slide is marked
+changed until the reviewer has seen it. A your-take card you change asks the reviewer again, with their last answer
+shown; changing the impact map after they sent their concerns drops those on areas it no longer has and lets them
+send again, so expect another `impact.send`. A published part must stay whole: the server refuses a batch that leaves
+Why, How it works or What it might impact without a slide, the deck without its one impact map, published Trade-offs
+without a slide, or a published block that does not render. Comments on a removed slide stay, shown as detached.
+Change a slide only when it is wrong or the reviewer asked: they may already have read it.
 
 ### The deck
 
@@ -146,7 +161,9 @@ up one by one as they are written, so the reviewer starts reading the first whil
      together, where its first page falls.
    - A **piece** is a whole method or block: `{ id, file, lines: "40-72", oldLines?: "38-66", view? }`. `lines` are on
      the new side, `oldLines` on the old side for removed code; give whole methods, not hunks. `view: "now"` for a
-     rewrite, `"diff"` for a small tweak; the reviewer's setting can fix one for every piece.
+     rewrite, `"diff"` for a small tweak; the reviewer's setting can fix one for every piece. A page shows each file's
+     pieces under one header for the file, in line order, but cannot join pieces on different pages: put a file's
+     imports and small hunks on the same page as the code that needs them, not on a page of their own.
    - A **repeat** is one piece on its example's lines with `repeat: <key>` from `index.repeats`: it covers every place,
      and the page lists the others, flagging those that differ.
    - **Moved code** is one piece on its new place with `from: { file, oldLines }`, from `index.moves`.
@@ -156,8 +173,13 @@ up one by one as they are written, so the reviewer starts reading the first whil
    - Leave lock, generated and binary files and spacing-only hunks off: they are on Housekeeping. At most 40 pieces a
      page; split a bigger concept in two.
    The server refuses a layout that leaves any added or removed line off every page, naming the lines; place them and
-   send it again. Once it is accepted the read-through opens with every page coming, and you can lay it out again
-   until a page is written.
+   send it again. Once it is accepted the read-through opens with every page coming.
+   **Restructure** by sending `read.outline` again, whole, at any time: move pieces between pages, split, merge,
+   reorder or drop pages. A page you keep (same `id`) keeps its words, each piece's note and test case go where the
+   piece goes, and an addition under a piece the page lost moves to its end; a new page is coming until you write it
+   with `read.page.upsert`, so send the notes of pieces you moved onto it again; a page you leave out is removed, its
+   threads detached. A piece you remove or give other lines is unticked, with every piece sharing a changed line with
+   it; a moved piece with the same lines stays ticked. Every changed line must still be on a page.
 2. **Have the pages written**: brief `planroom-page-writer` subagents, a batch of pages each, up to four at once, each
    given the worktree, the commit range and its pages' layout with any repeat and move they hold. List them in
    `subagents`. At the same time, run one more `planroom-page-writer` with the Agent tool's `model` set to `haiku` and
@@ -172,7 +194,7 @@ up one by one as they are written, so the reviewer starts reading the first whil
 4. **Answer questions on lines.** A `comment.create` on `page:<id>` carries the lines the reviewer selected in
    `anchor.lines`, and in `anchor.lines.text` the code they highlighted, which can start and end partway through a
    line: answer about that code, using the whole lines as context. One on the page's words instead carries what they
-   selected of the title, summary, a note, pseudo code or an addition in `anchor.quote`. Reply with `comment.reply`. To show more code or explain on the page itself, add to it with
+   selected of them, such as the summary, a note, a file name, pseudo code or an addition, in `anchor.quote`. Reply with `comment.reply`. To show more code or explain on the page itself, add to it with
    `read.page.add { page, threadId, piece?, text?, blocks? }`, under the piece it is about: it is marked as added at
    their request, never changes what the page showed, and unticks that piece.
 
@@ -209,11 +231,11 @@ architecture node id, or a sequence actor), and a `draft`: the comment to post.
 | Event | Do |
 | ----- | -- |
 | `reviewers.start` | The reviewer started the round: build what its `technique` names, and start the reviewers it names, as in step 2; none at `none`. |
-| `take.answer` | Note what the reviewer saw differently. No reply is needed; it feeds the summary. |
-| `impact.send` | The reviewer's concerns, under each of your areas (by `id`) and areas they added (no `id`). Investigate them, write Trade-offs, and publish it: see steps 6 and 7. |
+| `take.answer` | Note what the reviewer saw differently. No reply is needed; it feeds the summary. A second one for a card you changed is their new answer. |
+| `impact.send` | The reviewer's concerns, under each of your areas (by `id`) and areas they added (no `id`). Investigate them, write Trade-offs, and publish it: see steps 6 and 7. A second one, after you changed the impact map, carries their concerns again: update Trade-offs to answer them. |
 | `walkthrough.done` | The findings now show. Make sure every verified finding is sent. `how: "skipped"` means they knew the change; if Trade-offs is not published yet, still write and publish it. |
 | `item.react` | `agree` and `reword` need nothing. On `reject`, read the `reason`: withdraw or soften any finding it undermines that the reviewer has not reacted to yet. |
-| `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. A thread on `slide:<id>` or `item:<id>` is about that slide or finding; one on `page:<id>` is about a read-through page, with the selected lines in `anchor.lines` and the code highlighted in `anchor.lines.text`, or the words selected in `anchor.quote` (see step 4 of the read-through); one on `comment:<key>` is about a comment the round will post, by its key (`comment:item:<id>`, `comment:note:<id>` or `comment:summary`). |
+| `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. A thread on `slide:<id>` or `item:<id>` is about that slide or finding; one on `page:<id>` is about a read-through page, with the selected lines in `anchor.lines` and the code highlighted in `anchor.lines.text`, or the words selected in `anchor.quote` (see step 4 of the read-through); one on `comment:<key>` is about a comment the round will post, by its key (`comment:item:<id>`, `comment:note:<id>` or `comment:summary`); one on `tab:<name>` is on words outside all of those on that tab (`walkthrough`, `readthrough`, `findings` or `comments`), selected in `anchor.quote`. |
 | `preferences.change` | Follow the new preferences for slides you have not written yet. |
 | `review.posted` | Say what was posted. With `failed` non-empty, the reviewer retries from the page. |
 | `session.end` | The reviewer ended the review: stop. |
@@ -232,9 +254,9 @@ to the new one, and `earlier` lists the reviewer's earlier comments with the aut
 the destination branch in since, `diff.base` is the reviewed head with that merge applied, so only their own work shows.
 
 1. Wait for the round's `reviewers.start`, then build what its technique names, for the delta only: a short **delta
-   deck**, the same four chapters compressed to what changed, with new slide and block ids; and a **delta
-   read-through**, whose `index` covers only the lines changed since the posted round, the reviewer's ticks starting
-   fresh.
+   deck**, the same four chapters compressed to what changed, with new slide and block ids, since an earlier round's
+   deck is fixed; and a **delta read-through**, whose `index` covers only the lines changed since the posted round,
+   the reviewer's ticks starting fresh.
 2. Label every earlier comment with `earlier.label { key, label, note, code }`: `addressed`, `partly`, `not-addressed`
    or `outdated` (the server labels one whose lines were removed), with `code` the diff hunk that shows it.
 3. For each partly or not addressed one, draft a follow-up: `item.upsert` with `kind: "followup"`, `replyTo` its key and

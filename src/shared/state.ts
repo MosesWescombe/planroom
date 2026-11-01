@@ -18,18 +18,21 @@ import { itemRecord, noteRecord, reactionRecord, reviewRecord, slideRecord, take
 export const STATE_SCHEMA_VERSION = 1;
 
 /**
- * What a plan becomes on submit: an OpenSpec change, or a Markdown plan at `agent-plans/<id>/<id>.md`. Fixed when the
- * plan is created, since it decides the folder the plan lives in.
+ * What a plan becomes on submit: an OpenSpec change, or a Markdown plan at `<plans folder>/<id>/<id>.md`, by default in
+ * `agent-plans/`. Fixed when the plan is created, since it decides the folder the plan lives in.
  */
 export const planFormat = z.enum(['openspec', 'markdown']);
 export type PlanFormat = z.infer<typeof planFormat>;
 
-/** The repo folder each format's plans live in, one folder per plan. */
+/**
+ * The repo folder each format's plans live in, one folder per plan. A repo can keep its Markdown plans in another
+ * folder, remembered on this machine.
+ */
 export const PLAN_ROOTS: Readonly<Record<PlanFormat, string>> = { openspec: 'openspec/changes', markdown: 'agent-plans' };
 
-/** The repo-relative folder a plan's files and its `.planroom/` live in. */
-export function planDir(format: PlanFormat, changeId: string): string {
-    return `${PLAN_ROOTS[format]}/${changeId}`;
+/** The repo-relative folder a plan's files and its `.planroom/` live in. `plansRoot` is the repo's Markdown plans folder. */
+export function planDir(format: PlanFormat, changeId: string, plansRoot?: string): string {
+    return `${format === 'markdown' && plansRoot ? plansRoot : PLAN_ROOTS[format]}/${changeId}`;
 }
 
 /**
@@ -47,10 +50,10 @@ export const ASK_ROOT = '.planroom/asks';
 export const REVIEW_ROOT = '.planroom/reviews';
 
 /** The repo-relative folder a session keeps its records in: a plan's `.planroom/`, or an ask's or a review's own folder. */
-export function recordsDir(state: Pick<SessionState, 'kind' | 'format' | 'changeId'>): string {
+export function recordsDir(state: Pick<SessionState, 'kind' | 'format' | 'changeId' | 'plansRoot'>): string {
     if (state.kind === 'ask') return `${ASK_ROOT}/${state.changeId}`;
     if (state.kind === 'review') return `${REVIEW_ROOT}/${state.changeId}`;
-    return `${planDir(state.format, state.changeId)}/.planroom`;
+    return `${planDir(state.format, state.changeId, state.plansRoot)}/.planroom`;
 }
 
 /**
@@ -65,6 +68,8 @@ export const sessionState = z.object({
     kind: sessionKind.default('plan'),
     /** Plans saved before the format existed are OpenSpec ones. An ask has no use for it. */
     format: planFormat.default('openspec'),
+    /** A Markdown plan's plans folder, when the repo keeps them somewhere other than `agent-plans/`. */
+    plansRoot: z.string().optional(),
     /** An ask's repo-relative Markdown file, written with the transcript when the user sends their answers. */
     output: z.string().optional(),
     createdAt: z.string(),

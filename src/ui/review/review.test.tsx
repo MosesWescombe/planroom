@@ -1,4 +1,3 @@
-import { EditorView } from '@codemirror/view';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,8 +15,9 @@ import {
     type TakeAnswer,
     type TakeRecord
 } from '../../shared/review';
+import type { ActivityEntry } from '../../shared/view';
 import { blockRecord, NOW } from '../../test/fixtures';
-import { defined, instance, makeView, posted, renderWith, storeWith } from '../../test/harness';
+import { defined, editorOf, instance, makeView, OnScreen, posted, renderWith, storeWith, typeInto } from '../../test/harness';
 import { App } from '../App';
 import { BlockView } from '../blocks/Block';
 import { type BlobLoader, buildHtml } from '../exportHtml';
@@ -178,12 +178,6 @@ afterEach(() => {
     setSendKey('shift-enter');
 });
 
-/** Replaces the text of the comment editor `box`, as typing it would. */
-function typeInto(box: HTMLElement, text: string) {
-    const view = EditorView.findFromDOM(box.closest('.markdown-editor') as HTMLElement)!;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
-}
-
 describe('the walkthrough while it builds', () => {
     it('shows a loading bar, what the agent is doing and its progress, and none of the staged slides', () => {
         const view = reviewView({
@@ -315,6 +309,34 @@ describe('the deck', () => {
         expect(posted).toEqual([{ type: 'walkthrough.done', how: 'finished' }]);
     });
 
+    it('marks a slide the agent changed until the reviewer has it on screen', () => {
+        vi.stubGlobal('IntersectionObserver', OnScreen);
+        const activity: ActivityEntry[] = [
+            { id: 1, at: NOW, title: 'Changed a slide', detail: 'Slide how', ref: 'slide:how', kind: 'attention' }
+        ];
+        render(<App store={storeWith({ ...reviewView({ round: PUBLISHED }), activity })} />);
+        const segment = () => screen.getByRole('button', { name: /^Slide 2: / });
+        expect(segment()).toHaveAccessibleName('Slide 2: Slide how, changed by the agent');
+        expect(segment()).toHaveClass('is-changed');
+        expect(screen.getByRole('img', { name: 'changed by the agent, not seen yet' })).toBeInTheDocument();
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        expect(screen.getByRole('heading', { name: 'Slide steps' })).toBeInTheDocument();
+        expect(segment()).toHaveAccessibleName('Slide 2: Slide how');
+        expect(segment()).toHaveClass('is-read');
+        expect(screen.queryByRole('img', { name: 'changed by the agent, not seen yet' })).toBeNull();
+    });
+
+    it('stays in place when the agent removes the slide on show', () => {
+        const store = storeWith(reviewView({ round: PUBLISHED }));
+        render(<App store={store} />);
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        expect(screen.getByRole('heading', { name: 'Slide how' })).toBeInTheDocument();
+        act(() => store.snapshot(reviewView({ round: PUBLISHED, slides: SLIDES.filter((shown) => shown.id !== 'how') })));
+        expect(screen.getByRole('heading', { name: 'Slide steps' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Slide 2: Slide steps' })).toHaveAttribute('aria-current', 'step');
+    });
+
     it('prints every slide, one to a page, each step-through in its final state', () => {
         render(<App store={storeWith(reviewView({ round: PUBLISHED }))} />);
         act(() => setPrinting(true));
@@ -406,6 +428,23 @@ describe('your takes', () => {
         expect(screen.getByText('It gets a 503')).toBeInTheDocument();
         expect(screen.getByText('It goes through unlimited')).toBeInTheDocument();
         expect(screen.getByText(/availability wins/)).toBeInTheDocument();
+    });
+
+    it('asks again once the agent changed an answered card, showing the last answer and not its view', async () => {
+        const blocks = BLOCKS.map((block) => (block.id === 'take-predict' ? { ...block, version: 2 } : block));
+        const guess = { kind: 'predict' as const, guess: 'It gets a 503' };
+        const takes = { 'take-predict': { answer: guess, blockVersion: 1, summary: 'guessed "It gets a 503"', at: NOW } };
+        render(<App store={storeWith(reviewView({ round: PUBLISHED, blocks, takes }))} />);
+        for (let step = 0; step < 7; step += 1) fireEvent.keyDown(window, { key: 'ArrowRight' });
+        expect(
+            screen.getByText('The agent changed this card since you answered. Your last answer: guessed "It gets a 503"')
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/availability wins/)).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('radio', { name: 'It goes through unlimited' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Lock in my take' }));
+        expect(posted).toEqual([
+            { type: 'take.answer', blockId: 'take-predict', answer: { kind: 'predict', guess: 'It goes through unlimited' } }
+        ]);
     });
 
     const cases: [string, Record<string, unknown>, TakeAnswer, string][] = [
@@ -506,6 +545,38 @@ describe('the findings', () => {
         expect(dialog.getByText('- Claude')).toBeInTheDocument();
     });
 
+    it("previews a finding's comment placed as posting places it: a range opens with its lines", async () => {
+        const anchor = { file: 'src/retry.ts', side: 'new' as const, start: 3, end: 8 };
+        render(<App store={storeWith(reviewView({ round: DONE, items: [item('I-1', { anchor, draft: 'One loop.' })] }))} />);
+        await userEvent.click(screen.getByRole('button', { name: 'See the comment it drafts' }));
+        const dialog = within(screen.getByRole('dialog', { name: 'The comment I-1 drafts' }));
+        expect(dialog.getByText('src/retry.ts:3-8')).toBeInTheDocument();
+        expect(dialog.getByText('Lines 3-8:')).toBeInTheDocument();
+    });
+
+    it("previews a comment on a line Bitbucket's diff does not show on the file, quoting the line and its code", async () => {
+        const anchor = { file: 'src/retry.ts', side: 'new' as const, start: 40 };
+        const index = {
+            files: [
+                {
+                    path: 'src/retry.ts',
+                    hunks: [{ oldStart: 2, oldCount: 1, newStart: 2, newCount: 1 }],
+                    shown: [{ oldStart: 1, oldCount: 4, newStart: 1, newCount: 4 }]
+                }
+            ],
+            repeats: [],
+            moves: []
+        };
+        const finding = item('I-1', { anchor, code: ['export const limit = 3;'], draft: 'Make it a setting.' });
+        render(<App store={storeWith(reviewView({ round: { ...DONE, index }, items: [finding] }))} />);
+        await userEvent.click(screen.getByRole('button', { name: 'See the comment it drafts' }));
+        const dialog = within(screen.getByRole('dialog', { name: 'The comment I-1 drafts' }));
+        expect(dialog.getByText('src/retry.ts')).toBeInTheDocument();
+        expect(dialog.getByText('On line 40:')).toBeInTheDocument();
+        expect(dialog.getByText('export const limit = 3;')).toBeInTheDocument();
+        expect(dialog.getByText('Make it a setting.')).toBeInTheDocument();
+    });
+
     it('opens the change a finding sits on, scrolled to the finding', async () => {
         const patch = '@@ -1,2 +1,3 @@\n const a = 1;\n+const b = 2;\n const c = 3;\n';
         vi.stubGlobal(
@@ -542,6 +613,14 @@ describe('the findings', () => {
         }
     });
 
+    it("shows a rejected finding's reason as the Markdown it was written in", () => {
+        const reactions = { 'I-1': { verdict: 'reject' as const, reason: 'Handled in the **caller**' } };
+        render(<App store={storeWith(reviewView({ round: DONE, items: [item('I-1')], reactions }))} />);
+        const status = within(instance(document.getElementById('item-I-1'), HTMLElement)).getByRole('status');
+        expect(status).toHaveTextContent('You rejected it: Handled in the caller');
+        expect(status.querySelector('strong')).toHaveTextContent('caller');
+    });
+
     it('renders a reworded comment while it is typed, with the sign-off under it', async () => {
         render(<App store={storeWith(reviewView({ round: DONE, items: [item('I-1')] }))} />);
         await userEvent.click(screen.getByRole('button', { name: 'Reword' }));
@@ -559,7 +638,7 @@ describe('the findings', () => {
         typeInto(card('I-2').getByRole('textbox'), 'Cap it at one?');
         await userEvent.click(card('I-2').getByRole('button', { name: 'Use my wording' }));
         await userEvent.click(card('I-3').getByRole('button', { name: 'Reject' }));
-        await userEvent.type(card('I-3').getByRole('textbox'), 'handled in the caller');
+        typeInto(card('I-3').getByRole('textbox'), 'handled in the caller');
         await userEvent.click(card('I-3').getByRole('button', { name: 'Reject it' }));
         expect(posted).toEqual([
             { type: 'item.react', itemId: 'I-1', verdict: 'agree' },
@@ -703,7 +782,7 @@ describe('the comments', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
         const box = screen.getByRole('textbox', { name: 'Edit the comment' });
         expect(box).toHaveTextContent('Can two retries outlast the caller?');
-        const view = EditorView.findFromDOM(box.closest('.markdown-editor') as HTMLElement)!;
+        const view = editorOf(box);
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: 'Retry **once**?' } });
         expect(box.querySelector('.cm-md-strong')).toHaveTextContent('once');
         expect(box).toHaveTextContent('Retry once?');

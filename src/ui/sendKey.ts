@@ -49,7 +49,7 @@ export function isSendKey(event: KeyboardEvent, sendKey: SendKey): boolean {
     return sendKey === 'enter' ? !event.shiftKey : event.shiftKey;
 }
 
-/** A message box's keydown handler: sends on the chosen key and leaves every other key to the textarea. */
+/** A message box's keydown handler: sends on the chosen key and leaves every other key to the box. */
 export function useSendOnKey(): (event: ReactKeyboardEvent, send: () => void) => void {
     const sendKey = useSendKey();
     return (event, send) => {

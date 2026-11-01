@@ -171,7 +171,7 @@ The only data sent to Bitbucket as a result of a review SHALL be the comments an
 
 ### Requirement: Comments on ranges, off-diff lines and repeats are placed by fixed rules
 
-A comment on several lines SHALL be sent to Bitbucket on the last of those lines, its text opening with the line range, for example "Lines 12-18", unless a test on a scratch PR shows Bitbucket's API takes a span, in which case the span SHALL be used. A comment on a line that Bitbucket's diff does not show, meaning a line outside a diff hunk with three lines of context either side, SHALL become a comment on the file, quoting the line number and its code. A comment on the example of a repeated edit SHALL be sent once, on the example, ending with the list of the other places it applies to, unless the reviewer ticked "only here", in which case it is about that place alone and lists none. The preview SHALL show each such comment exactly as it will land, and the posted body SHALL equal the previewed body.
+A comment on several lines SHALL be sent to Bitbucket on the last of those lines, its text opening with the line range, for example "Lines 12-18", unless a test on a scratch PR shows Bitbucket's API takes a span, in which case the span SHALL be used. A comment on a line that Bitbucket's diff does not show, meaning a line outside a diff hunk with three lines of context either side, SHALL become a comment on the file, quoting the line number and its code. A comment on the example of a repeated edit SHALL be sent once, on the example, ending with the list of the other places it applies to, unless the reviewer ticked "only here", in which case it is about that place alone and lists none. The preview SHALL show each such comment exactly as it will land, and the posted body SHALL equal the previewed body. The comment a finding drafts, opened from its card before it is agreed, SHALL be placed by the same rules, and the code a preview shows SHALL scroll sideways rather than be cut off.
 
 #### Scenario: Range
 
@@ -192,6 +192,11 @@ A comment on several lines SHALL be sent to Bitbucket on the last of those lines
 
 - **WHEN** a comment on a repeat example has "only here" ticked
 - **THEN** it is posted on that place and lists no other places
+
+#### Scenario: Draft opened from a finding
+
+- **WHEN** the reviewer opens the comment a finding on lines 3 to 8 drafts
+- **THEN** its text opens with "Lines 3-8", as it will when posted
 
 #### Scenario: Preview matches
 

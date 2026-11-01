@@ -24,12 +24,15 @@ export class PlanViewer {
         readonly repoRoot: string
     ) {}
 
-    /** Read a change's plan, rejecting a change id that has none. `elsewhere` when the plan is from another repo than the page server's. */
-    static async open(repoRoot: string, changeId: string, elsewhere = false): Promise<PlanViewer> {
-        if (!(await hasPlan(repoRoot, changeId)))
+    /**
+     * Read a change's plan, rejecting a change id that has none. `elsewhere` when the plan is from another repo than the
+     * page server's; `plansRoot` is the repo's Markdown plans folder.
+     */
+    static async open(repoRoot: string, changeId: string, elsewhere = false, plansRoot?: string): Promise<PlanViewer> {
+        if (!(await hasPlan(repoRoot, changeId, plansRoot)))
             throw new RejectedError([{ path: 'changeId', message: `${changeId} has no plan to open` }], 404);
-        const format = formatFor(repoRoot, changeId, undefined);
-        const store = new SessionStore(planroomDir(repoRoot, format, changeId));
+        const format = formatFor(repoRoot, changeId, undefined, plansRoot);
+        const store = new SessionStore(planroomDir(repoRoot, format, changeId, plansRoot));
         const state = parseStateFile(await fs.readFile(store.stateFile, 'utf8'), store.stateFile);
         const revisions = (await store.loadRevisions()).filter((rev) => rev.n <= state.revision);
         const now = new Date().toISOString();
@@ -37,7 +40,7 @@ export class PlanViewer {
             agent: { mode: 'offline', queued: 0 },
             activity: await store.loadActivity(ACTIVITY_LIMIT),
             revisions: revisionMeta(revisions),
-            proposal: await scanChangeFolder(join(repoRoot, planDir(format, changeId)), now),
+            proposal: await scanChangeFolder(join(repoRoot, planDir(format, changeId, plansRoot)), now),
             validating: false,
             viewOnly: true,
             ...(elsewhere ? { elsewhere: repoRoot } : {})

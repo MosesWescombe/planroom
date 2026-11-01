@@ -1,11 +1,11 @@
 ---
 name: planroom
-description: Plan a feature or change in Planroom, the live browser planning page - grill the user through question cards, turn the answers into a visual write-up, and propose the result as a strictly validated OpenSpec change or a Markdown plan in agent-plans/. Use in any repo with an openspec/ directory whenever the user asks to plan, scope, design, spec or stress-test a feature or change, says "plan X", "let's think through X", "grill me on X", "poke holes in this" or "what should the design be", or resumes an in-flight change under openspec/changes/.
+description: Plan a feature or change in Planroom, the live browser planning page - grill the user through question cards, turn the answers into a visual write-up, and propose the result as a strictly validated OpenSpec change or a Markdown plan (in agent-plans/ by default). Use in any repo whenever the user asks to plan, scope, design, spec or stress-test a feature or change, says "plan X", "let's think through X", "grill me on X", "poke holes in this" or "what should the design be", or resumes an in-flight plan under openspec/changes/ or the repo's Markdown plans folder.
 ---
 
 # Planroom
 
-Planroom is the planning path in any repo with an `openspec/` directory. It is an MCP server (`planroom`) that also
+Planroom is the planning path in any repo. It is an MCP server (`planroom`) that also
 serves a page on `127.0.0.1`. `planroom install` sets it up for every repo on the machine: a user-scope MCP server
 running `planroom mcp`, plus this skill and its subagents linked into `~/.claude`. You write to the page with typed
 events; the user answers, comments and ticks on the page; their events come back to you. A session plans exactly one
@@ -17,19 +17,30 @@ approval step.
 ## Start
 
 1. Derive a kebab-case change id from the request, verb first (`add-api-rate-limiting`, `fix-alarm-dedup`). Check
-   `openspec/changes/` and `agent-plans/` for an in-flight plan that already covers it and resume that one instead.
+   `openspec/changes/` and the repo's Markdown plans folder (`agent-plans/`, unless `plansDirs` in
+   `~/.local/state/planroom/repos.json` names another for this repo) for an in-flight plan that already covers it and
+   resume that one instead.
 2. Pick the format of a new plan. It becomes an **OpenSpec change** in `openspec/changes/<change-id>/` (`openspec`,
-   the default) or a **Markdown plan** at `agent-plans/<change-id>/<change-id>.md` (`markdown`). Use the one the user
-   asked for ("plan X as markdown"); when they did not say, ask them which before opening, in one question. The format
-   is fixed once the plan exists: a resumed plan keeps its own, so leave `format` out when resuming.
+   the default) or a **Markdown plan** at `<change-id>/<change-id>.md` in the repo's Markdown plans folder,
+   `agent-plans/` by default (`markdown`). Use the one the user
+   asked for ("plan X as markdown"); when they did not say, ask them which before opening, in one question. In a repo
+   with no `openspec/` directory, plan in Markdown without asking: leave `format` out and the server picks it. The
+   format is fixed once the plan exists: a resumed plan keeps its own, so leave `format` out when resuming.
 3. Call `planroom_open({ changeId, title, format })`. Print the returned `url` for the user every time, even when a
-   browser opened. Keep `cursor`: it is your `after` for the first `planroom_wait`. Keep `repoRoot` too: every plan
-   path in this skill is relative to it. When it is not your working directory (the server was started with `--dir`),
-   read and write the plan there, run `openspec` from there, and tell every subagent you start to work in it.
+   browser opened. Another plan than the open one takes over the open page at the same URL; pass `newPage: true` only
+   when the user wants it on a separate page. Keep `cursor`: it is your `after` for the first `planroom_wait`. Keep
+   `planDir`, the plan's folder, and `repoRoot` too: every plan path in this skill is relative to it. When it is not
+   your working directory (the server was started with `--dir`), read and write the plan there, run `openspec` from
+   there, and tell every subagent you start to work in it.
 4. If the `planroom` tools are missing or the call fails because the server is not running, say so and name the fix:
    `planroom install` (after `npm i -g @moses-wescombe/planroom` if the `planroom` command is missing too), then `/mcp`
-   to reconnect. If the repo has no `openspec/` directory, `planroom_open` refuses: say the repo needs `openspec init`
-   first and do not run it yourself. Do not fall back to planning in chat. For a stale server or a change held by
+   to reconnect. `planroom_open` refuses `format: "openspec"` in a repo with no `openspec/` directory: plan in
+   Markdown, or ask the user whether to run `openspec init` first, and never run it unasked. A refusal at `plansDir`
+   means a new Markdown plan has nowhere to go: the repo (or plain folder) has no `agent-plans/` and no folder chosen
+   for its Markdown plans. Ask the user where they should go, in one question offering `agent-plans/` as the default,
+   then call `planroom_open` again with `plansDir` set to the folder, relative to `repoRoot`. Planroom remembers it for
+   the repo on this machine, so pass `plansDir` only then. Do not fall back to
+   planning in chat. For a stale server or a change held by
    another session, see [The server](#the-server).
 5. On `resumed: true`, call `planroom_state` and rebuild your picture of the session before acting. Do the same after a
    compaction.
@@ -53,7 +64,7 @@ skill again keep the old process.
     - A Planroom server (its command ends `planroom/dist/cli.js mcp`) whose session is
       gone or unwanted: with the user's go-ahead, `kill <N>`. SIGTERM makes it release the lock and close its page. It
       ends that session's planning, so never kill one unasked.
-    - Any other process: the pid was reused and the lock is stale. Delete `openspec/changes/<change-id>/.planroom/lock`.
+    - Any other process: the pid was reused and the lock is stale. Delete the plan's `.planroom/lock`, under `openspec/changes/<change-id>/` or its folder in the repo's Markdown plans folder.
     - A lock whose pid has exited, including after a `kill -9`, is taken over by the next `planroom_open` without help.
 - **Finding servers.** `pgrep -af 'planroom/dist/cli.js mcp'` lists every running one; its parent pid is the
   Claude Code session that owns it. State is written crash-safe, so killing a server loses nothing it had saved.
@@ -190,16 +201,16 @@ Throughout:
 
 Handling interrogation events:
 
-| Event                                            | Do                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `answer.submit`                                  | Add follow-ups the answer opens (`links.dependsOn`), close questions it makes moot (`question.close` with the reason), merge duplicates (`question.merge`). `stale: true` means they answered an older wording: check it still fits.                                                                                                                                                 |
-| `answer.submit` on the directions question       | `answer.choices` are the directions to investigate: start the deep dive on each. `answer.text` suggests one you missed: add it as an option.                                                                                                                                                                                                                                         |
-| `stage.advance`                                  | The user agreed the goals: move to explore. `open` lists questions still unanswered; they stay open, so fold them in or close them.                                                                                                                                                                                                                                                  |
-| `question.reopen`                                | Treat it as open again; the old answer, if any, is kept for reference.                                                                                                                                                                                                                                                                                                               |
-| `conflict.resolve`                               | `keep`: this answer stands, rethink the other question. `change-other`: the other question was reopened; ask again or reword it.                                                                                                                                                                                                                                                     |
-| `question.suggest`                               | Add it as a question with `fromSuggestion: "<suggestionId>"`, or `suggestion.decline` with a reason.                                                                                                                                                                                                                                                                                 |
-| `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. `intent: "question"` wants an answer, `"change"` wants an edit, `"wrong"` means something you said is false: fix it. When a diagram or table explains it better than words, put it in the reply's `blocks` (up to six, shaped like `context.blocks`). `attachments` holds what the user pasted: Read each image at its `path`; a text snippet is inline. |
-| `phase.complete`                                 | The interrogation is over; write the write-up for the chosen `direction`, if any, and drop the others. With `path: "assumptions"`, each unresolved question in the event becomes an assumption callout.                                                                                                                                                                              |
+| Event                                            | Do                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `answer.submit`                                  | Add follow-ups the answer opens (`links.dependsOn`), close questions it makes moot (`question.close` with the reason), merge duplicates (`question.merge`). `stale: true` means they answered an older wording: check it still fits.                                                                                                                                                                                                                                                                                                                   |
+| `answer.submit` on the directions question       | `answer.choices` are the directions to investigate: start the deep dive on each. `answer.text` suggests one you missed: add it as an option.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `stage.advance`                                  | The user agreed the goals: move to explore. `open` lists questions still unanswered; they stay open, so fold them in or close them.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `question.reopen`                                | Treat it as open again; the old answer, if any, is kept for reference.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `conflict.resolve`                               | `keep`: this answer stands, rethink the other question. `change-other`: the other question was reopened; ask again or reword it.                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `question.suggest`                               | Add it as a question with `fromSuggestion: "<suggestionId>"`, or `suggestion.decline` with a reason.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. `intent: "question"` wants an answer, `"change"` wants an edit, `"wrong"` means something you said is false: fix it. When a diagram or table explains it better than words, put it in the reply's `blocks` (up to six, shaped like `context.blocks`). `attachments` holds what the user pasted: Read each image at its `path`; a text snippet is inline. A thread on `tab:<name>` is on words outside any card on that tab of the page (`interrogate`, `directions`, `writeup` or `proposal`), selected in `anchor.quote`. |
+| `phase.complete`                                 | The interrogation is over; write the write-up for the chosen `direction`, if any, and drop the others. With `path: "assumptions"`, each unresolved question in the event becomes an assumption callout.                                                                                                                                                                                                                                                                                                                                                |
 
 When two answers contradict, upsert the later question with `status: "conflict"` and `conflict: { with, reason }`.
 Stop asking when only low-stakes detail is left, and tell the user in a message that they can go ahead (or finish
@@ -238,17 +249,17 @@ and assumptions.
 - Any change you make to a section the user reviewed unticks it. That is intended: say what you changed in your reply.
 
 Handling Phase 3 events: the user's reviewed ticks are theirs alone and never reach you. `checklist.tick` is
-information. `assumption.confirm` settles one. `block.fix` names a block and its schema errors: re-send it fixed.
+information. `assumption.confirm` settles one, or with `confirmed: false` reopens one the user took back. `block.fix` names a block and its schema errors: re-send it fixed.
 `edit.undone` means the user reverted revision `revision`; do not re-apply it. A comment reply that edited content lists
 what it changed in `touched`, or the server fills it in.
 
 ## Phase 4: Proposal
 
 On `phase.submit`, write the plan from write-up revision `revision`: an OpenSpec change into
-`openspec/changes/<change-id>/`, or a Markdown plan into `agent-plans/<change-id>/<change-id>.md` (the `format` from
+`openspec/changes/<change-id>/`, or a Markdown plan into `<planDir>/<change-id>.md` (the `format` and `planDir` from
 `planroom_open` and `planroom_state`):
 
-1. Hand the files to `planroom-proposer` with the change id, the `revision`, the event's `validate` flag (the page's
+1. Hand the files to `planroom-proposer` with the change id, a Markdown plan's `planDir`, the `revision`, the event's `validate` flag (the page's
    "Validate strictly" box, on by default) and its `outstanding` items (what the user submitted with anyway), and list
    it in `subagents`. It reads the write-up itself through `planroom_state`. For an OpenSpec change it writes
    proposal, specs, design and tasks from `openspec instructions`, and returns once `openspec validate` passes (with
@@ -282,7 +293,7 @@ then answers that no session is open. Do not call them again unless the user ask
 ## Old plans
 
 The change id under the page's logo opens a list of every plan in the repo: each folder under `openspec/changes/` or
-`agent-plans/` with a `.planroom/` folder, archived changes left out. Under it are the plans of other repos Planroom has run in on this
+the repo's Markdown plans folder with a `.planroom/` folder, archived changes left out. Under it are the plans of other repos Planroom has run in on this
 machine (`~/.local/state/planroom/repos.json`). Those open only from a Claude session in their own repo, or by link
 while one has them open: never plan another repo's change from here. Two page actions reach you from the list:
 

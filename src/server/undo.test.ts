@@ -92,3 +92,19 @@ describe('undo keeps the write-up consistent', () => {
         });
     });
 });
+
+describe('taking back a confirmed assumption', () => {
+    it('leaves it unconfirmed and tells the agent', async () => {
+        const { session } = await drafting();
+        await session.emit({ events: [assumption('a1', 'Limits are per region'), section('s1', 1, ['t1', 'a1'])] });
+        await session.handlePage({ type: 'assumption.confirm', blockId: 'a1' });
+        expect(isConfirmed(session.current, defined(session.current.blocks.a1))).toBe(true);
+        await session.handlePage({ type: 'assumption.confirm', blockId: 'a1', confirmed: false });
+        expect(session.current.confirmedAssumptions).not.toHaveProperty('a1');
+        const { events } = await session.wait(0, 1);
+        expect(events.filter((event) => event.type === 'assumption.confirm')).toMatchObject([
+            { blockId: 'a1', confirmed: true },
+            { blockId: 'a1', confirmed: false }
+        ]);
+    });
+});

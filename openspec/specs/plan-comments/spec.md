@@ -11,6 +11,11 @@ anchors that stay attached while the content around them changes.
 Selecting text anywhere on the page, including prose, table cells, list items, diagram labels, question cards and the
 rendered proposal, SHALL show a toolbar offering Comment, Ask to change and Wrong, also reachable with the `C` key. The
 composer SHALL carry the chosen intent, and sending SHALL notify the agent with the comment, its intent and its anchor.
+The anchor SHALL be on the nearest commentable element around the whole selection, so a selection across two passages
+is on what holds them both, and text outside any card, such as a heading or a file name, SHALL be a comment on the tab
+it is on (`tab:<name>`) quoting what was selected, filed with that tab's phase. The side panel, the lists of comments
+on a page and code with a Comment bar of its own MUST NOT show the toolbar, and their text MUST NOT count as text an
+anchor quotes, so a quote is never found in a list that repeats it.
 
 #### Scenario: Comment on a table cell
 
@@ -21,6 +26,17 @@ composer SHALL carry the chosen intent, and sending SHALL notify the agent with 
 
 - **WHEN** the user selects text and presses `C`
 - **THEN** the composer opens for that selection
+
+#### Scenario: Text outside any card
+
+- **WHEN** the user selects words of the Interrogate tab's introduction and comments on them
+- **THEN** the agent receives the comment on `tab:interrogate`, quoting those words, and it is listed with the comments
+  on questions
+
+#### Scenario: Code with its own Comment bar
+
+- **WHEN** the reviewer selects code in a read-through piece
+- **THEN** only the code's own toolbar shows
 
 ### Requirement: Any write-up block can be commented on whole
 

@@ -186,12 +186,18 @@ persist with the session and count toward the submit gate, and ticking or untick
 ### Requirement: Checklists and assumptions are answerable in place
 
 Ticking an item in an interactive checklist SHALL persist and notify the agent. Each assumption the agent records SHALL
-offer "Confirm", which notifies the agent, and "Correct it", which opens a comment with a change intent.
+offer "Confirm", which notifies the agent, and "Correct it", which opens a comment with a change intent. A confirmed
+assumption SHALL keep "Correct it" and offer "Undo", which leaves it unconfirmed again and notifies the agent.
 
 #### Scenario: Confirm an assumption
 
 - **WHEN** the user confirms "Limits are per region, not global"
 - **THEN** the assumption shows as confirmed and the agent is notified
+
+#### Scenario: Take a confirmation back
+
+- **WHEN** the user presses "Undo" on a confirmed assumption
+- **THEN** the assumption is unconfirmed, counts against the submit gate again, and the agent is notified
 
 ### Requirement: Agent edits can be undone
 

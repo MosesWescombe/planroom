@@ -28,13 +28,14 @@ export const REVIEW_WORK: Record<ReviewStage, string> = {
     'next-round': 'starting the next round'
 };
 
-/** Where an anchor sits, for a short label: `Q-3`, `§4`, a proposal file or the summary. */
+/** Where an anchor sits, for a short label: `Q-3`, `§4`, a proposal file, a tab or the summary. */
 function placeOf(target: string, state: SessionState): string | undefined {
     const colon = target.indexOf(':');
     const kind = colon === -1 ? target : target.slice(0, colon);
     const id = target.slice(colon + 1);
     if (kind === 'question' || kind === 'file' || kind === 'item') return id;
     if (kind === 'slide') return `slide "${state.slides[id]?.title ?? id}"`;
+    if (kind === 'tab') return `the ${id} tab`;
     if (kind === 'section') return sectionLabel(state, id);
     if (kind === 'block') {
         const section = sectionOfBlock(state, id);

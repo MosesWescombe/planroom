@@ -118,6 +118,15 @@ function topIn(main: HTMLElement, element: HTMLElement): number {
     return top;
 }
 
+/**
+ * `piece`'s top in what `main` scrolls, as the keys bring it to the top of the view: above it by the height of its file's
+ * header, which stays pinned over the top of the view, so the piece shows whole under it.
+ */
+function pieceTop(main: HTMLElement, piece: HTMLElement): number {
+    const head = piece.closest('.piece-file')?.querySelector<HTMLElement>('.piece-file-head');
+    return topIn(main, piece) - (head?.offsetHeight ?? 0);
+}
+
 /** What Space does to each piece of the page on show, by its element. */
 const spaceActions = new WeakMap<Element, () => void>();
 
@@ -173,10 +182,10 @@ export function useReadKeys({
         };
         const measure = () => {
             const elements = [...main.querySelectorAll<HTMLElement>('article.piece')];
-            const pieces = elements.map((element) => {
-                const top = topIn(main, element);
-                return { top, bottom: top + element.offsetHeight };
-            });
+            const pieces = elements.map((element) => ({
+                top: pieceTop(main, element),
+                bottom: topIn(main, element) + element.offsetHeight
+            }));
             const top = aim && performance.now() < aim.until ? aim.top : main.scrollTop;
             const scroll = { top, height: main.clientHeight, max: main.scrollHeight - main.clientHeight };
             const focused = elements.findIndex((element) => element.contains(document.activeElement));
@@ -219,7 +228,7 @@ export function useReadKeys({
             focus(element);
             // Folded from inside, the piece's header comes back to the top, the piece after it under it.
             aim = undefined;
-            const top = topIn(main, element);
+            const top = pieceTop(main, element);
             if (top < main.scrollTop) main.scrollTo?.({ top: Math.max(0, top - EDGE) });
             return true;
         };

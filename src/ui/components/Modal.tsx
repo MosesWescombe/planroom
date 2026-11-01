@@ -2,7 +2,8 @@ import { type ReactNode, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CloseIcon } from './icons';
 
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+    'button:not([disabled]), [href], input:not([disabled]), select, textarea, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
 
 /** Open dialogs, innermost last: only it handles Escape and Tab, so a block's full screen closes alone. */
 const openDialogs: object[] = [];

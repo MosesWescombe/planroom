@@ -67,8 +67,8 @@ The user SHALL be able to re-run strict validation from the page, and the latest
 
 ### Requirement: A Markdown plan is written and checked in place of a change
 
-When the plan's format is Markdown, the submit dialog SHALL name `agent-plans/<change-id>/<change-id>.md` as the file
-the agent writes, with no strict validation to choose. The agent SHALL write that file, and the server SHALL check that
+When the plan's format is Markdown, the submit dialog SHALL name `<change-id>/<change-id>.md` in the repo's Markdown
+plans folder, by default `agent-plans/`, as the file the agent writes, with no strict validation to choose. The agent SHALL write that file, and the server SHALL check that
 it exists and is not empty in place of running `openspec validate`, gating the review on the check exactly as on a
 validation. The review SHALL leave out requirement, task and trace counts, and accepting SHALL work as it does for a
 change.

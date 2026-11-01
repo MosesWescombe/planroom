@@ -4,16 +4,17 @@ import { describe, expect, it } from 'vitest';
 import { emptyState, type PlanFormat, planDir } from '../shared/state.js';
 import { defined, tempRepo } from '../test/serverHelpers.js';
 import { hasPlan, listPlans, listPlansElsewhere } from './plans.js';
-import { knownRepos, registryFile, rememberRepo } from './registry.js';
+import { knownRepos, plansDirOf, registryFile, rememberRepo } from './registry.js';
 
-/** Write a plan's state file, and a lock held by `pid` when given. */
+/** Write a plan's state file, and a lock held by `pid` when given, a Markdown one under `plansRoot`. */
 async function plan(
     repo: string,
     changeId: string,
     lock?: { pid: number; url: string },
-    format: PlanFormat = 'openspec'
+    format: PlanFormat = 'openspec',
+    plansRoot?: string
 ): Promise<void> {
-    const dir = join(repo, planDir(format, changeId), '.planroom');
+    const dir = join(repo, planDir(format, changeId, plansRoot), '.planroom');
     await mkdir(dir, { recursive: true });
     await writeFile(
         join(dir, 'state.json'),
@@ -38,6 +39,21 @@ describe('the repo registry', () => {
         await writeFile(file, 'not json');
         expect(await knownRepos(file)).toEqual([]);
     });
+
+    it("reads a file from before plans folders, and remembers a repo's plans folder beside its list", async () => {
+        const file = join(await tempRepo(), 'repos.json');
+        await writeFile(file, JSON.stringify({ repos: ['/repos/a'] }));
+        expect(await knownRepos(file)).toEqual(['/repos/a']);
+        expect(await plansDirOf(file, '/repos/a')).toBeUndefined();
+        await rememberRepo(file, '/repos/a/', 'docs/plans');
+        await rememberRepo(file, '/repos/b');
+        expect(await plansDirOf(file, '/repos/a')).toBe('docs/plans');
+        expect(await plansDirOf(file, '/repos/b')).toBeUndefined();
+        expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+            repos: ['/repos/a', '/repos/b'],
+            plansDirs: { '/repos/a': 'docs/plans' }
+        });
+    });
 });
 
 describe('plans in this repo', () => {
@@ -55,6 +71,17 @@ describe('plans in this repo', () => {
         ]);
         expect(await hasPlan(repo, 'add-notes')).toBe(true);
         expect(await hasPlan(repo, 'IOT-1-old-plan')).toBe(false);
+    });
+
+    it("finds Markdown plans in the repo's own plans folder, and says which", async () => {
+        const repo = await tempRepo();
+        await plan(repo, 'add-notes', undefined, 'markdown', 'docs/plans');
+        expect(await listPlans(repo, 'docs/plans')).toEqual([
+            expect.objectContaining({ changeId: 'add-notes', format: 'markdown', plansRoot: 'docs/plans' })
+        ]);
+        expect(await listPlans(repo)).toEqual([]);
+        expect(await hasPlan(repo, 'add-notes', 'docs/plans')).toBe(true);
+        expect(await hasPlan(repo, 'add-notes')).toBe(false);
     });
 });
 
@@ -76,5 +103,15 @@ describe('plans in other repos', () => {
         expect(byId['add-own']).not.toHaveProperty('liveUrl');
         expect((await listPlans(here)).map((summary) => summary.changeId)).toEqual(['add-here']);
         expect(JSON.parse(await readFile(file, 'utf8')).repos).toHaveLength(4);
+    });
+
+    it("lists another repo's Markdown plans from the plans folder remembered for it", async () => {
+        const [here, other] = await Promise.all([tempRepo(), tempRepo()]);
+        const file = join(here, 'repos.json');
+        await rememberRepo(file, other, 'docs/plans');
+        await plan(other, 'add-notes', undefined, 'markdown', 'docs/plans');
+        expect(await listPlansElsewhere(file, here)).toEqual([
+            { repoRoot: other, plans: [expect.objectContaining({ changeId: 'add-notes', plansRoot: 'docs/plans' })] }
+        ]);
     });
 });

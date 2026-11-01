@@ -7,11 +7,11 @@ import { useNow } from '../hooks';
 import { storageScope } from '../local';
 import { useReadOnly } from '../readOnly';
 import { isSeen, markSeen, useSeen } from '../seen';
-import { useSendOnKey } from '../sendKey';
 import { useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
 import { Attachments, usePastes } from './Attachments';
 import { Markdown } from './Markdown';
+import { MarkdownEditor } from './MarkdownEditor';
 import { Modal } from './Modal';
 
 /** Three bouncing dots: the agent is on it. */
@@ -56,7 +56,6 @@ export const Thread = memo(function Thread({ id }: { id: string }) {
     const [reply, setReply] = useState('');
     const [replying, setReplying] = useState(false);
     const [busy, track] = useBusy();
-    const sendOnKey = useSendOnKey();
     const pastes = usePastes();
     const now = useNow();
     if (!thread) return null;
@@ -143,15 +142,15 @@ export const Thread = memo(function Thread({ id }: { id: string }) {
                                 sendReply();
                             }}
                         >
-                            <label className="visually-hidden" htmlFor={`reply-${thread.id}`}>
+                            <label className="visually-hidden" id={`reply-${thread.id}-label`} htmlFor={`reply-${thread.id}`}>
                                 Reply
                             </label>
-                            <textarea
+                            <MarkdownEditor
                                 id={`reply-${thread.id}`}
+                                labelId={`reply-${thread.id}-label`}
                                 rows={2}
                                 value={reply}
-                                onChange={(event) => setReply(event.target.value)}
-                                onKeyDown={(event) => sendOnKey(event, sendReply)}
+                                onChange={setReply}
                                 onPaste={pastes.onPaste}
                                 autoFocus
                             />

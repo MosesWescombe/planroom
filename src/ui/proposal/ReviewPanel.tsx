@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { acceptGate, canRequestChanges, tracedAnswers } from '../../shared/derive';
 import { countDelta } from '../../shared/specDelta';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 import { useReadOnly } from '../readOnly';
 import { deepEqual, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
@@ -120,12 +121,15 @@ export function ReviewPanel() {
                                 );
                             }}
                         >
-                            <label htmlFor="request-changes">What should change?</label>
-                            <textarea
+                            <label id="request-changes-label" htmlFor="request-changes">
+                                What should change?
+                            </label>
+                            <MarkdownEditor
                                 id="request-changes"
+                                labelId="request-changes-label"
                                 rows={3}
                                 value={message}
-                                onChange={(event) => setMessage(event.target.value)}
+                                onChange={setMessage}
                                 autoFocus
                             />
                             {!canRequest && (

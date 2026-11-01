@@ -27,6 +27,7 @@ export function SubmitDialog({ onClose }: { onClose: () => void }) {
         (current) => ({
             changeId: current.changeId,
             format: current.format,
+            plansRoot: current.plansRoot,
             revision: current.revision,
             outstanding: outstandingItems(current),
             questions: phase1Gate(current, current.phases.phase1.direction),
@@ -115,7 +116,7 @@ export function SubmitDialog({ onClose }: { onClose: () => void }) {
                 <span className="field-label">The agent will write</span>
                 {markdown ? (
                     <code className="field-value">
-                        {planDir(view.format, view.changeId)}/{view.changeId}.md
+                        {planDir(view.format, view.changeId, view.plansRoot)}/{view.changeId}.md
                     </code>
                 ) : (
                     <ul className="file-grid">

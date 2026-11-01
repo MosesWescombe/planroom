@@ -1,9 +1,9 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Profiler } from 'react';
 import { describe, expect, it } from 'vitest';
 import { blockRecord, questionRecord, sectionRecord } from '../test/fixtures';
-import { instance, makeView, renderWith, storeWith } from '../test/harness';
+import { editorOf, editorText, instance, makeView, renderWith, storeWith, typeInto } from '../test/harness';
 import { QuestionCard } from './interrogate/QuestionCard';
 
 function counted(ids: string[]) {
@@ -77,9 +77,11 @@ describe('per-record rendering', () => {
         const user = userEvent.setup();
         const q14 = instance(document.getElementById('q-Q-14'), HTMLElement);
         await user.click(within(q14).getByRole('radio', { name: /Option A/ }));
-        const note = instance(document.getElementById('note-Q-14'), HTMLTextAreaElement);
-        await user.type(note, 'Overrides need an expiry');
-        note.setSelectionRange(9, 9);
+        const note = instance(document.getElementById('note-Q-14'), HTMLElement);
+        const editor = editorOf(note);
+        editor.focus();
+        typeInto(note, 'Overrides need an expiry');
+        act(() => editor.dispatch({ selection: { anchor: 9 } }));
         store.apply([
             {
                 field: 'questions',
@@ -89,8 +91,8 @@ describe('per-record rendering', () => {
         ]);
         expect(screen.getByText('Reworded by agent')).toBeInTheDocument();
         expect(document.activeElement).toBe(note);
-        expect(note.value).toBe('Overrides need an expiry');
-        expect(note.selectionStart).toBe(9);
+        expect(editorText(note)).toBe('Overrides need an expiry');
+        expect(editor.state.selection.main.head).toBe(9);
         fireEvent.blur(note);
     });
 });

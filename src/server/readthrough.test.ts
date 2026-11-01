@@ -258,6 +258,19 @@ describe('reading', () => {
         expect(readProgress(state, currentRound(defined(state.review)).index, 1)).toEqual(read);
     });
 
+    it('marks several pieces read in one request, or none when one is unknown, keeping an earlier tick', async () => {
+        const server = await readingNow();
+        await server.page({ type: 'read.tick', piece: 'send', read: true, how: 'auto' });
+        const first = server.session().current.ticks['1:send'];
+        expect((await rejection(server.page({ type: 'read.mark', pieces: ['test-retries', 'nope'] }))).status).toBe(404);
+        expect(Object.keys(server.session().current.ticks)).toEqual(['1:send']);
+        await server.page({ type: 'read.mark', pieces: ['send', 'test-retries'] });
+        const { ticks } = server.session().current;
+        expect(Object.keys(ticks).sort()).toEqual(['1:send', '1:test-retries']);
+        expect(ticks['1:send']).toEqual(first);
+        expect(ticks['1:test-retries']).toMatchObject({ how: 'manual' });
+    });
+
     it('reads every identical place of a repeat with its example, and has no other place to open', async () => {
         const server = await readingNow();
         const round = () => currentRound(defined(server.session().current.review));
@@ -444,6 +457,118 @@ async function prReading() {
     expect((await server.emit([{ type: 'read.outline', pages: outline() }])).isError).toBe(false);
     return { ...server, repo, head, dir };
 }
+
+describe('restructuring', () => {
+    /** The layout with the callers on a page of their own, beside the limit check on line 8, which the send loop holds too. */
+    function split(): Pieces {
+        const [limit, tests] = outline();
+        const [send, callers] = defined(limit).pieces;
+        return [
+            { ...defined(limit), pieces: [defined(send)] },
+            {
+                id: 'callers',
+                kind: 'concept',
+                title: 'Callers pass the policy',
+                group: 'Retry policy',
+                order: 2,
+                pieces: [defined(callers), { id: 'limit', file: 'src/send.ts', lines: '8' }]
+            },
+            defined(tests)
+        ];
+    }
+
+    it("keeps kept pages' words, moves notes and ticks with their pieces, and unticks what changed", async () => {
+        const server = await opened();
+        await server.page({ type: 'reviewers.start', technique: 'readthrough', reviewers: NONE });
+        expect((await server.emit([{ type: 'read.outline', pages: split() }])).isError).toBe(false);
+        const written = await server.emit([
+            {
+                type: 'read.page.upsert',
+                page: { id: 'retry-limit', summary: 'The loop.', pieces: [{ id: 'send', note: 'Sends.' }] }
+            },
+            {
+                type: 'read.page.upsert',
+                page: {
+                    id: 'callers',
+                    summary: 'The callers.',
+                    pieces: [
+                        { id: 'callers', note: 'Each passes the policy.' },
+                        { id: 'limit', note: 'The check.' }
+                    ]
+                }
+            },
+            {
+                type: 'read.page.upsert',
+                page: {
+                    id: 'send-tests',
+                    summary: 'The tests.',
+                    pieces: [],
+                    tests: [
+                        { piece: 'test-retries', title: 'retries', pseudo: 'send, fail, retry' },
+                        { piece: 'test-gives-up', title: 'gives up', pseudo: 'fail three times' }
+                    ]
+                }
+            }
+        ]);
+        expect(written.isError).toBe(false);
+        await server.page({ type: 'comment.create', anchor: { target: 'page:callers' }, intent: 'question', text: 'Which?' });
+        await server.emit([{ type: 'read.page.add', page: 'callers', threadId: 'C-1', piece: 'callers', text: 'All three.' }]);
+        await server.page({ type: 'read.mark', pieces: ['send', 'callers', 'limit', 'test-retries', 'test-gives-up'] });
+
+        const [limit, callersPage, tests] = split();
+        const restructured: Pieces = [
+            { ...defined(limit), pieces: [...defined(limit).pieces, ...defined(callersPage).pieces.slice(0, 1)] },
+            { ...defined(callersPage), pieces: [{ id: 'limit', file: 'src/send.ts', lines: '8-9' }] },
+            { ...defined(tests), pieces: defined(tests).pieces.slice(0, 1) },
+            { id: 'stop-tests', kind: 'tests', title: 'Tests of giving up', order: 2, pieces: defined(tests).pieces.slice(1) }
+        ];
+        expect((await server.emit([{ type: 'read.outline', pages: restructured }])).isError).toBe(false);
+        const { pages, ticks } = server.session().current;
+        expect(pages['1:retry-limit']?.content).toEqual({
+            summary: 'The loop.',
+            pieces: [
+                { id: 'send', note: 'Sends.' },
+                { id: 'callers', note: 'Each passes the policy.' }
+            ]
+        });
+        expect(pages['1:callers']?.content?.pieces).toEqual([{ id: 'limit', note: 'The check.' }]);
+        expect(pages['1:callers']?.added).toEqual([{ thread: 'C-1', text: 'All three.', at: expect.any(String) }]);
+        expect(pages['1:send-tests']?.content?.tests).toEqual([
+            { piece: 'test-retries', title: 'retries', pseudo: 'send, fail, retry' }
+        ]);
+        expect(pages['1:stop-tests']?.content).toBeUndefined();
+        // The limit check has other lines, so it and the send loop sharing line 8 are read again; the rest moved as read.
+        expect(Object.keys(ticks).sort()).toEqual(['1:callers', '1:test-gives-up', '1:test-retries']);
+        expect(server.session().view().activity[0]).toMatchObject({
+            title: 'Restructured the read-through',
+            detail: '4 pages, 1 coming, 2 to read again',
+            kind: 'attention'
+        });
+    });
+
+    it('refuses a restructure that leaves lines off every page, and removes a page left out of one', async () => {
+        const server = await readingNow();
+        await server.emit([
+            {
+                type: 'read.page.upsert',
+                page: { id: 'retry-limit', summary: 'The loop.', pieces: [{ id: 'send', note: 'Sends.' }] }
+            }
+        ]);
+        await server.page({ type: 'comment.create', anchor: { target: 'page:send-tests' }, intent: 'question', text: 'Enough?' });
+        const before = server.session().current.pages;
+        const refused = await server.emit([{ type: 'read.outline', pages: outline('3-6') }]);
+        expect(JSON.stringify(refused)).toContain('src/send.ts line 8');
+        expect(server.session().current.pages).toEqual(before);
+
+        const [limit, tests] = outline();
+        const merged: Pieces = [{ ...defined(limit), pieces: [...defined(limit).pieces, ...defined(tests).pieces] }];
+        expect((await server.emit([{ type: 'read.outline', pages: merged }])).isError).toBe(false);
+        const { pages, threads } = server.session().current;
+        expect(Object.keys(pages)).toEqual(['1:retry-limit']);
+        expect(pages['1:retry-limit']?.content?.summary).toBe('The loop.');
+        expect(threads['C-1']?.anchor?.target).toBe('page:send-tests');
+    });
+});
 
 describe('comments from the read-through', () => {
     it('places a range on its last line, a line off the diff on the file quoting it, and a repeat once with its other places', async () => {

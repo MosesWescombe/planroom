@@ -1,5 +1,7 @@
+import clamp from 'lodash/clamp';
 import isEqual from 'lodash/isEqual';
 import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { boxOf, type SelectionBox, textOffset } from '../comments/selection';
 import { ChevronIcon } from '../components/icons';
 import { plural } from '../format';
@@ -18,6 +20,8 @@ export interface CodeRow {
     oldNumber?: number;
     /** On the first line of a change, the old lines the whole change replaced; none on a line that was only added. */
     was?: string[];
+    /** The old line number the lines in `was` start at. */
+    wasAt?: number;
     /** The lines removed at a `gone` marker. */
     gone?: string[];
 }
@@ -56,7 +60,12 @@ export function nowRows(rows: readonly CodeRow[]): CodeRow[] {
             if (replacing) flush();
             removed.push(row);
         } else if (row.kind === 'add') {
-            out.push(replacing || !removed.length ? row : { ...row, was: removed.map((line) => line.text) });
+            const wasAt = removed[0]?.oldNumber;
+            out.push(
+                replacing || !removed.length
+                    ? row
+                    : { ...row, was: removed.map((line) => line.text), ...(wasAt !== undefined ? { wasAt } : {}) }
+            );
             replacing = true;
         } else {
             flush();
@@ -304,17 +313,84 @@ export function inSelection(row: CodeRow, selection: LineSelection | undefined):
     return number !== undefined && number >= selection.start && number <= selection.end && row.kind !== 'gone';
 }
 
-/** The old lines a change replaced, shown over the code below its first line. */
-function WasPopover({ row }: { row: CodeRow }) {
-    return (
-        <span className="was-popover" role="note" aria-label={`Before the change at line ${row.number}`}>
-            <span className="small strong">Before</span>
-            {row.was?.map((line, index) => (
-                <span key={index} className="was-line">
-                    {line || ' '}
-                </span>
-            ))}
-        </span>
+/** How wide the box of old code floats. */
+const OLD_CODE_WIDTH = 560;
+/** The old code box's tallest; it scrolls past this. */
+const OLD_CODE_HEIGHT = 300;
+
+/**
+ * Where the old code box floats: under its opener when that has room for it, or more room than above, else above it,
+ * growing up from the line; either way no taller than the room it has.
+ */
+export function oldCodePlace({ top, left, bottom }: DOMRect): React.CSSProperties {
+    const [below, above] = [window.innerHeight - bottom - 12, top - 12];
+    const under = below >= Math.min(OLD_CODE_HEIGHT, above);
+    return {
+        left: clamp(left, 12, window.innerWidth - OLD_CODE_WIDTH - 12),
+        maxHeight: Math.min(OLD_CODE_HEIGHT, under ? below : above),
+        ...(under ? { top: bottom + 4 } : { bottom: window.innerHeight - top + 4 })
+    };
+}
+
+/**
+ * The old code at `row`, the lines a change replaced or a marker's removed lines, as a code window highlighted and
+ * numbered as the lines were, in a box floating under `opener`, the button that opened it. It takes focus as it opens;
+ * Escape, a press outside it or a scroll of the page closes it. It renders into the body: a code window with notes is a
+ * size container, which would place a fixed box against itself rather than the screen.
+ */
+function OldCode({
+    row,
+    opener,
+    language,
+    onClose
+}: {
+    row: CodeRow;
+    opener: HTMLElement;
+    language: string | undefined;
+    onClose: () => void;
+}) {
+    const box = useRef<HTMLDialogElement>(null);
+    const close = useRef(onClose);
+    close.current = onClose;
+    useEffect(() => {
+        box.current?.focus({ preventScroll: true });
+        const outside = (event: Event) => {
+            const target = event.target instanceof Node ? event.target : null;
+            if (!box.current?.contains(target) && !opener.contains(target)) close.current();
+        };
+        document.addEventListener('pointerdown', outside);
+        document.addEventListener('scroll', outside, true);
+        return () => {
+            document.removeEventListener('pointerdown', outside);
+            document.removeEventListener('scroll', outside, true);
+        };
+    }, [opener]);
+    const start = row.wasAt ?? row.oldNumber;
+    return createPortal(
+        // A dialog element, so the read-through's keys leave keys pressed in it to scroll the box.
+        <dialog
+            ref={box}
+            open
+            className="was-popover"
+            aria-label={row.kind === 'gone' ? `The ${row.text}` : `Before the change at line ${row.number}`}
+            tabIndex={-1}
+            style={oldCodePlace(opener.getBoundingClientRect())}
+            onKeyDown={(event) => {
+                if (event.key !== 'Escape') return;
+                event.preventDefault();
+                opener.focus();
+                onClose();
+            }}
+        >
+            <CodeViewer
+                source={(row.was ?? row.gone ?? []).join('\n')}
+                {...(start !== undefined ? { start } : {})}
+                language={language}
+                title={row.kind === 'gone' ? 'Removed' : 'Before'}
+                label={`The old code from line ${start ?? 1}`}
+            />
+        </dialog>,
+        document.body
     );
 }
 
@@ -323,10 +399,10 @@ const COPY_LABELS: Record<CopyState, string> = { idle: 'Copy', copied: 'Copied',
 
 /**
  * Read-only code, highlighted and foldable: plain code numbered from `start`, a unified diff shown inline or as either
- * side alone, or a diff as the code reads now, its added lines marked as in the diff, what a change replaced in a popover
- * from a dot on its first line, and a marker where lines were removed that opens to show them. Folding follows
- * indentation, so functions, blocks, objects and diff hunks collapse under their first line. The page renders every
- * line as text, so comments anchor in it like any other block. With `onSelect`, selecting code with the mouse, or with
+ * side alone, or a diff as the code reads now, its added lines marked as in the diff, and the old code, what a change
+ * replaced or the lines a marker stands for where lines were removed, in a code window floating from a dot on the
+ * change's first line or from the marker. Folding follows indentation, so functions, blocks, objects and diff hunks
+ * collapse under their first line. The page renders every line as text, so comments anchor in it like any other block. With `onSelect`, selecting code with the mouse, or with
  * Shift and the arrow keys, Home or End once the code has focus, picks the lines it touches and the code highlighted;
  * without Shift those keys move a drawn caret. With `onName`, clicking a name in the code reports it, and whether Ctrl
  * or Cmd was held.
@@ -379,8 +455,8 @@ export function CodeViewer({
     );
     const [folded, setFolded] = useState<ReadonlySet<number>>(() => new Set());
     const [copy, setCopy] = useState<CopyState>('idle');
-    const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
-    const [was, setWas] = useState<number>();
+    /** The row whose old code shows, and the button that opened it. */
+    const [old, setOld] = useState<{ index: number; opener: HTMLElement }>();
     const linesRef = useRef<HTMLDivElement>(null);
     const rowsRef = useRef<HTMLDivElement>(null);
     const caretRef = useRef<HTMLSpanElement>(null);
@@ -408,7 +484,10 @@ export function CodeViewer({
             document.removeEventListener('selectionchange', drawCaret);
         };
     }, [selectable, drawCaret]);
-    useEffect(() => setFolded(new Set()), [shown]);
+    useEffect(() => {
+        setFolded(new Set());
+        setOld(undefined);
+    }, [shown]);
     useEffect(() => {
         if (copy === 'idle') return undefined;
         const timer = setTimeout(() => setCopy('idle'), 1500);
@@ -476,7 +555,9 @@ export function CodeViewer({
         const end = folds.get(index);
         const closed = end !== undefined && folded.has(index);
         const marked = inSelection(row, selection);
-        const showWas = was === index;
+        const showOld = old?.index === index;
+        const openOld = (event: React.MouseEvent<HTMLElement>) =>
+            setOld(showOld ? undefined : { index, opener: event.currentTarget });
         lines.push(
             <span key={index} className={`code-line is-${row.kind}${marked ? ' is-selected' : ''}`}>
                 <span className="code-gutter">
@@ -499,8 +580,9 @@ export function CodeViewer({
                             type="button"
                             className="was-toggle"
                             aria-label={`What the change at line ${row.number} replaced`}
-                            aria-expanded={showWas}
-                            onClick={() => setWas(showWas ? undefined : index)}
+                            aria-haspopup="dialog"
+                            aria-expanded={showOld}
+                            onClick={openOld}
                         />
                     ) : null}
                 </span>
@@ -511,14 +593,9 @@ export function CodeViewer({
                         <button
                             type="button"
                             className="gone-toggle"
-                            aria-expanded={opened.has(index)}
-                            onClick={() =>
-                                setOpened((current) => {
-                                    const next = new Set(current);
-                                    if (!next.delete(index)) next.add(index);
-                                    return next;
-                                })
-                            }
+                            aria-haspopup="dialog"
+                            aria-expanded={showOld}
+                            onClick={openOld}
                         >
                             − {row.text}
                         </button>
@@ -529,7 +606,6 @@ export function CodeViewer({
                             {row.text ? rowTokens.map((token, at) => renderToken(token, at, Boolean(onName))) : <br />}
                         </span>
                     )}
-                    {showWas && <WasPopover row={row} />}
                     {closed && (
                         // The gutter toggle is the accessible control; this is a wider mouse target beside the text.
                         <button
@@ -545,20 +621,16 @@ export function CodeViewer({
                 </span>
             </span>
         );
-        if (row.kind === 'gone' && opened.has(index))
-            row.gone?.forEach((text, at) =>
-                lines.push(
-                    <span key={`gone-${index}-${at}`} className="code-line is-remove">
-                        <span className="code-gutter">
-                            <span className="fold-slot" />
-                            <span className="line-number">{row.oldNumber === undefined ? '' : row.oldNumber + at}</span>
-                        </span>
-                        <span className="line-text">
-                            <span className="visually-hidden">Removed: </span>
-                            <span className="line-code">{text}</span>
-                        </span>
-                    </span>
-                )
+        // Beside the line rather than in it, so its code stays out of this viewer's own selectable lines.
+        if (showOld)
+            lines.push(
+                <OldCode
+                    key={`old-${index}`}
+                    row={row}
+                    opener={old.opener}
+                    language={language}
+                    onClose={() => setOld(undefined)}
+                />
             );
         const note = notes?.(row);
         if (note) {
@@ -606,7 +678,10 @@ export function CodeViewer({
                 className="code-lines"
                 role="group"
                 aria-label={label}
-                {...(onSelect ? { tabIndex: 0, onKeyDown: moveCaret, onFocus: drawCaret, onBlur: drawCaret } : {})}
+                // Selected code shows its own Comment bar, never the page's as well.
+                {...(onSelect
+                    ? { tabIndex: 0, onKeyDown: moveCaret, onFocus: drawCaret, onBlur: drawCaret, 'data-no-comment': true }
+                    : {})}
             >
                 {/* Names are a mouse shortcut: the read-through's search box finds any name from the keyboard. */}
                 {/* biome-ignore lint/a11y/useKeyWithClickEvents: the click only searches for the name clicked. */}

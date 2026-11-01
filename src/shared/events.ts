@@ -80,8 +80,13 @@ export const agentEvent = z.discriminatedUnion('type', [
         questions: z.array(questionId).max(40)
     }),
     z.object({ type: z.literal('proposal.ready') }),
-    /** Stage a slide of the round's deck. It stays off the page until `deck.publish`, and is fixed after it. */
+    /**
+     * Stage a slide of the round's deck, or change, move or reorder one at any time. A staged slide stays off the page
+     * until `deck.publish`; a change to a published one shows at once, marked changed until the reviewer sees it.
+     */
     z.object({ type: z.literal('slide.upsert'), slide: slideContent }),
+    /** Take a slide out of the round's deck, staged or published. Its blocks stay sent, for anything else naming them. */
+    z.object({ type: z.literal('slide.remove'), id: recordId }),
     /** What the page shows while the deck builds: the planned outline, pictures drawn of those briefed, review progress. */
     z
         .object({
@@ -119,7 +124,10 @@ export const agentEvent = z.discriminatedUnion('type', [
     }),
     /**
      * Lay out the round's read-through: its pages and the pieces of code on each. Refused, naming the lines, until
-     * every added and removed line is in some piece; accepted, it opens the read-through with every page coming.
+     * every added and removed line is in some piece; accepted, it opens the read-through with every page coming. Send
+     * it again at any time to restructure: a kept page keeps its words, each piece's note goes where the piece goes, a
+     * new page is coming until written, a page left out is removed, and a piece removed or with other lines is
+     * unticked with every piece sharing a changed line with it.
      */
     z.object({ type: z.literal('read.outline'), pages: z.array(outlinePage).min(1).max(200) }),
     /** Write one laid-out page's words, which puts it up for the reviewer. */
@@ -150,6 +158,7 @@ export const agentEventTypes = agentEvent.options.map((option) => option.shape.t
 /** The agent events only a review takes. */
 const REVIEW_ONLY_AGENT_EVENTS: readonly AgentEventType[] = [
     'slide.upsert',
+    'slide.remove',
     'deck.progress',
     'deck.publish',
     'item.upsert',
@@ -235,7 +244,8 @@ export const pageRequest = z.discriminatedUnion('type', [
     z.object({ type: z.literal('message.send'), ...message }).refine(...saysSomething),
     z.object({ type: z.literal('review.mark'), sectionId: recordId, reviewed: z.boolean() }),
     z.object({ type: z.literal('checklist.tick'), blockId: recordId, item: z.string().min(1), done: z.boolean() }),
-    z.object({ type: z.literal('assumption.confirm'), blockId: recordId }),
+    /** Confirm an assumption, or with `confirmed: false` take the confirmation back. */
+    z.object({ type: z.literal('assumption.confirm'), blockId: recordId, confirmed: z.boolean().default(true) }),
     /** `thrown`: the page's error when a block that validated threw while drawing, so there is no stored problem. */
     z.object({ type: z.literal('block.fix'), blockId: recordId, thrown: z.string().min(1).max(2000).optional() }),
     z.object({ type: z.literal('edit.undo'), revision: z.number().int().min(1) }),
@@ -279,6 +289,8 @@ export const pageRequest = z.discriminatedUnion('type', [
         read: z.boolean(),
         how: z.enum(['manual', 'auto'])
     }),
+    /** Tick several read-through pieces read by hand at once, as "Mark the page read" and "Mark all read" do. */
+    z.object({ type: z.literal('read.mark'), pieces: z.array(recordId).min(1).max(8000) }),
     /** Write the round's comments to a task file for an agent to work through, and hand back the prompt to copy. */
     z.object({ type: z.literal('comments.handoff') }),
     /** Finish or skip the round's walkthrough, which unlocks its findings. */
@@ -365,6 +377,7 @@ const REVIEW_ONLY_PAGE_REQUESTS: readonly PageRequestType[] = [
     'earlier.confirm',
     'preferences.set',
     'read.tick',
+    'read.mark',
     'comments.handoff'
 ];
 
@@ -448,7 +461,13 @@ export const loggedEvent = z.discriminatedUnion('type', [
     logged.extend({ type: z.literal('comment.resolve'), threadId: z.string() }),
     logged.extend({ type: z.literal('message.send'), threadId: z.string(), text: z.string(), ...pasted }),
     logged.extend({ type: z.literal('checklist.tick'), blockId: z.string(), item: z.string(), done: z.boolean() }),
-    logged.extend({ type: z.literal('assumption.confirm'), blockId: z.string(), title: z.string() }),
+    logged.extend({
+        type: z.literal('assumption.confirm'),
+        blockId: z.string(),
+        title: z.string(),
+        /** False when the user took an earlier confirmation back, which leaves the assumption open again. */
+        confirmed: z.boolean().default(true)
+    }),
     logged.extend({ type: z.literal('block.fix'), blockId: z.string(), blockType: z.string(), issues: z.array(issue) }),
     logged.extend({
         type: z.literal('stage.advance'),

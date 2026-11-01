@@ -7,7 +7,7 @@ Opens and keeps a review of someone else's PR or a local branch: how the target 
 
 ### Requirement: A review opens on a PR or a local branch
 
-The `planroom_review` tool SHALL accept a `target` that is a Bitbucket Cloud PR link, a bare PR number or a local branch name. A PR link SHALL name its workspace, repo and number. A bare number SHALL use the workspace and repo of the checkout's `origin` remote. Any other target SHALL be a local branch, reviewed as the branch against its merge base with the default branch. The call SHALL return the page URL, the PR summary, the worktree path and the reviewer's preferences.
+The `planroom_review` tool SHALL accept a `target` that is a Bitbucket Cloud PR link, a bare PR number or a branch name. A PR link SHALL name its workspace, repo and number. A bare number SHALL use the checkout's `origin` repo. A branch SHALL open its open PR in the `origin` repo, or with none, or when asked for the local branch, be reviewed against its merge base with the default branch. The call SHALL return the page URL, the PR summary, the worktree path and the reviewer's preferences.
 
 #### Scenario: PR link
 
@@ -21,13 +21,32 @@ The `planroom_review` tool SHALL accept a `target` that is a Bitbucket Cloud PR 
 
 #### Scenario: Local branch
 
-- **WHEN** the agent opens a review for `feature/retry-policy`, which is not a PR link or a number
+- **WHEN** the agent opens a review for `feature/retry-policy`, which is not a PR link or a number, in a checkout whose `origin` is not on Bitbucket
 - **THEN** the change is that branch against its merge base with the default branch, and the server makes no network call
+
+#### Scenario: Branch with an open PR
+
+- **WHEN** the agent opens a review for `feature/retry-policy` while PR 412 of `origin` is open from it
+- **THEN** the review is `pr-412`, the same review that opening `412` opens
+
+#### Scenario: Local branch on request
+
+- **WHEN** the agent opens a review for `feature/retry-policy` asking for the local branch while PR 412 is open from it
+- **THEN** the review is `branch-feature-retry-policy`, of the local branch, and nothing is posted for it
 
 #### Scenario: PR that cannot be resolved
 
 - **WHEN** the agent opens a review for a PR number and the checkout has no `origin` remote
 - **THEN** the call fails saying the workspace and repo could not be determined, and nothing is created
+
+### Requirement: Another target takes over the open page
+
+Opening a review of another target than the open one SHALL take over the open page, as opening any other session does, unless the agent asks for a new page.
+
+#### Scenario: Another target
+
+- **WHEN** the agent opens a review for PR 413 while PR 412's review is open in a browser tab
+- **THEN** PR 413's review takes over that page at the same URL, the tab reloads onto it, and no new browser window opens
 
 ### Requirement: Code is read from a temporary worktree at the PR head
 

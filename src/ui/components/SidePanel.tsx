@@ -8,11 +8,11 @@ import { useNarrow, useNow } from '../hooks';
 import { ReviewPanel } from '../proposal/ReviewPanel';
 import { useReadOnly } from '../readOnly';
 import { isSeen, useSeen } from '../seen';
-import { useSendOnKey } from '../sendKey';
 import { type Connection, deepEqual, useConnection, useSelector } from '../store';
 import { type PanelTab, quietly, useActions, useBusy, useUiState } from '../ui';
 import { Attachments, usePastes } from './Attachments';
 import { ActivityIcon, CommentIcon, PanelIcon, ReviewIcon, SendIcon } from './icons';
+import { MarkdownEditor } from './MarkdownEditor';
 import { type PaneSize, ResizeHandle, useStoredWidth } from './Resizer';
 import { AgentDots, ThreadDialog, ThreadRow } from './Thread';
 
@@ -277,12 +277,11 @@ const Comments = memo(function Comments() {
 });
 
 /** The box for messaging the agent directly, pastes included. Hidden while the session is read-only. */
-function MessageBox({ inputRef }: { inputRef: React.RefObject<HTMLTextAreaElement | null> }) {
+function MessageBox({ formRef }: { formRef: React.RefObject<HTMLFormElement | null> }) {
     const { send } = useActions();
     const readOnly = useReadOnly();
     const [text, setText] = useState('');
     const [busy, track] = useBusy();
-    const sendOnKey = useSendOnKey();
     const pastes = usePastes();
     if (readOnly) return null;
     const submit = () => {
@@ -298,21 +297,23 @@ function MessageBox({ inputRef }: { inputRef: React.RefObject<HTMLTextAreaElemen
     };
     return (
         <form
+            ref={formRef}
             className="message-box"
             onSubmit={(event) => {
                 event.preventDefault();
                 submit();
             }}
         >
-            <label htmlFor="agent-message">Message the agent</label>
-            <textarea
+            <label id="agent-message-label" htmlFor="agent-message">
+                Message the agent
+            </label>
+            <MarkdownEditor
                 id="agent-message"
-                ref={inputRef}
+                labelId="agent-message-label"
                 rows={2}
                 placeholder="It sees this whole page. Ask it to add, merge or reword anything…"
                 value={text}
-                onChange={(event) => setText(event.target.value)}
-                onKeyDown={(event) => sendOnKey(event, submit)}
+                onChange={setText}
                 onPaste={pastes.onPaste}
             />
             <Attachments items={pastes.items} onRemove={pastes.remove} />
@@ -337,7 +338,7 @@ export function SidePanel() {
     const { setPanelCollapsed, setPanelTab } = useActions();
     const openCount = useSelector((view) => openComments(view).length);
     const liveDot = useSelector((view) => view.agent.mode !== 'offline' || Boolean(view.agent.editing));
-    const messageRef = useRef<HTMLTextAreaElement>(null);
+    const messageRef = useRef<HTMLFormElement>(null);
     // A drawer on a narrow screen always opens expanded.
     const narrow = useNarrow();
     const [width, setWidth] = useStoredWidth(PANEL_SIZE);
@@ -346,13 +347,14 @@ export function SidePanel() {
 
     const expandTo = (next: PanelTab | 'message') => {
         setPanelCollapsed(false);
-        if (next === 'message') window.requestAnimationFrame(() => messageRef.current?.focus());
+        if (next === 'message')
+            window.requestAnimationFrame(() => messageRef.current?.querySelector<HTMLElement>('[role="textbox"]')?.focus());
         else setPanelTab(next);
     };
 
     if (panelCollapsed && !narrow) {
         return (
-            <aside className="panel is-collapsed" aria-label="Side panel, collapsed">
+            <aside data-no-comment className="panel is-collapsed" aria-label="Side panel, collapsed">
                 <button
                     type="button"
                     className="icon-button"
@@ -394,8 +396,9 @@ export function SidePanel() {
     }
 
     const labels: Record<PanelTab, string> = { review: 'Review', activity: 'Activity', comments: 'Comments' };
+    // Its threads and messages are no text to comment on: they have replies of their own.
     return (
-        <aside className="panel" aria-label="Side panel" style={narrow ? undefined : { width }}>
+        <aside data-no-comment className="panel" aria-label="Side panel" style={narrow ? undefined : { width }}>
             {!narrow && (
                 <ResizeHandle label="Resize side panel" edge="left" size={PANEL_SIZE} width={width} setWidth={setWidth} />
             )}
@@ -432,7 +435,7 @@ export function SidePanel() {
                 {current === 'activity' && <Activity />}
                 {current === 'comments' && <Comments />}
             </div>
-            <MessageBox inputRef={messageRef} />
+            <MessageBox formRef={messageRef} />
         </aside>
     );
 }

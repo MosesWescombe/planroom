@@ -253,9 +253,25 @@ export function describeTake(config: YourTakeConfig, answer: TakeAnswer): string
     }
 }
 
-/** A stored answer to a take, with the card's version it answered. */
-export const takeRecord = z.object({ answer: takeAnswer, blockVersion: z.number().int().min(1), at: z.string() });
+/**
+ * A stored answer to a take, with the card's version it answered and the answer in words. Once the agent changes the
+ * card it is unanswered again, the answer kept as the reviewer's last.
+ */
+export const takeRecord = z.object({
+    answer: takeAnswer,
+    blockVersion: z.number().int().min(1),
+    summary: z.string().optional(),
+    at: z.string()
+});
 export type TakeRecord = z.infer<typeof takeRecord>;
+
+/** A take that answers the card as it is now: none once the agent changed the card since. */
+export function currentTake(
+    take: TakeRecord | undefined,
+    block: Pick<BlockRecord, 'version'> | undefined
+): TakeRecord | undefined {
+    return take && block && take.blockVersion === block.version ? take : undefined;
+}
 
 // ---------------------------------------------------------------- preferences
 
@@ -479,8 +495,11 @@ export const roundRecord = z.object({
     readthrough: z.object({ openedAt: z.string() }).optional(),
     /** When the first part of the deck, Why to What it might impact, was published. */
     publishedAt: z.string().optional(),
-    /** The reviewer's questions and concerns on the impact map, saved as they write them and sent once. */
-    impact: impactConcerns.extend({ sentAt: z.string().optional() }).optional(),
+    /**
+     * The reviewer's questions and concerns on the impact map, saved as they write them and sent once; sent again when
+     * the agent changed the map since, which reopens them.
+     */
+    impact: impactConcerns.extend({ sentAt: z.string().optional(), reopenedAt: z.string().optional() }).optional(),
     /** When Trade-offs, the second part of the deck, was published. */
     tradeoffsAt: z.string().optional(),
     walkthrough: z.object({ how: z.enum(['finished', 'skipped']), at: z.string() }).optional(),
@@ -723,7 +742,7 @@ function fenced(lines: readonly string[]): string {
  * comment on the file that quotes its line number and code.
  * ponytail: the rules are the conservative ones; if a scratch PR shows Bitbucket takes a span, send it instead.
  */
-function placement(
+export function placement(
     index: LineIndex | undefined,
     anchor: CodeAnchor | undefined,
     code: readonly string[] | undefined

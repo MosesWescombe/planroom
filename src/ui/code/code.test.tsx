@@ -5,7 +5,7 @@ import { checkBlockConfig } from '../../shared/blocks';
 import { makeView, renderWith, storeWith } from '../../test/harness';
 import { BlockView } from '../blocks/Block';
 import { Attachments } from '../components/Attachments';
-import { CodeViewer, parsePatch } from './CodeViewer';
+import { CodeViewer, nowRows, oldCodePlace, parsePatch } from './CodeViewer';
 import { blockLength, foldRanges, indentLevel } from './folding';
 import { guessLanguage, highlightLines, looksLikeCode } from './highlight';
 
@@ -205,6 +205,18 @@ describe('CodeViewer', () => {
     });
 });
 
+describe('as it is now', () => {
+    it('keeps the old code a change replaced and a removal on its own, each with the old line it starts at', () => {
+        const patch = '@@ -3,5 +3,3 @@\n keep\n-one\n-two\n+One\n-gone\n tail\n';
+        expect(nowRows(parsePatch(patch))).toMatchObject([
+            { kind: 'context', number: 3 },
+            { kind: 'add', number: 4, was: ['one', 'two'], wasAt: 4 },
+            { kind: 'gone', text: '1 line removed', gone: ['gone'], oldNumber: 6 },
+            { kind: 'context', number: 5 }
+        ]);
+    });
+});
+
 describe('multi-file diffs', () => {
     it('skips the header of every file, not just the first', () => {
         const patch = [
@@ -284,5 +296,17 @@ describe('pasted text', () => {
         const dialog = screen.getByRole('dialog', { name: 'Pasted text' });
         expect(within(dialog).queryByRole('group', { name: 'Pasted code' })).toBeNull();
         expect(dialog).toHaveTextContent('page someone');
+    });
+});
+
+describe('where the old code box floats', () => {
+    const at = (top: number) => DOMRect.fromRect({ x: 40, y: top, width: 8, height: 8 });
+
+    it('under its line when there is room', () => {
+        expect(oldCodePlace(at(100))).toEqual({ left: 40, maxHeight: 300, top: 112 });
+    });
+
+    it('above its line, growing up from it, when there is more room there', () => {
+        expect(oldCodePlace(at(window.innerHeight - 100))).toEqual({ left: 40, maxHeight: 300, bottom: 104 });
     });
 });

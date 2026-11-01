@@ -7,9 +7,21 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Patch, StreamMessage, View } from '../shared/view.js';
-import { CHANGE, defined, harness, onCleanup, rejection, section, tempRepo, textBlock, upsert } from '../test/serverHelpers.js';
+import {
+    CHANGE,
+    defined,
+    fakeCli,
+    harness,
+    onCleanup,
+    rejection,
+    section,
+    tempRepo,
+    textBlock,
+    upsert
+} from '../test/serverHelpers.js';
 import { type PageServer, startPageServer } from './http.js';
 import { rememberRepo } from './registry.js';
+import { Session } from './session.js';
 import { PlanViewer } from './viewer.js';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -44,6 +56,7 @@ const streamMessage = z.discriminatedUnion('type', [
     z.object({ type: z.literal('snapshot'), view: z.custom<View>(isObject) }),
     z.object({ type: z.literal('patch'), patches: z.array(z.custom<Patch>(isObject)) }),
     z.object({ type: z.literal('closed') }),
+    z.object({ type: z.literal('reload') }),
     z.object({ type: z.literal('browse') })
 ]);
 
@@ -197,6 +210,21 @@ describe('the event stream', () => {
         pages.remove(session);
         expect((await reading).map((message) => message.type)).toEqual(['snapshot', 'closed']);
     });
+
+    it('a swap serves the next session under the same URL and reloads the open page onto it', async () => {
+        const { url, pages, session } = await served();
+        const next = await harness({ changeId: 'add-audit-log' });
+        expect(pages.swap(session, next.session)).toBe(false);
+        expect(pages.swap(next.session, session)).toBe(false);
+        const controller = new AbortController();
+        onCleanup(async () => controller.abort());
+        const reading = readStream(`${url}api/stream`, () => false, controller.signal);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(pages.swap(session, next.session)).toBe(true);
+        expect((await reading).map((message) => message.type)).toEqual(['snapshot', 'reload']);
+        const [snapshot] = await readStream(`${url}api/stream`, (messages) => messages.length > 0, controller.signal);
+        expect(snapshot).toMatchObject({ type: 'snapshot', view: { changeId: 'add-audit-log' } });
+    });
 });
 
 describe('page data', () => {
@@ -334,6 +362,21 @@ describe('a plan shown read-only', () => {
         expect((await open({ changeId: CHANGE, repoRoot: repoRoot.replace(/\/$/, '') })).status).toBe(404);
         expect((await open({ changeId: 'add-unknown', repoRoot: repo })).status).toBe(404);
         expect((await open({ changeId: CHANGE, repoRoot: 7 })).status).toBe(400);
+    });
+
+    it("reads a Markdown plan from the repo's own plans folder", async () => {
+        const repo = await tempRepo();
+        const plansRoot = 'docs/plans';
+        const opened = await Session.open({
+            repoRoot: repo,
+            changeId: CHANGE,
+            cli: fakeCli(repo),
+            format: 'markdown',
+            plansRoot
+        });
+        await opened.session.close();
+        expect((await PlanViewer.open(repo, CHANGE, false, plansRoot)).view()).toMatchObject({ format: 'markdown', plansRoot });
+        expect((await rejection(PlanViewer.open(repo, CHANGE))).status).toBe(404);
     });
 
     it('opens only a change that has a plan', async () => {

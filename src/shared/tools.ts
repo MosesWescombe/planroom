@@ -13,6 +13,19 @@ import { planFormat } from './state.js';
  */
 export const DEFAULT_WAIT_SEC = 600;
 
+/** The openers' `newPage`: serve another session under a new URL in a new window, not on the page already open. */
+const newPage = z
+    .boolean()
+    .optional()
+    .describe(
+        'Open it under a new URL in a new browser window; the page already open then closes. By default another session ' +
+            'takes over the page already open, at the same URL: its tab reloads onto it, and no new window opens while a ' +
+            'tab shows it. Ignored when it is the session already open'
+    );
+
+/** Why a `plansDir` is refused: it must stay inside the repo. */
+const PLANS_DIR_MESSAGE = 'must be a folder inside the repo, relative to its root, e.g. docs/plans';
+
 /** `planroom_open`'s input. */
 export const openInput = z.object({
     changeId: z
@@ -26,9 +39,30 @@ export const openInput = z.object({
     format: planFormat
         .optional()
         .describe(
-            'What a new plan becomes on submit: `openspec` (the default), an OpenSpec change in openspec/changes/<changeId>/, ' +
-                'or `markdown`, a plan at agent-plans/<changeId>/<changeId>.md. A resumed plan keeps the format it was created with.'
+            'What a new plan becomes on submit: `openspec`, an OpenSpec change in openspec/changes/<changeId>/ (the default in a repo ' +
+                "with an openspec/ directory), or `markdown` (the default in one without), a plan at <changeId>/<changeId>.md in the repo's " +
+                'folder for Markdown plans, agent-plans/ by default. A resumed plan keeps the format it was created with.'
+        ),
+    plansDir: z
+        .string()
+        .trim()
+        .max(400)
+        .refine((path) => !path.startsWith('/') && !path.includes('\\'), { message: PLANS_DIR_MESSAGE })
+        // Normalised: `./docs//plans/` is `docs/plans`.
+        .transform((path) =>
+            path
+                .split('/')
+                .filter((part) => part !== '' && part !== '.')
+                .join('/')
         )
+        .refine((path) => path !== '' && !path.split('/').includes('..'), { message: PLANS_DIR_MESSAGE })
+        .optional()
+        .describe(
+            'Where this repo keeps its Markdown plans, a folder relative to repoRoot, e.g. docs/plans. Only when planroom_open asked ' +
+                'for it, with the folder the user chose: remembered for the repo on this machine and used for every later Markdown plan. ' +
+                'Refused for an OpenSpec plan'
+        ),
+    newPage
 });
 
 /** `planroom_ask`'s input. */
@@ -46,7 +80,8 @@ export const askInput = z.object({
         .describe(
             'A repo-relative .md file to also write the questions and answers to when the user sends them, e.g. ' +
                 'docs/decisions/auth-migration.md. Given when resuming, it replaces the earlier one'
-        )
+        ),
+    newPage
 });
 
 /** `planroom_review`'s input. */
@@ -58,9 +93,15 @@ export const reviewInput = z.object({
         .max(400)
         .describe(
             'What to review: a Bitbucket Cloud PR link (https://bitbucket.org/<workspace>/<repo>/pull-requests/<n>), a bare PR ' +
-                "number of the checkout's origin repo, or a local branch name, reviewed against its merge base with the default branch"
+                "number of the checkout's origin repo, or a branch name. A branch with an open PR in the origin repo reviews " +
+                'that PR; otherwise, or with `local`, the local branch against its merge base with the default branch'
         ),
-    title: z.string().max(200).optional().describe('A title for the page; by default the PR title or the branch name')
+    local: z
+        .boolean()
+        .optional()
+        .describe('Review a branch target as the local branch even when it has an open PR; nothing is posted for it'),
+    title: z.string().max(200).optional().describe('A title for the page; by default the PR title or the branch name'),
+    newPage
 });
 
 /** `planroom_wait`'s input. */

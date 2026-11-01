@@ -1,5 +1,7 @@
 import { type ReactNode, useCallback } from 'react';
+import { type ReadProgress, readPieces, readProgress } from '../../shared/readthrough';
 import { currentRound, findingsUnlocked, type RoundRecord, roundItems } from '../../shared/review';
+import type { View } from '../../shared/view';
 import { type Pin, type Pins, PinsContext } from '../blocks/pins';
 import { plainTitle } from '../components/Markdown';
 import { deepEqual, useSelector } from '../store';
@@ -61,4 +63,31 @@ export function ReviewPins({ children }: { children: ReactNode }) {
         [pins, goTo]
     );
     return <PinsContext.Provider value={pinsFor}>{children}</PinsContext.Provider>;
+}
+
+/** Each round's read pieces and progress by the ticks they were worked out from, so every selector shares one pass. */
+const readCache = new WeakMap<
+    View['ticks'],
+    { pages: View['pages']; round: RoundRecord; read: ReadonlySet<string>; progress?: ReadProgress }
+>();
+
+/** The round's read state for the view's ticks and pages, worked out once. */
+function readEntry(view: View, round: RoundRecord) {
+    const cached = readCache.get(view.ticks);
+    if (cached?.pages === view.pages && cached.round === round) return cached;
+    const entry = { pages: view.pages, round, read: readPieces(view, round.index, round.n) };
+    readCache.set(view.ticks, entry);
+    return entry;
+}
+
+/** The ids of the round's read pieces, code on several pages read on each at once. */
+export function readSet(view: View, round: RoundRecord): ReadonlySet<string> {
+    return readEntry(view, round).read;
+}
+
+/** The reviewer's progress through the round's read-through. */
+export function roundProgress(view: View, round: RoundRecord): ReadProgress {
+    const entry: { read: ReadonlySet<string>; progress?: ReadProgress } = readEntry(view, round);
+    entry.progress ??= readProgress(view, round.index, round.n, entry.read);
+    return entry.progress;
 }

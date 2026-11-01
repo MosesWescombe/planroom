@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { planDir } from '../../shared/state';
+import { PLAN_ROOTS, planDir } from '../../shared/state';
 import type { PlanListing as Listing, PlanStatus, PlanSummary } from '../../shared/view';
 import { fetchPlans, openPlan } from '../api';
 import { relativeTime } from '../format';
@@ -35,7 +35,7 @@ function PlanRow({ plan, note }: { plan: PlanSummary; note: string }) {
             <span className="nav-name plan-name">
                 <span>{plan.title}</span>
                 <span className="small muted">
-                    <span className="mono" title={planDir(plan.format, plan.changeId)}>
+                    <span className="mono" title={planDir(plan.format, plan.changeId, plan.plansRoot)}>
                         {plan.changeId}
                     </span>
                     {plan.format === 'markdown' ? ' · Markdown' : ''} · {note}
@@ -57,11 +57,11 @@ function LivePlan({ plan, liveUrl }: { plan: PlanSummary; liveUrl: string }) {
     );
 }
 
-/** What opening a plan from the list does: move the page and the agent to it, or show it read-only. */
-function PlansNote({ readOnly }: { readOnly: boolean }) {
+/** Where the list looks, then what opening a plan from it does: move the page and the agent to it, or show it read-only. */
+function PlansNote({ readOnly, plansRoot = PLAN_ROOTS.markdown }: { readOnly: boolean; plansRoot?: string | undefined }) {
     return (
         <p className="small muted">
-            Every plan under <code>openspec/changes/</code> and <code>agent-plans/</code>.{' '}
+            Every plan under <code>{PLAN_ROOTS.openspec}/</code> and <code>{plansRoot}/</code>.{' '}
             {readOnly
                 ? 'No Claude session is attached here, so each opens read-only: to work on one, ask Claude to resume it.'
                 : 'Opening one moves this page to it, and the agent picks it up on its next step. An ended or accepted plan opens read-only until you reopen it.'}{' '}
@@ -116,7 +116,7 @@ function PlanListing({ current, onLoadFailed }: { current?: CurrentPlan; onLoadF
         );
     return (
         <>
-            <PlansNote readOnly={listing.readOnly} />
+            <PlansNote readOnly={listing.readOnly} plansRoot={listing.plansRoot} />
             {listing.plans.length === 0 && <p className="muted">No plans in this repo yet. Ask Claude to plan a change.</p>}
             <ul className="plan-list">
                 {listing.plans.map((plan) => {
@@ -207,7 +207,7 @@ export function PlanBrowser() {
 /** The change id under the brand, as the button that opens the plan list. */
 export function PlanSwitcher() {
     const changeId = useSelector((view) => view.changeId);
-    const path = useSelector((view) => planDir(view.format, view.changeId));
+    const path = useSelector((view) => planDir(view.format, view.changeId, view.plansRoot));
     const [open, setOpen] = useState(false);
     // Stable, so the list loads once each time the dialog opens.
     const close = useCallback(() => setOpen(false), []);

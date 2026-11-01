@@ -33,6 +33,7 @@ import {
 } from '../shared/records.js';
 import {
     currentRound,
+    currentTake,
     deriveComments,
     describeTake,
     findingsUnlocked,
@@ -316,22 +317,16 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
             const slide = Object.values(state.slides).find((candidate) => blockIdsOf(candidate).includes(block.id));
             if (!slide || slide.round !== round.n || !slideShown(slide, round))
                 reject(`block ${block.id} is not on round ${round.n}'s walkthrough`, 'blockId');
-            if (state.takes[block.id]) reject('You already gave your take on this card');
+            // A card the agent changed since it was answered takes a new answer.
+            if (currentTake(state.takes[block.id], block)) reject('You already gave your take on this card');
             const { answer } = request;
             if (answer.kind !== config.kind) reject(`This card asks for a ${config.kind} answer`, 'answer.kind', 400);
             if (answer.kind === 'check' && config.kind === 'check' && answer.choice >= config.options.length)
                 reject(`Pick one of the ${config.options.length} options`, 'answer.choice', 400);
-            draft.putTake(block.id, { answer, blockVersion: block.version, at: now });
+            const summary = describeTake(config, answer);
+            draft.putTake(block.id, { answer, blockVersion: block.version, summary, at: now });
             noteYours(draft, { title: 'You gave your take', detail: TAKE_TITLES[config.kind] });
-            return {
-                event: {
-                    type: 'take.answer',
-                    blockId: block.id,
-                    kind: config.kind,
-                    answer,
-                    summary: describeTake(config, answer)
-                }
-            };
+            return { event: { type: 'take.answer', blockId: block.id, kind: config.kind, answer, summary } };
         }
         case 'reviewers.start': {
             notPosted(round);
@@ -367,7 +362,10 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
             for (const id of Object.keys(request.concerns))
                 if (!areas.has(id)) reject(`The impact map has no area "${id}"`, 'concerns', 400);
             const concerns = Object.fromEntries(Object.entries(request.concerns).filter(([, list]) => list.length > 0));
-            draft.updateRound(round.n, (current) => ({ ...current, impact: { concerns, added: request.added } }));
+            draft.updateRound(round.n, (current) => ({
+                ...current,
+                impact: { ...current.impact, concerns, added: request.added }
+            }));
             return {};
         }
         case 'impact.send': {
@@ -567,6 +565,17 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
             } else for (const tick of keys) if (Object.hasOwn(state.ticks, tick)) draft.removeTick(tick);
             return {};
         }
+        case 'read.mark': {
+            if (!round.readthrough) reject('The read-through is not open yet');
+            const known = new Set(roundPages(state, round.n).flatMap((page) => page.pieces.map((piece) => piece.id)));
+            const unknown = request.pieces.find((piece) => !known.has(piece));
+            if (unknown) reject(`round ${round.n}'s read-through has no piece ${unknown}`, 'pieces', 404);
+            for (const piece of request.pieces) {
+                const key = tickKey(round.n, piece);
+                if (!state.ticks[key]) draft.putTick(key, { how: 'manual', at: now });
+            }
+            return {};
+        }
         case 'comments.handoff': {
             if (!findingsUnlocked(round)) reject('Finish or skip the walkthrough first');
             if (deriveComments(state, round.n).length === 0) reject('There is nothing to hand to an agent yet');
@@ -741,10 +750,21 @@ export function applyPageRequest(
         case 'assumption.confirm': {
             const block = state.blocks[request.blockId] ?? reject(`block ${request.blockId} does not exist`, 'blockId', 404);
             if (!isAssumption(block)) reject(`block ${block.id} is not an assumption`, 'blockId', 400);
-            if (state.confirmedAssumptions[block.id] === block.version) return {};
-            draft.putConfirmed(block.id, block.version);
-            noteYours(draft, { title: 'You confirmed an assumption', detail: assumptionTitle(block) });
-            return { event: { type: 'assumption.confirm', blockId: block.id, title: assumptionTitle(block) } };
+            if ((state.confirmedAssumptions[block.id] === block.version) === request.confirmed) return {};
+            if (request.confirmed) draft.putConfirmed(block.id, block.version);
+            else draft.dropConfirmed(block.id);
+            noteYours(draft, {
+                title: request.confirmed ? 'You confirmed an assumption' : 'You took back an assumption you confirmed',
+                detail: assumptionTitle(block)
+            });
+            return {
+                event: {
+                    type: 'assumption.confirm',
+                    blockId: block.id,
+                    title: assumptionTitle(block),
+                    confirmed: request.confirmed
+                }
+            };
         }
         case 'block.fix': {
             const block = state.blocks[request.blockId] ?? reject(`block ${request.blockId} does not exist`, 'blockId', 404);

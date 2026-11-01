@@ -45,30 +45,32 @@ export function CalloutBlock({ id, config, placement }: BlockProps<'callout'>) {
                     </span>
                 )}
             </div>
-            {assumption &&
-                (confirmed ? (
-                    <span className="badge badge-answered">Confirmed</span>
-                ) : (
-                    !readOnly && (
-                        <div className="row callout-actions">
+            {assumption && (confirmed || !readOnly) && (
+                <div className="row callout-actions">
+                    {confirmed && <span className="badge badge-answered">Confirmed</span>}
+                    {!readOnly && (
+                        <>
                             <button
                                 type="button"
                                 className="button-secondary button-small"
-                                onClick={() => commentOnWhole(`block:${id}`, 'change')}
+                                onClick={(event) => commentOnWhole(`block:${id}`, 'change', event.currentTarget)}
                             >
                                 Correct it
                             </button>
                             <button
                                 type="button"
-                                className="button-primary button-small"
+                                className={`${confirmed ? 'button-secondary' : 'button-primary'} button-small`}
                                 disabled={busy}
-                                onClick={() => quietly(track(send({ type: 'assumption.confirm', blockId: id })))}
+                                onClick={() =>
+                                    quietly(track(send({ type: 'assumption.confirm', blockId: id, confirmed: !confirmed })))
+                                }
                             >
-                                Confirm
+                                {confirmed ? 'Undo' : 'Confirm'}
                             </button>
-                        </div>
-                    )
-                ))}
+                        </>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

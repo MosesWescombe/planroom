@@ -24,6 +24,30 @@ The agent SHALL lay out the read-through as pages, each holding pieces of code t
 - **WHEN** the agent resubmits the layout with the missing lines placed
 - **THEN** the second layout is accepted
 
+### Requirement: The agent can restructure the read-through at any time
+
+The agent SHALL be able to send the whole layout again at any time, also once pages are written and the reviewer is reading, to move pieces between pages, split, merge, reorder or remove pages. The new layout SHALL be checked like the first, and refused while any changed line is on no page. A page kept by its id SHALL keep its written words; each piece's note and test case SHALL follow the piece by its id from whichever page it was on; an addition under a piece its page no longer has SHALL move to the page's end; a new page SHALL show as coming until it is written; and a page left out SHALL be removed, its comments kept and shown as detached. A piece whose lines are unchanged SHALL keep its tick wherever it moved. A piece removed, or whose lines changed, SHALL be unticked, together with every piece that shared a changed line with it on the pages as they were. The activity feed SHALL tell the reviewer the read-through was restructured. A reviewer on a removed page SHALL stay at its place, on the page that took it.
+
+#### Scenario: Moving a piece
+
+- **WHEN** the reviewer has ticked a piece and the agent moves it, its lines unchanged, to another written page
+- **THEN** the piece shows on that page with its note and is still ticked
+
+#### Scenario: Changing a piece's lines
+
+- **WHEN** the agent re-lays out a ticked piece with other lines
+- **THEN** the piece and every piece sharing a changed line with it are unticked
+
+#### Scenario: A new page
+
+- **WHEN** the agent splits a written page into the kept page and a new one
+- **THEN** the kept page keeps its words and the new page says it is coming until the agent writes it
+
+#### Scenario: Lines left over after a restructure
+
+- **WHEN** the agent re-lays out the read-through leaving a changed line on no page
+- **THEN** the layout is refused naming the line, and the pages stay as they were
+
 ### Requirement: Pages run concept pages, test pages, then Housekeeping
 
 The read-through SHALL list its pages in this order: concept pages in the reading order the agent chose, then the test pages, then one Housekeeping page last. The agent SHALL put every concept page in a group, an area of the change read in one sitting, and SHALL lay out the groups so each file and changed method sits in as few groups as it can, each group after the groups whose code it uses. A group's pages SHALL read together, where its first page falls in the agent's order. Test pages SHALL take no group. The server SHALL refuse a layout with a concept page outside a group or a test page in one. Page writers SHALL fill the pages in, up to four at once, and the reviewer SHALL be able to read the first page as soon as it is written, while pages not yet written say they are coming. The review's agent SHALL check each page before it goes up. A concept that needs more than 40 blocks SHALL be split into two pages.
@@ -72,19 +96,33 @@ A concept page SHALL open with a short, plain summary of the concept and why it 
 - **WHEN** the agent sends a page whose piece carries a block that fails its schema
 - **THEN** the page is stored and the agent is told which piece's block failed
 
+### Requirement: A page shows each file's pieces in one block
+
+On a concept page and a test page alike, every piece of one file SHALL show in a single block for that file, placed where the file's first piece is on the page. The block's header SHALL name the file, open it in VS Code, mark it read once all its pieces are read, and offer a comment on the whole file, and SHALL stay at the top of the view while any of the file shows. Each piece SHALL be a section of the block, in line order, headed by its lines, with its own words, diagrams, code, read tick and fold as before. Pieces of one file on different pages SHALL stay apart.
+
+#### Scenario: Imports and a method of one file
+
+- **WHEN** a page holds a method of `src/send.ts`, a piece of `src/b.ts`, then the imports of `src/send.ts`
+- **THEN** `src/send.ts` shows once, first, its imports then its method as two sections each with its own note, then `src/b.ts`
+
+#### Scenario: File read
+
+- **WHEN** the reviewer ticks the last unread piece of a file on a page
+- **THEN** the file's header shows it read
+
 ### Requirement: Each piece shows as it is now or as a diff
 
-Every piece SHALL be viewable in two ways, with a switch on each piece. *As it is now* SHALL show the code as it stands in the reviewed commit, highlight the line numbers that changed, show a marker where lines were removed, and show what a changed line was before in a popover on hover or click. *As a diff* SHALL show the familiar diff widened to the whole method or block. A code view setting of Auto, as it is now or as a diff SHALL choose the starting view: at Auto the agent picks per piece, a rewrite as it is now and a small tweak as a diff, and otherwise the setting fixes it for every piece. Auto SHALL be the starting setting.
+Every piece SHALL be viewable in two ways, with a switch on each piece. *As it is now* SHALL show the code as it stands in the reviewed commit, highlight the line numbers that changed, show a marker where lines were removed, and show the code a change replaced, from a dot on its first line, or the lines a marker stands for, on click, as a code window highlighted and numbered as the lines were, in a box floating by the dot or marker that scrolls for long code and closes on Escape or a press outside it. *As a diff* SHALL show the familiar diff widened to the whole method or block. A code view setting of Auto, as it is now or as a diff SHALL choose the starting view: at Auto the agent picks per piece, a rewrite as it is now and a small tweak as a diff, and otherwise the setting fixes it for every piece. Auto SHALL be the starting setting.
 
 #### Scenario: As it is now
 
 - **WHEN** the reviewer views a rewritten method as it is now
-- **THEN** the changed line numbers are highlighted and the old text of a changed line shows in a popover on hover or click
+- **THEN** the changed line numbers are highlighted and clicking a changed line's dot shows the old code, highlighted with its old line numbers, in a floating box
 
 #### Scenario: Removed lines
 
 - **WHEN** a piece, viewed as it is now, had lines removed
-- **THEN** a marker shows where they were and opens to show them
+- **THEN** a marker shows where they were and opens a floating box of them, highlighted with their old line numbers
 
 #### Scenario: Switch on a piece
 
@@ -255,12 +293,17 @@ While no field or dialog has the keys, Page Down and Page Up SHALL bring the nex
 
 ### Requirement: The reviewer can comment on a line or a range
 
-The reviewer SHALL be able to select code in a piece, with the mouse or with Shift and the arrow keys, Home or End, and write a comment under it. The comment SHALL be on every whole line the selection touches. On the example of a repeated edit the comment SHALL cover every place of the repeat unless the reviewer ticks "only here", which makes it about that place alone.
+The reviewer SHALL be able to select code in a piece, with the mouse or with Shift and the arrow keys, Home or End, and write a comment under it. The comment SHALL be on every whole line the selection touches. A comment, finding or question under a line SHALL show in the page's font, wrap to the width of the code's window and stay in view while the code scrolls sideways, and a comment SHALL render as Bitbucket will post it. On the example of a repeated edit the comment SHALL cover every place of the repeat unless the reviewer ticks "only here", which makes it about that place alone.
 
 #### Scenario: Comment on a line
 
 - **WHEN** the reviewer selects part of line 15 of a piece and writes a comment
 - **THEN** a comment anchored to the whole of line 15 is queued
+
+#### Scenario: Comment under a long line
+
+- **WHEN** the reviewer's comment sits under a line wider than the code's window
+- **THEN** the comment wraps within the window and does not widen the code
 
 #### Scenario: Select a range
 
@@ -277,14 +320,28 @@ The reviewer SHALL be able to select code in a piece, with the mouse or with Shi
 - **WHEN** the reviewer ticks "only here" on a comment on that example
 - **THEN** the comment is about that place alone
 
+### Requirement: The reviewer can comment on a whole file
+
+The reviewer SHALL be able to comment on a whole file from its header on a read-through page. The comment SHALL be on the file and no line of it, SHALL post to Bitbucket on the file alone, and SHALL show under the file's header, where the findings on the whole file also show once the findings may show.
+
+#### Scenario: Comment on a file
+
+- **WHEN** the reviewer comments on `src/send.ts` from its header
+- **THEN** a comment on the whole of `src/send.ts` is queued and shows under the header, and posts on the file with no line
+
 ### Requirement: The reviewer can ask the agent about lines
 
-Each page SHALL have a thread with the agent. The reviewer SHALL be able to select code on one or more lines and ask about it, and the thread SHALL carry the selected file, the lines the selection touches and exactly the code selected. The agent SHALL answer in the thread and MAY add an explanation or more code to the page, which SHALL be marked as added at the reviewer's request. An addition MUST NOT change anything the page already showed. When an addition changes a piece the reviewer had ticked, that piece SHALL be unticked. When the agent answers a question, the pieces it is about SHALL be unticked: those holding the lines it asks about, or every piece of the page when it asks about the page's words or the whole page.
+Each page SHALL have a thread with the agent. The reviewer SHALL be able to select code on one or more lines and ask about it, and the thread SHALL carry the selected file, the lines the selection touches and exactly the code selected. Any other words on the page, such as a piece's file name, SHALL be selectable to ask about the page, quoting them. The agent SHALL answer in the thread and MAY add an explanation or more code to the page, which SHALL be marked as added at the reviewer's request. An addition MUST NOT change anything the page already showed; restructuring the read-through is not an addition. When an addition changes a piece the reviewer had ticked, that piece SHALL be unticked. When the agent answers a question, the pieces it is about SHALL be unticked: those holding the lines it asks about, or every piece of the page when it asks about the page's words or the whole page.
 
 #### Scenario: Ask and answer
 
 - **WHEN** the reviewer selects `lock.acquire()` on line 14 and asks why a lock is needed
 - **THEN** the agent receives the question with that file, line 14 and the code `lock.acquire()`, and its answer appears in the page's thread
+
+#### Scenario: Ask about a file name
+
+- **WHEN** the reviewer selects `src/send.ts` in a piece's header and asks about it
+- **THEN** the agent receives a question on that page quoting `src/send.ts`, listed with the page's questions
 
 #### Scenario: Addition marked
 

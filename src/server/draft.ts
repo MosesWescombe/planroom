@@ -108,11 +108,15 @@ export class Draft {
             delete this.state.checklistTicks[blockId];
             this.patches.set(`checklistTicks:${blockId}`, { field: 'checklistTicks', id: blockId, value: null });
         }
-        if (Object.hasOwn(this.state.confirmedAssumptions, blockId)) {
-            this.state.confirmedAssumptions = this.own('confirmedAssumptions', this.state.confirmedAssumptions);
-            delete this.state.confirmedAssumptions[blockId];
-            this.patches.set(`confirmedAssumptions:${blockId}`, { field: 'confirmedAssumptions', id: blockId, value: null });
-        }
+        this.dropConfirmed(blockId);
+    }
+
+    /** Drop a block's assumption confirmation, and send the page the patch that deletes it. */
+    dropConfirmed(blockId: string): void {
+        if (!Object.hasOwn(this.state.confirmedAssumptions, blockId)) return;
+        this.state.confirmedAssumptions = this.own('confirmedAssumptions', this.state.confirmedAssumptions);
+        delete this.state.confirmedAssumptions[blockId];
+        this.patches.set(`confirmedAssumptions:${blockId}`, { field: 'confirmedAssumptions', id: blockId, value: null });
     }
 
     /** Record the block version whose assumption the user confirmed, and the page patch. */
@@ -189,6 +193,13 @@ export class Draft {
         this.state.slides = this.own('slides', this.state.slides);
         this.state.slides[record.id] = record;
         this.patches.set(`slides:${record.id}`, { field: 'slides', id: record.id, value: record });
+    }
+
+    /** Remove a review slide, and send the page the patch that deletes it. */
+    removeSlide(id: string): void {
+        this.state.slides = this.own('slides', this.state.slides);
+        delete this.state.slides[id];
+        this.patches.set(`slides:${id}`, { field: 'slides', id, value: null });
     }
 
     /** Store a review finding and record its page patch. */

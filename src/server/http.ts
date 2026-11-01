@@ -13,6 +13,7 @@ import { RejectedError } from './draft.js';
 import { isErrno } from './fsutil.js';
 import { ChangeLockedError } from './lock.js';
 import { listPlans, listPlansElsewhere, otherRepos } from './plans.js';
+import { plansDirOf } from './registry.js';
 import { PlanViewer } from './viewer.js';
 
 /** The most lines one code excerpt returns. */
@@ -54,13 +55,18 @@ export interface PageServer {
     add(plan: ServedPlan): string;
     /** Stop serving a plan: its token stops working and its open streams end. */
     remove(plan: ServedPlan): void;
+    /**
+     * Serve `next` on the page serving `previous`, under the same token, and reload its open tabs onto it. Returns
+     * whether a tab had the page open.
+     */
+    swap(previous: ServedPlan, next: ServedPlan): boolean;
     close(): Promise<void>;
 }
 
 export interface PageServerOptions {
     /** The built SPA (`dist/ui`). */
     uiDir: string;
-    /** Code excerpts are read from git-tracked files under this root, and plans from its `openspec/changes/`. */
+    /** Code excerpts are read from git-tracked files under this root, and plans from its plan folders. */
     repoRoot: string;
     /** Switch the page to another plan by change id, resolving with its page URL. */
     openPlan: (changeId: string) => Promise<string>;
@@ -133,10 +139,12 @@ export function stillSvg(svg: string): string {
     );
 }
 
-/** End a page's event stream, telling it first that the session is closed so it stops reconnecting. */
-function endStream(stream: Response): void {
-    const closed: StreamMessage = { type: 'closed' };
-    stream.end(`data: ${JSON.stringify(closed)}\n\n`);
+/**
+ * End a page's event stream, telling it first that the session is closed so it stops reconnecting, or with `reload`,
+ * that its page now serves another session.
+ */
+function endStream(stream: Response, message: StreamMessage = { type: 'closed' }): void {
+    stream.end(`data: ${JSON.stringify(message)}\n\n`);
 }
 
 /** Answer with a rejection's status and issues, or a 500 for anything else. */
@@ -234,11 +242,17 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
 
     router.get('/api/plans', async (_req, res) => {
         try {
+            const plansRoot = options.registryFile ? await plansDirOf(options.registryFile, options.repoRoot) : undefined;
             const [plans, elsewhere] = await Promise.all([
-                listPlans(options.repoRoot),
+                listPlans(options.repoRoot, plansRoot),
                 options.registryFile ? listPlansElsewhere(options.registryFile, options.repoRoot) : []
             ]);
-            const listing: PlanListing = { plans, elsewhere, readOnly: options.readOnly ?? false };
+            const listing: PlanListing = {
+                plans,
+                elsewhere,
+                ...(plansRoot ? { plansRoot } : {}),
+                readOnly: options.readOnly ?? false
+            };
             res.json(listing);
         } catch (error) {
             sendError(res, error);
@@ -253,10 +267,11 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
      * reads it afresh under the same page.
      */
     const openElsewhere = async (repoRoot: string, changeId: string): Promise<string> => {
-        const others = options.registryFile ? await otherRepos(options.registryFile, options.repoRoot) : [];
-        if (!others.includes(repoRoot))
+        const registry = options.registryFile;
+        const others = registry ? await otherRepos(registry, options.repoRoot) : [];
+        if (!registry || !others.includes(repoRoot))
             throw new RejectedError([{ path: 'repoRoot', message: `${repoRoot} is not another repo Planroom has run in` }], 404);
-        const viewer = await PlanViewer.open(repoRoot, changeId, true);
+        const viewer = await PlanViewer.open(repoRoot, changeId, true, await plansDirOf(registry, repoRoot));
         const key = JSON.stringify([repoRoot, changeId]);
         const page = elsewherePages.get(key);
         if (page) {
@@ -458,6 +473,16 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
                 served.delete(entry);
                 for (const stream of entry.streams) endStream(stream);
             }
+        },
+        swap(previous, next) {
+            let shown = false;
+            for (const entry of served) {
+                if (entry.plan !== previous) continue;
+                entry.plan = next;
+                shown ||= entry.streams.size > 0;
+                for (const stream of entry.streams) endStream(stream, { type: 'reload' });
+            }
+            return shown;
         },
         async close() {
             for (const entry of served) for (const stream of entry.streams) endStream(stream);

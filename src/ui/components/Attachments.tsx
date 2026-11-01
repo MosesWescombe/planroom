@@ -1,4 +1,4 @@
-import { type ClipboardEvent, useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { type Attachment, MAX_SNIPPET } from '../../shared/records';
 import { assetUrl, uploadAsset } from '../api';
 import { CodeViewer } from '../code/CodeViewer';
@@ -21,7 +21,7 @@ export interface Pastes {
     items: Attachment[];
     /** An image is still uploading, so the message cannot be sent yet. */
     uploading: boolean;
-    onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+    onPaste: (event: ClipboardEvent) => void;
     remove: (index: number) => void;
     clear: () => void;
 }
@@ -36,9 +36,9 @@ export function usePastes(): Pastes {
     const [items, setItems] = useState<Attachment[]>([]);
     const [uploads, setUploads] = useState(0);
     const add = (item: Attachment) => setItems((current) => [...current, item]);
-    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-        const text = event.clipboardData.getData('text/plain');
-        const images = [...event.clipboardData.files].filter((file) => file.type.startsWith('image/'));
+    const onPaste = (event: ClipboardEvent) => {
+        const text = event.clipboardData?.getData('text/plain') ?? '';
+        const images = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith('image/'));
         if (!text && images.length) {
             event.preventDefault();
             for (const image of images) {

@@ -7,9 +7,12 @@ import { ASK_ROOT, type PlanFormat, parseStateFile, planDir, REVIEW_ROOT, type S
 import { type ActivityEntry, activityEntry } from '../shared/view.js';
 import { appendLineSynced, isErrno, readIfExists, writeAtomic } from './fsutil.js';
 
-/** A plan's `.planroom` folder: in its OpenSpec change folder, or its folder under `agent-plans/`. */
-export function planroomDir(repoRoot: string, format: PlanFormat, changeId: string): string {
-    return join(repoRoot, planDir(format, changeId), '.planroom');
+/**
+ * A plan's `.planroom` folder: in its OpenSpec change folder, or its folder under the repo's Markdown plans folder,
+ * `plansRoot`, by default `agent-plans/`.
+ */
+export function planroomDir(repoRoot: string, format: PlanFormat, changeId: string, plansRoot?: string): string {
+    return join(repoRoot, planDir(format, changeId, plansRoot), '.planroom');
 }
 
 /** An ask's records folder, under `.planroom/asks/`. */

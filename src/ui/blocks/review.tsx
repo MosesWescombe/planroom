@@ -1,7 +1,7 @@
 import { type CSSProperties, type FormEvent, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { RISK_AREAS, type YourTakeConfig } from '../../shared/blocks';
-import { comparePoints, TAKE_TITLES, type TakeAnswer } from '../../shared/review';
+import { comparePoints, currentTake, TAKE_TITLES, type TakeAnswer } from '../../shared/review';
 import { LinkedText } from '../components/LinkedText';
 import { Markdown } from '../components/Markdown';
 import { ZoomFootContext } from '../components/ZoomView';
@@ -390,10 +390,12 @@ function Prompt({ config }: { config: YourTakeConfig }) {
 
 /**
  * `yourTake`: the reviewer commits to their own view before seeing the agent's. Answering logs the answer for the agent,
- * then shows the agent's view beside it; until then the agent's view is not on the page at all.
+ * then shows the agent's view beside it; until then the agent's view is not on the page at all. A card the agent
+ * changed since it was answered asks again, with the last answer above it.
  */
 export function YourTakeBlock({ id, config, placement }: BlockProps<'yourTake'>) {
-    const take = useSelector((view) => view.takes[id], deepEqual);
+    const last = useSelector((view) => view.takes[id], deepEqual);
+    const take = useSelector((view) => currentTake(view.takes[id], view.blocks[id]), deepEqual);
     const printing = usePrinting();
     const readOnly = useReadOnly();
     const { send } = useActions();
@@ -402,6 +404,11 @@ export function YourTakeBlock({ id, config, placement }: BlockProps<'yourTake'>)
     return (
         <div className={`take${take ? ' is-answered' : ''}`}>
             <span className="eyebrow">Your take · {TAKE_TITLES[config.kind]}</span>
+            {last && !take && (
+                <p className="small muted">
+                    The agent changed this card since you answered.{last.summary && ` Your last answer: ${last.summary}`}
+                </p>
+            )}
             {take ? (
                 <>
                     <Prompt config={config} />

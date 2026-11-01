@@ -3,7 +3,7 @@ import { commentThread, NOW, questionRecord, stateWith } from '../test/fixtures.
 import { askTranscript } from './ask.js';
 
 describe('the ask transcript', () => {
-    it('lists each card by group with its answer and comments, then the messages', () => {
+    it('lists each card by group with its answer and comments, then the comments around the cards and the messages', () => {
         const state = stateWith({
             questions: [
                 questionRecord('Q-1', 'open', {
@@ -33,6 +33,13 @@ describe('the ask transcript', () => {
                         { id: 'C-1.2', author: 'agent', text: 'B needs a migration.\nIt is slower.', at: NOW }
                     ],
                     status: 'resolved'
+                }),
+                commentThread('C-2', 'tab:interrogate', {
+                    anchor: {
+                        target: 'tab:interrogate',
+                        position: { start: 0, end: 7 },
+                        quote: { exact: 'Rollout', prefix: '', suffix: '' }
+                    }
                 }),
                 {
                     ...commentThread('M-1', 'unused'),
@@ -76,6 +83,12 @@ describe('the ask transcript', () => {
                 '### Q-4: Question Q-4',
                 '',
                 '_Closed: Moot after Q-2_',
+                '',
+                '## Comments on the page',
+                '',
+                '**Comment C-2 on "Rollout"**',
+                '',
+                '> **User:** Please change',
                 '',
                 '## Messages',
                 '',

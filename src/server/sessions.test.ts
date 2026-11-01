@@ -90,11 +90,25 @@ describe('opening a session', () => {
         expect(existsSync(join(repo, 'openspec', 'changes', 'Add Rate Limiting'))).toBe(false);
     });
 
-    it('no openspec/ directory: rejects without scaffolding one', async () => {
+    it('no openspec/ directory: opens a Markdown plan without scaffolding one', async () => {
         const repo = await tempRepo();
         await rm(join(repo, 'openspec'), { recursive: true });
         const cli = fakeCli(repo);
-        await expect(Session.open({ repoRoot: repo, changeId: CHANGE, cli })).rejects.toThrow(/openspec init/);
+        const { session } = await Session.open({ repoRoot: repo, changeId: CHANGE, cli });
+        await session.close();
+        expect(session.current.format).toBe('markdown');
+        expect(cli.created).toEqual([]);
+        expect(existsSync(join(repo, 'openspec'))).toBe(false);
+        expect(existsSync(join(repo, 'agent-plans', CHANGE, '.planroom', 'state.json'))).toBe(true);
+    });
+
+    it('no openspec/ directory: refuses an OpenSpec plan without scaffolding one', async () => {
+        const repo = await tempRepo();
+        await rm(join(repo, 'openspec'), { recursive: true });
+        const cli = fakeCli(repo);
+        const opening = Session.open({ repoRoot: repo, changeId: CHANGE, cli, format: 'openspec' });
+        await expect(opening).rejects.toThrow(RejectedError);
+        await expect(opening).rejects.toThrow(/openspec init/);
         expect(cli.created).toEqual([]);
     });
 

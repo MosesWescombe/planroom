@@ -72,6 +72,7 @@ export interface View
         | 'title'
         | 'kind'
         | 'format'
+        | 'plansRoot'
         | 'output'
         | 'createdAt'
         | 'questions'
@@ -121,6 +122,8 @@ export interface PlanSummary {
     changeId: string;
     title: string;
     format: PlanFormat;
+    /** A Markdown plan's plans folder, when the repo keeps them somewhere other than `agent-plans/`. */
+    plansRoot?: string;
     status: PlanStatus;
     /** When its state file last changed. */
     updatedAt: string;
@@ -153,7 +156,10 @@ export type MapField =
     | 'ticks';
 
 /** View fields replaced whole. */
-export type ScalarField = Exclude<keyof View, MapField | 'changeId' | 'kind' | 'format' | 'createdAt' | 'viewOnly' | 'elsewhere'>;
+export type ScalarField = Exclude<
+    keyof View,
+    MapField | 'changeId' | 'kind' | 'format' | 'plansRoot' | 'createdAt' | 'viewOnly' | 'elsewhere'
+>;
 
 export type MapPatch = { [K in MapField]: { field: K; id: string; value: View[K][string] | null } }[MapField];
 export type ScalarPatch = { [K in ScalarField]: { field: K; value: View[K] } }[ScalarField];
@@ -186,17 +192,20 @@ export function isMapPatch(patch: Patch): patch is MapPatch {
 export interface PlanListing {
     plans: PlanSummary[];
     elsewhere: RepoPlans[];
+    /** This repo's Markdown plans folder, when it is not `agent-plans/`. */
+    plansRoot?: string;
     /** Set by the standalone browser, which attaches no agent: every plan opens read-only. */
     readOnly: boolean;
 }
 
 /** Server-sent stream messages. */
 /**
- * `closed`: Planroom stopped serving this session, so the page must not reconnect. `browse`: the page is the plan
- * browser, showing no plan.
+ * `closed`: Planroom stopped serving this session, so the page must not reconnect. `reload`: the page now serves
+ * another session, which the page loads afresh. `browse`: the page is the plan browser, showing no plan.
  */
 export type StreamMessage =
     | { type: 'snapshot'; view: View }
     | { type: 'patch'; patches: Patch[] }
     | { type: 'closed' }
+    | { type: 'reload' }
     | { type: 'browse' };

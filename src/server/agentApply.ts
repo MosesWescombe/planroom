@@ -26,6 +26,9 @@ import {
     describeLeftover,
     HOUSEKEEPING_PAGE,
     indexFileOf,
+    type LineIndex,
+    type PageRecord,
+    type PieceSpec,
     pageKey,
     roundPages,
     sharedTicks,
@@ -47,7 +50,7 @@ import {
     TAKE_TITLES
 } from '../shared/review.js';
 import type { Revision } from '../shared/revisions.js';
-import type { SessionKind } from '../shared/state.js';
+import type { SessionKind, SessionState } from '../shared/state.js';
 import type { ActivityEntry } from '../shared/view.js';
 import { blockContentOf, type Draft, RejectedError } from './draft.js';
 
@@ -272,12 +275,12 @@ function checkKind(kind: SessionKind, events: AgentEvent[], preferences: ReviewP
 }
 
 /**
- * The ids of blocks on a published slide of any round, with the slide: each part of the deck is fixed once it is out,
- * the blocks that explain the impact map's areas with it.
+ * The ids of blocks on a published slide of an earlier round, with the slide: a round's deck is fixed once the next
+ * round starts, the blocks that explain its impact map's areas with it.
  */
-function publishedBlocks(draft: Draft): Map<string, string> {
+function earlierBlocks(draft: Draft): Map<string, string> {
     const owners = new Map<string, string>();
-    for (const round of draft.state.review?.rounds ?? []) {
+    for (const round of draft.state.review?.rounds.slice(0, -1) ?? []) {
         for (const slide of deckSlides(draft.state, round.n))
             if (slideShown(slide, round)) for (const id of blockIdsOf(slide)) owners.set(id, slide.id);
         const map = round.publishedAt ? impactMapOf(draft.state, round.n) : undefined;
@@ -286,57 +289,67 @@ function publishedBlocks(draft: Draft): Map<string, string> {
     return owners;
 }
 
-/** Refuse publishing while a block on `slides` or behind the impact map does not render. */
-function checkRenders(draft: Draft, blocks: { id: string; on: string }[], index: number, fail: Fail): void {
-    for (const { id, on } of blocks)
-        if (draft.state.blocks[id]?.problem)
-            fail(index, '.type', `block "${id}" on ${on} does not render; fix it before publishing`);
+/** The blocks of `blocks` that do not render, each named with where it sits. */
+function renderProblems(draft: Draft, blocks: { id: string; on: string }[]): string[] {
+    return blocks.flatMap(({ id, on }) =>
+        draft.state.blocks[id]?.problem ? [`block "${id}" on ${on} does not render; fix it first`] : []
+    );
 }
 
 /**
- * Publish the deck's first part, Why to What it might impact: every one of those chapters needs a slide, and What it
- * might impact the round's one impact map, every block its areas name sent. Trade-offs stays staged.
+ * Why the deck's first part, Why to What it might impact, cannot be out as it stands: every one of those chapters
+ * needs a slide, What it might impact the round's one impact map with every block its areas name sent, and every block
+ * on them must render.
  */
-function publishFirstPart(draft: Draft, round: RoundRecord, index: number, fail: Fail): void {
+function firstPartProblems(draft: Draft, round: RoundRecord): string[] {
     const slides = deckSlides(draft.state, round.n).filter((slide) => slide.chapter !== 'tradeoffs');
-    if (slides.length === 0) {
-        fail(index, '.type', 'there is nothing to publish: stage the slides with slide.upsert first');
-        return;
-    }
     const empty = CHAPTERS.filter((name) => name !== 'tradeoffs' && !slides.some((slide) => slide.chapter === name));
-    if (empty.length) {
-        fail(index, '.type', `every chapter needs a slide; ${empty.map((name) => CHAPTER_TITLES[name]).join(', ')} has none`);
-        return;
-    }
+    if (empty.length) return [`every chapter needs a slide; ${empty.map((name) => CHAPTER_TITLES[name]).join(', ')} has none`];
     const maps = slides.flatMap((slide) =>
         blockIdsOf(slide)
             .filter((id) => draft.state.blocks[id]?.type === 'impactMap')
             .map((id) => ({ id, slide }))
     );
     const map = impactMapOf(draft.state, round.n);
-    if (maps.length !== 1 || maps[0]!.slide.chapter !== 'touches' || !map) {
-        fail(
-            index,
-            '.type',
+    if (maps.length !== 1 || maps[0]!.slide.chapter !== 'touches' || !map)
+        return [
             maps.length > 1
                 ? `a deck has one impactMap; ${maps.map((entry) => entry.id).join(', ')} are on its slides`
                 : `${CHAPTER_TITLES.touches} needs one valid impactMap block on its slide: the areas the change might reach`
-        );
-        return;
-    }
-    for (const area of map.areas)
-        for (const id of area.blocks)
-            if (!Object.hasOwn(draft.state.blocks, id))
-                fail(index, '.type', `block "${id}" for the ${area.id} area has not been sent; send it with doc.block.upsert`);
-    checkRenders(
-        draft,
-        [
+        ];
+    return [
+        ...map.areas.flatMap((area) =>
+            area.blocks
+                .filter((id) => !Object.hasOwn(draft.state.blocks, id))
+                .map((id) => `block "${id}" for the ${area.id} area has not been sent; send it with doc.block.upsert`)
+        ),
+        ...renderProblems(draft, [
             ...slides.flatMap((slide) => blockIdsOf(slide).map((id) => ({ id, on: `slide ${slide.id}` }))),
             ...map.areas.flatMap((area) => area.blocks.map((id) => ({ id, on: `the ${area.id} area` })))
-        ],
-        index,
-        fail
+        ])
+    ];
+}
+
+/** Why Trade-offs cannot be out as it stands: it needs a slide, and every block on its slides must render. */
+function tradeoffsProblems(draft: Draft, round: RoundRecord): string[] {
+    const slides = deckSlides(draft.state, round.n).filter((slide) => slide.chapter === 'tradeoffs');
+    if (slides.length === 0) return ['Trade-offs needs a slide: stage one with slide.upsert'];
+    return renderProblems(
+        draft,
+        slides.flatMap((slide) => blockIdsOf(slide).map((id) => ({ id, on: `slide ${slide.id}` })))
     );
+}
+
+/** Publish the deck's first part, Why to What it might impact, once nothing keeps it back. Trade-offs stays staged. */
+function publishFirstPart(draft: Draft, round: RoundRecord, index: number, fail: Fail): void {
+    const slides = deckSlides(draft.state, round.n).filter((slide) => slide.chapter !== 'tradeoffs');
+    if (slides.length === 0) {
+        fail(index, '.type', 'there is nothing to publish: stage the slides with slide.upsert first');
+        return;
+    }
+    const problems = firstPartProblems(draft, round);
+    for (const problem of problems) fail(index, '.type', problem);
+    if (problems.length) return;
     draft.updateRound(round.n, (current) => ({ ...current, publishedAt: draft.now }));
     draft.note({
         title: 'Published the walkthrough',
@@ -345,25 +358,73 @@ function publishFirstPart(draft: Draft, round: RoundRecord, index: number, fail:
     });
 }
 
-/** Publish Trade-offs, once the reviewer has sent their concerns on the impact map or skipped the walkthrough. */
+/**
+ * Publish Trade-offs, once the reviewer has sent their concerns on the impact map, even if a change to the map has
+ * reopened them since, or skipped the walkthrough.
+ */
 function publishTradeoffs(draft: Draft, round: RoundRecord, index: number, fail: Fail): void {
-    if (!round.impact?.sentAt && !round.walkthrough) {
+    if (!round.impact?.sentAt && !round.impact?.reopenedAt && !round.walkthrough) {
         fail(index, '.type', 'Trade-offs waits for the reviewer: publish it after their impact.send event');
         return;
     }
+    const problems = tradeoffsProblems(draft, round);
+    for (const problem of problems) fail(index, '.type', problem);
+    if (problems.length) return;
     const slides = deckSlides(draft.state, round.n).filter((slide) => slide.chapter === 'tradeoffs');
-    if (slides.length === 0) {
-        fail(index, '.type', 'stage the Trade-offs slides with slide.upsert first');
-        return;
-    }
-    checkRenders(
-        draft,
-        slides.flatMap((slide) => blockIdsOf(slide).map((id) => ({ id, on: `slide ${slide.id}` }))),
-        index,
-        fail
-    );
     draft.updateRound(round.n, (current) => ({ ...current, tradeoffsAt: draft.now }));
     draft.note({ title: 'Published Trade-offs', detail: `${slides.length} slides`, kind: 'question' });
+}
+
+/** The deck as a batch found it: its slides and blocks, and the round's publishing then. */
+interface DeckBefore {
+    slides: SessionState['slides'];
+    blocks: SessionState['blocks'];
+    round: Pick<RoundRecord, 'publishedAt' | 'tradeoffsAt'>;
+}
+
+/**
+ * After a batch that changed the round's deck: refuse it if a published part lost what publishing it needed, else
+ * mark each slide it added to or changed in a part already out, its blocks and its impact map's included, until the
+ * reviewer sees it. A changed impact map drops the concerns of areas it no longer has and takes them again.
+ */
+function reviseDeck(draft: Draft, before: DeckBefore, index: number, fail: Fail): void {
+    const round = currentRound(draft.state.review!);
+    const problems = [
+        ...(round.publishedAt ? firstPartProblems(draft, round) : []),
+        ...(round.tradeoffsAt ? tradeoffsProblems(draft, round) : [])
+    ];
+    for (const problem of problems) fail(index, '', `the published deck would break: ${problem}`);
+    if (problems.length) return;
+    const changed = new Set(draft.changedBlocks());
+    const map = impactMapOf(draft.state, round.n);
+    const mapChanged = map !== undefined && (changed.has(map.blockId) || impactMapOf(before, round.n)?.blockId !== map.blockId);
+    for (const slide of deckSlides(draft.state, round.n)) {
+        // A part this batch publishes shows its slides for the first time, which is no change.
+        if (!slideShown(slide, before.round)) continue;
+        const old = ownRecord(before.slides, slide.id);
+        const shown = old !== undefined && old.round === round.n && slideShown(old, before.round);
+        const touched =
+            old !== slide ||
+            blockIdsOf(slide).some((id) => changed.has(id)) ||
+            (slide.id === map?.slideId && (mapChanged || map.areas.some((area) => area.blocks.some((id) => changed.has(id)))));
+        if (touched)
+            draft.note({
+                title: shown ? 'Changed a slide' : 'Added a slide',
+                detail: slide.title,
+                ref: `slide:${slide.id}`,
+                kind: 'attention'
+            });
+    }
+    const impact = round.impact;
+    if (mapChanged && impact) {
+        const areas = new Set(map.areas.map((area) => area.id));
+        const concerns = Object.fromEntries(Object.entries(impact.concerns).filter(([id]) => areas.has(id)));
+        const reopenedAt = impact.sentAt ? draft.now : impact.reopenedAt;
+        draft.updateRound(round.n, (current) => ({
+            ...current,
+            impact: { concerns, added: impact.added, ...(reopenedAt ? { reopenedAt } : {}) }
+        }));
+    }
 }
 
 /** Where this batch's review events sit, for problems found once the whole batch has applied. */
@@ -380,7 +441,10 @@ function slideContentOf(slide: SlideContent): SlideContent {
     return { id, chapter, order, title, blocks };
 }
 
-/** Apply one review event: stage a slide, report progress, publish the deck, or write a finding, the summary or a label. */
+/**
+ * Apply one review event: stage, change or remove a slide, report progress, publish the deck, write a finding, the
+ * summary or a label, or lay out or write the read-through.
+ */
 function applyReviewEvent(
     draft: Draft,
     event: Extract<
@@ -388,6 +452,7 @@ function applyReviewEvent(
         {
             type:
                 | 'slide.upsert'
+                | 'slide.remove'
                 | 'deck.progress'
                 | 'deck.publish'
                 | 'item.upsert'
@@ -438,22 +503,23 @@ function applyReviewEvent(
                 );
                 return;
             }
-            if (round.tradeoffsAt) {
-                fail(index, '.type', `round ${round.n}'s deck is published, so it is fixed for the round`);
-                return;
-            }
-            if (round.publishedAt && (slide.chapter !== 'tradeoffs' || (existing && slideShown(existing, round)))) {
-                fail(
-                    index,
-                    '.slide.chapter',
-                    `round ${round.n}'s deck is published up to What it might impact; only Trade-offs slides can still be staged`
-                );
-                return;
-            }
+            if (posted()) return;
             batch.slideEvents.set(slide.id, index);
             const changed = !existing || !isEqual(slideContentOf(existing), slideContentOf(slide));
             if (changed) draft.putSlide({ ...slide, round: round.n, version: (existing?.version ?? 0) + 1, updatedAt: now });
             applied(slide.id, changed, draft.state.slides[slide.id]?.version);
+            return;
+        }
+        case 'slide.remove': {
+            if (noDeck() || posted()) return;
+            const existing = ownRecord(draft.state.slides, event.id);
+            if (!existing || existing.round !== round.n) {
+                fail(index, '.id', `round ${round.n} has no slide ${event.id}`);
+                return;
+            }
+            draft.removeSlide(event.id);
+            if (slideShown(existing, round)) draft.note({ title: 'Removed a slide', detail: existing.title, kind: 'attention' });
+            applied(event.id, true);
             return;
         }
         case 'deck.progress': {
@@ -682,7 +748,7 @@ function untickAsked(draft: Draft, thread: ThreadRecord): void {
 }
 
 /** Why the round cannot take a read-through layout now, if it cannot. */
-function outlineRefusal(draft: Draft, round: RoundRecord): string | undefined {
+function outlineRefusal(round: RoundRecord): string | undefined {
     if (round.postedAt) return `round ${round.n} is posted; it takes no more read.outline`;
     if (!hasReadthrough(round.technique))
         return round.technique
@@ -691,15 +757,13 @@ function outlineRefusal(draft: Draft, round: RoundRecord): string | undefined {
     if (round.technique === 'both' && !round.publishedAt)
         return 'the reviewer chose the deck first: publish it, then lay out the read-through';
     if (!round.index) return `round ${round.n} has no line index yet; reopen the review`;
-    if (roundPages(draft.state, round.n).some((page) => page.content))
-        return 'the read-through is open with pages written; add to a page with read.page.add instead';
     return undefined;
 }
 
 /**
  * Lay out the round's read-through, once the reviewer chose it and, for both, the deck is out. Refused, naming every
  * changed line left over, until each added and removed line is in a piece or on Housekeeping, which the server fills
- * by its own rules. A layout can be replaced until a page of it is written.
+ * by its own rules. A layout can be replaced at any time: see `restructure`.
  */
 function layOutReadthrough(
     draft: Draft,
@@ -708,7 +772,7 @@ function layOutReadthrough(
     index: number,
     fail: Fail
 ): void {
-    const refusal = outlineRefusal(draft, round);
+    const refusal = outlineRefusal(round);
     const lines = round.index;
     if (refusal || !lines) {
         fail(index, '.type', refusal ?? 'there is no line index');
@@ -759,12 +823,88 @@ function layOutReadthrough(
         );
         return;
     }
-    for (const page of existing) draft.removePage(pageKey(round.n, page.id));
+    restructure(draft, round, lines, existing, pages);
+    draft.updateRound(round.n, (current) => ({
+        ...current,
+        readthrough: { openedAt: current.readthrough?.openedAt ?? draft.now }
+    }));
+}
+
+/** The fields of a piece that say which changed lines it covers. */
+function pieceLinesSpec({ file, lines, oldLines, repeat, from }: PieceSpec): Partial<PieceSpec> {
+    return { file, lines, oldLines, repeat, from };
+}
+
+/**
+ * Replace the round's pages with `pages`. A page kept by its id keeps its words, each piece's note and test case
+ * follow the piece by its id from whichever page it was on, and an addition under a piece the page lost moves to the
+ * page's end; a new page is coming until written, and a page left out goes, its threads detached. A piece removed or
+ * whose lines changed is unticked, with every piece sharing a changed line with it on the pages as they were.
+ */
+function restructure(
+    draft: Draft,
+    round: RoundRecord,
+    lines: LineIndex,
+    existing: PageRecord[],
+    pages: Extract<AgentEvent, { type: 'read.outline' }>['pages']
+): void {
     const now = draft.now;
-    for (const page of pages)
-        draft.putPage(pageKey(round.n, page.id), { ...page, round: round.n, added: [], version: 1, updatedAt: now });
-    draft.updateRound(round.n, (current) => ({ ...current, readthrough: { openedAt: current.readthrough?.openedAt ?? now } }));
-    draft.note({ title: 'Opened the read-through', detail: `${pages.length} pages coming`, kind: 'question' });
+    const laidOut = new Map(pages.flatMap((page) => page.pieces.map((piece) => [piece.id, piece] as const)));
+    const dropped = existing
+        .flatMap((page) => page.pieces)
+        .filter((piece) => {
+            const next = laidOut.get(piece.id);
+            return !next || !isEqual(pieceLinesSpec(piece), pieceLinesSpec(next));
+        });
+    const own = new Set(dropped.map((piece) => tickKey(round.n, piece.id)));
+    const shared = new Set(sharedTicks(draft.state, lines, round.n, dropped));
+    const unticked = Object.keys(draft.state.ticks).filter((tick) => own.has(tick.replace(/#\d+$/, '')) || shared.has(tick));
+    const notes = new Map(existing.flatMap((page) => (page.content?.pieces ?? []).map((note) => [note.id, note] as const)));
+    const tests = new Map(existing.flatMap((page) => (page.content?.tests ?? []).map((test) => [test.piece, test] as const)));
+    const kept = new Set(pages.map((page) => page.id));
+    for (const page of existing) if (!kept.has(page.id)) draft.removePage(pageKey(round.n, page.id));
+    for (const page of pages) {
+        const key = pageKey(round.n, page.id);
+        const before = ownRecord(draft.state.pages, key);
+        const ids = new Set(page.pieces.map((piece) => piece.id));
+        let content: PageRecord['content'];
+        if (before?.content) {
+            const { tests: _tests, ...words } = before.content;
+            const cases = page.kind === 'tests' ? page.pieces.flatMap((piece) => tests.get(piece.id) ?? []) : [];
+            content = {
+                ...words,
+                pieces: page.pieces.flatMap((piece) => notes.get(piece.id) ?? []),
+                ...(cases.length ? { tests: cases } : {})
+            };
+        }
+        const added = (before?.added ?? []).map(({ piece, ...addition }) =>
+            piece === undefined || !ids.has(piece) ? addition : { ...addition, piece }
+        );
+        draft.putPage(key, {
+            ...page,
+            round: round.n,
+            ...(content ? { content } : {}),
+            added,
+            version: (before?.version ?? 0) + 1,
+            updatedAt: now
+        });
+    }
+    for (const tick of unticked) draft.removeTick(tick);
+    if (!round.readthrough) {
+        draft.note({ title: 'Opened the read-through', detail: `${pages.length} pages coming`, kind: 'question' });
+        return;
+    }
+    const coming = pages.filter((page) => !ownRecord(draft.state.pages, pageKey(round.n, page.id))?.content).length;
+    const reread = new Set(unticked.map((tick) => tick.replace(/#\d+$/, ''))).size;
+    draft.note({
+        title: 'Restructured the read-through',
+        detail: [
+            `${pages.length} pages`,
+            ...(coming ? [`${coming} coming`] : []),
+            ...(reread ? [`${reread} to read again`] : [])
+        ].join(', '),
+        kind: 'attention'
+    });
 }
 
 /** The node ids a finding can pin to on a diagram block: flow and architecture node ids, sequence actors. */
@@ -894,7 +1034,13 @@ export function applyAgentBatch(
     const questionsBefore = draft.state.questions;
     const slideEvents = new Map<string, number>();
     const itemEvents = new Map<string, number>();
-    const fixed = publishedBlocks(draft);
+    const fixed = earlierBlocks(draft);
+    const review = draft.state.review;
+    const deckBefore: DeckBefore | undefined = review
+        ? { slides: draft.state.slides, blocks: blocksBefore, round: currentRound(review) }
+        : undefined;
+    /** The last event of the batch that changed the deck: a slide or a block. */
+    let deckIndex: number | undefined;
     let validate = false;
 
     // Once the user finishes Phase 1, even mid-batch, the question set is closed: rejecting a new question is how
@@ -1096,10 +1242,11 @@ export function applyAgentBatch(
                     fail(
                         index,
                         '.block.id',
-                        `block "${envelope.id}" is on slide ${slide}, published, so it cannot change this round`
+                        `block "${envelope.id}" is on slide ${slide} of an earlier round, so it cannot change`
                     );
                     break;
                 }
+                if (changed) deckIndex = index;
                 const check = checkBlockConfig(envelope.type, envelope.config);
                 if (!check.ok) result.blockProblems.push({ block: envelope.id, reason: check.reason, issues: check.issues });
                 if (changed) {
@@ -1241,6 +1388,10 @@ export function applyAgentBatch(
                 break;
             }
             case 'slide.upsert':
+            case 'slide.remove':
+                deckIndex = index;
+                applyReviewEvent(draft, event, index, fail, result, { slideEvents, itemEvents }, quoted);
+                break;
             case 'deck.progress':
             case 'deck.publish':
             case 'item.upsert':
@@ -1258,6 +1409,7 @@ export function applyAgentBatch(
     });
 
     if (draft.state.kind === 'review') checkReviewIntegrity(draft, { slideEvents, itemEvents }, fail);
+    if (deckBefore && deckIndex !== undefined) reviseDeck(draft, deckBefore, deckIndex, fail);
 
     // Referential integrity over the batch's end state: every listed block exists and sits once, in one section.
     for (const problem of listingProblems(draft.state, draft.changedSections())) {
@@ -1303,7 +1455,7 @@ export function applyAgentBatch(
         draft.putThread({ ...thread, messages });
     }
 
-    // A review's blocks live on its slides, which are fixed once published, so they keep no write-up revisions.
+    // A review's blocks live on its slides, which keep no write-up revisions.
     const changes = draft.state.kind === 'review' ? [] : draft.revisionChanges();
     let revision: Revision | undefined;
     if (changes.length) {

@@ -22,7 +22,8 @@ import { BlockView } from '../blocks/Block';
 import { commentOnWhole } from '../comments/composer';
 import { CheckIcon, DashIcon, MergeIcon, WarningIcon } from '../components/icons';
 import { LinkedText, QuestionLink } from '../components/LinkedText';
-import { Markdown } from '../components/Markdown';
+import { InlineMarkdown, Markdown } from '../components/Markdown';
+import { MarkdownEditor } from '../components/MarkdownEditor';
 import { ThreadDialog, ThreadRow } from '../components/Thread';
 import { relativeTime } from '../format';
 import { useNow } from '../hooks';
@@ -245,18 +246,22 @@ function AssumptionInput({
             </div>
             {correcting && (!disabled || draft.text) && (
                 <>
-                    <label className="visually-hidden" htmlFor={`answer-${question.id}-correction`}>
+                    <label
+                        className="visually-hidden"
+                        id={`answer-${question.id}-correction-label`}
+                        htmlFor={`answer-${question.id}-correction`}
+                    >
                         What is actually the case
                     </label>
-                    <textarea
+                    <MarkdownEditor
                         id={`answer-${question.id}-correction`}
-                        className="grow-text"
+                        labelId={`answer-${question.id}-correction-label`}
                         rows={2}
                         placeholder="What is actually the case?"
                         value={draft.text ?? ''}
                         autoFocus={!draft.text}
                         disabled={disabled}
-                        onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+                        onChange={(text) => setDraft({ ...draft, text })}
                     />
                 </>
             )}
@@ -297,17 +302,17 @@ function Inputs({
     if (question.input === 'freeform') {
         return (
             <div className="q-inputs">
-                <label className="visually-hidden" htmlFor={`${name}-text`}>
+                <label className="visually-hidden" id={`${name}-text-label`} htmlFor={`${name}-text`}>
                     Your answer
                 </label>
-                <textarea
+                <MarkdownEditor
                     id={`${name}-text`}
-                    className="grow-text"
+                    labelId={`${name}-text-label`}
                     rows={3}
                     placeholder="Write your answer…"
                     value={draft.text ?? ''}
                     disabled={disabled}
-                    onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+                    onChange={(text) => setDraft({ ...draft, text })}
                 />
             </div>
         );
@@ -342,23 +347,17 @@ function Inputs({
                 })}
                 {question.allowOther && (!disabled || draft.text) && (
                     <>
-                        <label className="visually-hidden" htmlFor={`${name}-other`}>
+                        <label className="visually-hidden" id={`${name}-other-label`} htmlFor={`${name}-other`}>
                             Your own answer
                         </label>
-                        <textarea
+                        <MarkdownEditor
                             id={`${name}-other`}
-                            className="grow-text"
+                            labelId={`${name}-other-label`}
                             rows={1}
                             placeholder="Or write your own answer…"
                             value={draft.text ?? ''}
                             disabled={disabled}
-                            onChange={(event) =>
-                                setDraft({
-                                    ...draft,
-                                    text: event.target.value,
-                                    choice: event.target.value.trim() ? undefined : draft.choice
-                                })
-                            }
+                            onChange={(text) => setDraft({ ...draft, text, choice: text.trim() ? undefined : draft.choice })}
                         />
                     </>
                 )}
@@ -412,18 +411,18 @@ function Inputs({
             </div>
             {(writing || (multi && question.allowOther)) && (!disabled || draft.text) && (
                 <>
-                    <label className="visually-hidden" htmlFor={`${name}-own`}>
+                    <label className="visually-hidden" id={`${name}-own-label`} htmlFor={`${name}-own`}>
                         Your own answer
                     </label>
-                    <textarea
+                    <MarkdownEditor
                         id={`${name}-own`}
-                        className="grow-text"
+                        labelId={`${name}-own-label`}
                         rows={1}
                         placeholder={multi ? 'Anything else? (optional)' : 'Your own answer…'}
                         value={draft.text ?? ''}
                         autoFocus={writing && !draft.text}
                         disabled={disabled}
-                        onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+                        onChange={(text) => setDraft({ ...draft, text })}
                     />
                 </>
             )}
@@ -445,30 +444,35 @@ function Note({
 }) {
     return (
         <div className="note-field">
-            <label htmlFor={`note-${id}`}>Add a note (optional)</label>
-            <textarea
+            <label id={`note-${id}-label`} htmlFor={`note-${id}`}>
+                Add a note (optional)
+            </label>
+            <MarkdownEditor
                 id={`note-${id}`}
+                labelId={`note-${id}-label`}
                 rows={2}
                 value={draft.note ?? ''}
                 disabled={disabled}
-                onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                onChange={(note) => setDraft({ ...draft, note })}
             />
         </div>
     );
 }
 
-/** "You: Plans table + per-key override. Overrides need an expiry date." */
+/** "You: Plans table + per-key override. Overrides need an expiry date.", with what the user wrote rendered as Markdown. */
 function YourAnswer({ question, answer, label = 'You:' }: { question: QuestionRecord; answer: Answer; label?: string }) {
     return (
-        <p className="your-answer">
-            <span className="muted">{label}</span> {describeAnswer(question, answer)}
+        <div className="your-answer">
+            <span className="muted">{label}</span> <InlineMarkdown source={describeAnswer(question, answer)} />
             {answer.note && (
                 <>
                     {'. '}
-                    <em>{answer.note}</em>
+                    <em>
+                        <InlineMarkdown source={answer.note} />
+                    </em>
                 </>
             )}
-        </p>
+        </div>
     );
 }
 
@@ -508,7 +512,7 @@ function Info({ question, slot }: { question: QuestionRecord; slot: Clarificatio
                     <button
                         type="button"
                         className="button-text"
-                        onClick={() => commentOnWhole(`question:${question.id}`, 'question')}
+                        onClick={(event) => commentOnWhole(`question:${question.id}`, 'question', event.currentTarget)}
                     >
                         Ask to clarify
                     </button>
@@ -638,7 +642,9 @@ function Conflict({ question, slot }: { question: QuestionRecord; slot: Clarific
                     {other?.answer ? (
                         <>
                             {', where you answered '}
-                            <strong>{describeAnswer(other, other.answer)}</strong>
+                            <strong>
+                                <InlineMarkdown source={describeAnswer(other, other.answer)} />
+                            </strong>
                         </>
                     ) : null}
                     . <LinkedText text={question.conflict?.reason ?? ''} /> Which should win?
@@ -782,11 +788,9 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
     const saveDraft = () => {
         if (canSave && !busy && problem === null) save(toAnswer(draft));
     };
-    // The send key saves from any of the card's text boxes. A box that handled the key itself, like a
-    // clarification reply, has already prevented it.
+    // The send key saves from any of the card's text boxes, caught on its way down, before the box types a new line.
     const saveOnKey = (event: KeyboardEvent<HTMLElement>) => {
-        if (event.defaultPrevented || !(event.target instanceof HTMLTextAreaElement)) return;
-        sendOnKey(event, saveDraft);
+        if (event.target instanceof Element && event.target.closest('.markdown-editor')) sendOnKey(event, saveDraft);
     };
 
     return withClarifications(
@@ -800,7 +804,7 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
             aria-labelledby={`q-title-${question.id}`}
             data-scroll-anchor
             onDoubleClick={viewing && !readOnly ? editOnDoubleClick : undefined}
-            onKeyDown={readOnly ? undefined : saveOnKey}
+            onKeyDownCapture={readOnly ? undefined : saveOnKey}
         >
             <div className="q-head">
                 <div className="q-head-start">
@@ -857,7 +861,7 @@ export const QuestionCard = memo(function QuestionCard({ id }: { id: string }) {
                         <button
                             type="button"
                             className="button-text"
-                            onClick={() => commentOnWhole(`question:${question.id}`, 'question')}
+                            onClick={(event) => commentOnWhole(`question:${question.id}`, 'question', event.currentTarget)}
                         >
                             Ask to clarify
                         </button>

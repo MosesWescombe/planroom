@@ -19,7 +19,7 @@ import {
     type SearchResult
 } from '../shared/review.js';
 import { type Revision, revisionMeta } from '../shared/revisions.js';
-import { emptyState, type PlanFormat, planDir, planFormat, type SessionState } from '../shared/state.js';
+import { emptyState, PLAN_ROOTS, type PlanFormat, planDir, planFormat, type SessionState } from '../shared/state.js';
 import type { ActivityEntry, AgentStatus, Patch, ProposalView, View } from '../shared/view.js';
 import { applyAgentBatch, type BatchResult, parseBatch } from './agentApply.js';
 import { checkMarkdownPlan, scanChangeFolder, watchChangeFolder } from './changeFolder.js';
@@ -54,6 +54,8 @@ export interface OpenOptions {
     title?: string;
     /** The format for a new plan. A plan that exists keeps its own, and a different one here is refused. */
     format?: PlanFormat;
+    /** The repo's folder for Markdown plans, relative to it. Unset: `agent-plans`. */
+    plansRoot?: string;
     cli: OpenSpecRunner;
     /** Returns the current time; tests pass a fixed clock. */
     now?: () => Date;
@@ -92,16 +94,17 @@ function checkId(id: string, path: string, example: string): void {
 const FORMAT_NAME: Record<PlanFormat, string> = { openspec: 'an OpenSpec change', markdown: 'a Markdown plan' };
 
 /**
- * The format to open `changeId` in: the one its plan was created in, else `requested`, else OpenSpec. Refuses a
- * requested format the existing plan was not created in, and an id with a plan in both formats' folders.
+ * The format to open `changeId` in: the one its plan was created in, else `requested`, else OpenSpec in a repo with an
+ * `openspec/` directory and Markdown in one without. Refuses a requested format the existing plan was not created in,
+ * and an id with a plan in both formats' folders. `plansRoot` is the repo's Markdown plans folder.
  */
-export function formatFor(repoRoot: string, changeId: string, requested: PlanFormat | undefined): PlanFormat {
+export function formatFor(repoRoot: string, changeId: string, requested: PlanFormat | undefined, plansRoot?: string): PlanFormat {
     const planned = planFormat.options.filter((format) =>
-        existsSync(join(planroomDir(repoRoot, format, changeId), 'state.json'))
+        existsSync(join(planroomDir(repoRoot, format, changeId, plansRoot), 'state.json'))
     );
     const [existing] = planned;
     if (planned.length > 1) {
-        const where = planned.map((format) => `${planDir(format, changeId)}/`).join(' and ');
+        const where = planned.map((format) => `${planDir(format, changeId, plansRoot)}/`).join(' and ');
         throw new RejectedError([{ path: 'changeId', message: `${changeId} has a plan in both ${where}: move one aside` }], 409);
     }
     if (existing && requested && requested !== existing) {
@@ -109,13 +112,51 @@ export function formatFor(repoRoot: string, changeId: string, requested: PlanFor
             [
                 {
                     path: 'format',
-                    message: `${changeId} is already planned as ${FORMAT_NAME[existing]} in ${planDir(existing, changeId)}/: open it without a format, or choose another change id`
+                    message: `${changeId} is already planned as ${FORMAT_NAME[existing]} in ${planDir(existing, changeId, plansRoot)}/: open it without a format, or choose another change id`
                 }
             ],
             409
         );
     }
-    return existing ?? requested ?? 'openspec';
+    return existing ?? requested ?? (existsSync(join(repoRoot, 'openspec')) ? 'openspec' : 'markdown');
+}
+
+/**
+ * The Markdown plans folder to open `changeId` with for the agent: `plansDir`, the folder it passed for the repo, else
+ * `remembered`, the repo's on this machine, else the default. Refuses `plansDir` for an OpenSpec plan, and a new
+ * Markdown plan when the repo has neither and no `agent-plans/`, so the agent asks the user where its plans go.
+ */
+export function plansRootFor(
+    repoRoot: string,
+    changeId: string,
+    format: PlanFormat | undefined,
+    plansDir: string | undefined,
+    remembered: string | undefined
+): string | undefined {
+    const plansRoot = plansDir ?? remembered;
+    const opens = formatFor(repoRoot, changeId, format, plansRoot);
+    if (plansDir !== undefined && opens !== 'markdown')
+        throw new RejectedError(
+            [
+                {
+                    path: 'plansDir',
+                    message: `${changeId} opens as ${FORMAT_NAME[opens]}, which lives in ${PLAN_ROOTS.openspec}/: plansDir is for Markdown plans, so leave it out or open a new plan with format "markdown"`
+                }
+            ],
+            400
+        );
+    // With no plans folder chosen and no agent-plans/, the plan cannot exist yet: a new one asks first.
+    if (opens === 'markdown' && plansRoot === undefined && !existsSync(join(repoRoot, PLAN_ROOTS.markdown)))
+        throw new RejectedError(
+            [
+                {
+                    path: 'plansDir',
+                    message: `${repoRoot} has no ${PLAN_ROOTS.markdown}/ folder and no folder for Markdown plans remembered: ask the user where this repo's Markdown plans should go (${PLAN_ROOTS.markdown}/ is the default), then call planroom_open again with plansDir set to that folder, relative to repoRoot. Nothing was created`
+                }
+            ],
+            400
+        );
+    return plansRoot;
 }
 
 /** The fields a page view adds to the persisted state, which the server works out live. */
@@ -140,6 +181,7 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         title,
         kind,
         format,
+        plansRoot,
         output,
         createdAt,
         questions,
@@ -168,6 +210,7 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         title,
         kind,
         format,
+        ...(plansRoot !== undefined ? { plansRoot } : {}),
         ...(output !== undefined ? { output } : {}),
         createdAt,
         questions,
@@ -256,28 +299,35 @@ export class Session {
      * Open or resume the session for a change: reject a non-kebab-case id before
      * touching anything, scaffold an OpenSpec change with `openspec new change` when it
      * does not exist, take the lock, and restore the persisted state. A Markdown plan
-     * lives in `agent-plans/<id>/` instead, which needs no scaffold. Its `.planroom/`
+     * lives in `<plansRoot>/<id>/` instead, which needs no scaffold. Its `.planroom/`
      * gets a `.gitignore` for the files that stay local.
      */
     static async open(options: OpenOptions): Promise<{ session: Session; resumed: boolean }> {
-        const { repoRoot, changeId, cli } = options;
+        const { repoRoot, changeId, plansRoot, cli } = options;
         checkId(changeId, 'changeId', 'add-api-rate-limiting');
+        const format = formatFor(repoRoot, changeId, options.format, plansRoot);
         // Otherwise `openspec new change` would quietly create an OpenSpec root here.
-        if (!existsSync(join(repoRoot, 'openspec')))
-            throw new Error(
-                `No openspec/ directory in ${repoRoot} or above it. Planroom plans OpenSpec changes: run \`openspec init\` first.`
+        if (format === 'openspec' && !existsSync(join(repoRoot, 'openspec')))
+            throw new RejectedError(
+                [
+                    {
+                        path: 'format',
+                        message: `No openspec/ directory in ${repoRoot} or above it: plan in markdown, or run \`openspec init\` first`
+                    }
+                ],
+                400
             );
-        const format = formatFor(repoRoot, changeId, options.format);
-        const changeDir = join(repoRoot, planDir(format, changeId));
+        const changeDir = join(repoRoot, planDir(format, changeId, plansRoot));
         if (format === 'openspec' && !existsSync(changeDir)) {
             await cli.newChange(changeId);
             if (!existsSync(changeDir)) throw new Error(`openspec new change did not create ${changeDir}`);
         }
-        const dir = planroomDir(repoRoot, format, changeId);
+        const dir = planroomDir(repoRoot, format, changeId, plansRoot);
         await ignoreInGit(dir, LOCAL_FILES);
-        return Session.start(options, changeDir, new SessionStore(dir), (now) =>
-            emptyState(changeId, options.title?.trim() || changeId, now, format)
-        );
+        return Session.start(options, changeDir, new SessionStore(dir), (now) => ({
+            ...emptyState(changeId, options.title?.trim() || changeId, now, format),
+            ...(format === 'markdown' && plansRoot && plansRoot !== PLAN_ROOTS.markdown ? { plansRoot } : {})
+        }));
     }
 
     /**

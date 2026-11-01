@@ -1,12 +1,14 @@
 import { diffArrays } from 'diff';
 import clamp from 'lodash/clamp';
 import groupBy from 'lodash/groupBy';
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import sortBy from 'lodash/sortBy';
+import { memo, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { describeAnchor } from '../../shared/anchors';
 import type { ContextBlock } from '../../shared/questions';
 import {
     describePlace,
+    describeSpan,
     HOUSEKEEPING_PAGE,
     HOUSEKEEPING_TITLES,
     housekeepingEntries,
@@ -19,8 +21,6 @@ import {
     pagesOfFile,
     parseRange,
     type RelatedCode,
-    readPieces,
-    readProgress,
     repeatOf,
     roundPages,
     tickKey
@@ -45,7 +45,7 @@ import { resolveLanguage } from '../code/highlight';
 import { commentOnWhole, openComposer } from '../comments/composer';
 import { MAX_QUOTE, place, type SelectionBox } from '../comments/selection';
 import { CheckIcon, ChevronIcon, CommentIcon, VsCodeIcon } from '../components/icons';
-import { Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
+import { BitbucketMarkdown, Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
 import { AgentNow } from '../components/SidePanel';
@@ -57,8 +57,8 @@ import { deepEqual, useSelector } from '../store';
 import { quietly, useActions, useBusy, useUiState } from '../ui';
 import { CommentEditor } from './BitbucketComment';
 import { buildTree, commonRoot, compactFolders, type Folder } from './FileTreeSelect';
-import { FindingCards, findingsOnRow, underRow } from './Findings';
-import { useIsCurrentRound, useShownRound } from './hooks';
+import { FindingCards, findingsOnRow, onWholeFile, underRow } from './Findings';
+import { readSet, roundProgress, useIsCurrentRound, useShownRound } from './hooks';
 import { useReadKeys, useSpaceKey } from './readKeys';
 
 /**
@@ -202,18 +202,6 @@ function useReading(round: RoundRecord, onName: Reading['onName']): Reading {
     return { round, editable: current && !readOnly, onName, ...settings };
 }
 
-/** Each round's read pieces by the ticks they were worked out from, so every piece's selector shares one pass. */
-const readCache = new WeakMap<View['ticks'], { pages: View['pages']; round: RoundRecord; read: ReadonlySet<string> }>();
-
-/** The ids of the round's read pieces, code on several pages read on each at once. */
-function readSet(view: View, round: RoundRecord): ReadonlySet<string> {
-    const cached = readCache.get(view.ticks);
-    if (cached?.pages === view.pages && cached.round === round) return cached.read;
-    const read = readPieces(view, round.index, round.n);
-    readCache.set(view.ticks, { pages: view.pages, round, read });
-    return read;
-}
-
 /**
  * Whether `piece` shows as read with its Read toggle pressed: its own tick, though a repeat's differing place is still
  * to open, or its code read on other pages.
@@ -242,6 +230,12 @@ function useTick() {
             quietly(send({ type: 'read.tick', piece, read, how, ...(place !== undefined ? { place } : {}) })),
         [send]
     );
+}
+
+/** Tick `pieces` read by hand, all in one request. */
+function useMarkRead() {
+    const { send } = useActions();
+    return useCallback((pieces: string[]) => quietly(send({ type: 'read.mark', pieces })), [send]);
 }
 
 /** A piece's Read toggle: a tick button, pressed once read; ticking it by hand calls `onRead`, say to fold the piece. */
@@ -324,15 +318,18 @@ function notesOnRow(notes: readonly NoteRecord[], file: string, row: CodeRow): N
     return notes.filter((note) => note.anchor?.file === file && underRow(note.anchor, row));
 }
 
-/** A comment on the selected lines, in the plan page's composer box under them, with "only here" on a repeat's example. */
+/**
+ * A comment on what `label` names, the selected lines or a whole file, in the plan page's composer box by `at`, with
+ * "only here" on a repeat's example.
+ */
 function NoteForm({
-    selection,
+    label,
     at,
     repeat,
     onSave,
     onCancel
 }: {
-    selection: LineSelection;
+    label: string;
     at: SelectionBox;
     repeat: boolean;
     onSave: (text: string, onlyHere: boolean) => Promise<unknown>;
@@ -342,15 +339,15 @@ function NoteForm({
     const [onlyHere, setOnlyHere] = useState(false);
     const [busy, track] = useBusy();
     const box = useRef<HTMLDivElement>(null);
+    const id = useId();
     // Focus moves into the box as it opens, as it does into the plan page's composer.
     useEffect(() => box.current?.querySelector<HTMLElement>('[role="textbox"]')?.focus(), []);
-    const lines = selection.start === selection.end ? `line ${selection.start}` : `lines ${selection.start}-${selection.end}`;
     return (
         <div
             ref={box}
             className="composer"
             role="dialog"
-            aria-label={`Comment on ${lines}`}
+            aria-label={`Comment on ${label}`}
             style={place(at, 360, true)}
             onKeyDown={(event) => event.key === 'Escape' && onCancel()}
         >
@@ -361,13 +358,7 @@ function NoteForm({
                     if (text.trim()) quietly(track(onSave(text, onlyHere)));
                 }}
             >
-                <CommentEditor
-                    id={`note-${selection.start}`}
-                    label={`Your comment on ${lines}`}
-                    value={text}
-                    signed={false}
-                    onChange={setText}
-                />
+                <CommentEditor id={id} label={`Your comment on ${label}`} value={text} signed={false} onChange={setText} />
                 {repeat && (
                     <label className="toggle-inline">
                         <input type="checkbox" checked={onlyHere} onChange={(event) => setOnlyHere(event.target.checked)} />
@@ -418,13 +409,13 @@ function SelectionBar({
     );
 }
 
-/** One of the reviewer's comments, under the line it is on. */
+/** One of the reviewer's comments, under the line it is on, rendered as Bitbucket will post it. */
 function NoteCard({ note }: { note: NoteRecord }) {
     return (
         <div className="piece-note">
             <span className="small strong">Your comment{note.repeat && !note.repeat.onlyHere ? ', on every place' : ''}</span>
-            <div className="prose">
-                <Markdown source={note.text} />
+            <div className="bb-body">
+                <BitbucketMarkdown source={note.text} />
             </div>
         </div>
     );
@@ -575,7 +566,11 @@ function PieceCode({
             {picked &&
                 (writing ? (
                     <NoteForm
-                        selection={picked.selection}
+                        label={
+                            picked.selection.start === picked.selection.end
+                                ? `line ${picked.selection.start}`
+                                : `lines ${picked.selection.start}-${picked.selection.end}`
+                        }
                         at={picked.at}
                         repeat={Boolean(repeat)}
                         onSave={save}
@@ -791,8 +786,8 @@ export function editorLink(dir: string, file: string, line: number): string {
 }
 
 /**
- * Opens a piece's file from the review's worktree in VS Code at the piece's first line. Only while the worktree holds
- * the round on show, the current one of a live review, and only for a piece with lines in the new code.
+ * Opens `file` from the review's worktree in VS Code at the first of `lines`. Only while the worktree holds the round on
+ * show, the current one of a live review, and only with lines in the new code.
  */
 function OpenInEditor({ reading, file, lines }: { reading: Reading; file: string; lines?: string }) {
     const dir = useSelector((view) => view.worktreeDir);
@@ -819,6 +814,12 @@ function startingView(reading: Reading, piece: PieceSpec): PieceView {
 function pieceWhere(piece: PieceSpec): string {
     if (piece.lines) return `${piece.file}:${piece.lines}`;
     return `${piece.file} (removed):${piece.oldLines}`;
+}
+
+/** A piece's lines in words, under its file's header: "lines 40-72", "line 4" or "removed lines 3-6". */
+function pieceLines(piece: PieceSpec): string {
+    const lines = describeSpan(parseRange(piece.lines ?? piece.oldLines ?? '')).replace(' to ', '-');
+    return piece.lines ? lines : `removed ${lines}`;
 }
 
 /**
@@ -863,13 +864,12 @@ const PieceCard = memo(function PieceCard({
                     <FoldButton folded={folded} label={where} onFold={setFolded} />
                     {read && <ReadMark />}
                     <code className="piece-where truncate" title={where}>
-                        {where}
+                        {pieceLines(piece)}
                     </code>
                 </span>
                 {piece.repeat && <span className="chip">Repeated edit</span>}
                 {piece.from && <span className="chip">Moved</span>}
                 <span className="grow" />
-                <OpenInEditor reading={reading} file={piece.file} {...(piece.lines ? { lines: piece.lines } : {})} />
                 {piece.lines && <ViewSwitch view={view} onChange={setOverride} label={where} />}
                 <ReadTick reading={reading} piece={piece.id} label={where} onRead={() => setFolded(true)} />
             </header>
@@ -949,7 +949,6 @@ function TestCard({
                     </span>
                 </span>
                 <span className="grow" />
-                <OpenInEditor reading={reading} file={piece.file} {...(piece.lines ? { lines: piece.lines } : {})} />
                 <span role="tablist" aria-label={`How ${plainTitle(title)} shows`} className="segmented">
                     {TEST_VIEWS.map((id) => (
                         <button
@@ -992,6 +991,97 @@ function TestCard({
     );
 }
 
+/**
+ * Every piece of one file on a page under one header: the file's path, Open in VS Code at the first of them, a read mark
+ * once all of them are read, and a comment on the whole file, with the reviewer's comments and the findings on the whole
+ * file under it once the findings may show. Then the pieces, `children`, each a section of the file.
+ */
+function FileBlock({
+    reading,
+    page,
+    file,
+    pieces,
+    children
+}: {
+    reading: Reading;
+    page: string;
+    file: string;
+    pieces: readonly PieceSpec[];
+    children: ReactNode;
+}) {
+    const { round } = reading;
+    const read = useSelector((view) => pieces.every((piece) => readSet(view, round).has(piece.id)));
+    const notes = useSelector(
+        (view) => Object.values(view.notes).filter((note) => note.round === round.n && onWholeFile(note.anchor, file)),
+        deepEqual
+    );
+    const findings = useSelector(
+        (view) => (findingsUnlocked(round) ? roundItems(view, round.n).filter((item) => onWholeFile(item.anchor, file)) : []),
+        deepEqual
+    );
+    const { send } = useActions();
+    const [writing, setWriting] = useState<SelectionBox>();
+    const first = pieces.find((piece) => piece.lines)?.lines;
+    return (
+        <section className="piece-file" aria-label={file}>
+            <header className="piece-file-head">
+                {read && <ReadMark />}
+                <code className="piece-file-path truncate" title={file}>
+                    {file}
+                </code>
+                <span className="grow" />
+                <OpenInEditor reading={reading} file={file} {...(first ? { lines: first } : {})} />
+                {reading.editable && (
+                    <button
+                        type="button"
+                        className="icon-button tiny"
+                        aria-label={`Comment on ${file}`}
+                        title="Comment on the whole file"
+                        onClick={(event) => {
+                            const { top, left, bottom } = event.currentTarget.getBoundingClientRect();
+                            setWriting({ top, left, bottom });
+                        }}
+                    >
+                        <CommentIcon size={14} />
+                    </button>
+                )}
+            </header>
+            {(notes.length > 0 || findings.length > 0) && (
+                <div className="piece-file-notes">
+                    {findings.length > 0 && <FindingCards items={findings} inPlace />}
+                    {notes.map((note) => (
+                        <NoteCard key={note.id} note={note} />
+                    ))}
+                </div>
+            )}
+            {children}
+            {writing && (
+                <NoteForm
+                    label={file}
+                    at={writing}
+                    repeat={false}
+                    onSave={(text) =>
+                        send({ type: 'note.save', anchor: { file, side: 'new' }, text, page }).then(() => setWriting(undefined))
+                    }
+                    onCancel={() => setWriting(undefined)}
+                />
+            )}
+        </section>
+    );
+}
+
+/**
+ * A page's pieces by file, each file where its first piece is, its pieces in line order.
+ * ponytail: a piece of removed code alone sorts by its old line among new ones, near but not exact; map old lines to new
+ * through the file's diff if one lands out of place.
+ */
+function byFile(pieces: readonly PieceSpec[]): [file: string, pieces: PieceSpec[]][] {
+    return [...Map.groupBy(pieces, (piece) => piece.file)].map(([file, ofFile]) => [
+        file,
+        sortBy(ofFile, (piece) => parseRange(piece.lines ?? piece.oldLines ?? '')[0])
+    ]);
+}
+
 /** The page's threads with the agent, and the way to ask about the whole page. */
 function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }) {
     const threads = useSelector(
@@ -1006,7 +1096,8 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
     );
     const [open, setOpen] = useState<string>();
     return (
-        <section className="page-threads" aria-label="Questions on this page">
+        // The questions quote what they are on, so their own words are no place to comment or to find a quote in.
+        <section className="page-threads" aria-label="Questions on this page" data-no-comment>
             <h2 className="eyebrow">Questions on this page</h2>
             {threads.length === 0 && (
                 <p className="small muted">Select code or words and ask the agent, or ask about the whole page.</p>
@@ -1023,7 +1114,11 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
                 <ThreadDialog id={open} title={`Question on ${plainTitle(page.title)}`} onClose={() => setOpen(undefined)} />
             )}
             {editable && (
-                <button type="button" className="button-link small" onClick={() => commentOnWhole(`page:${page.id}`, 'question')}>
+                <button
+                    type="button"
+                    className="button-link small"
+                    onClick={(event) => commentOnWhole(`page:${page.id}`, 'question', event.currentTarget)}
+                >
                     Ask the agent about this page
                 </button>
             )}
@@ -1033,7 +1128,7 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
 
 /** One page: its title, then its words and pieces once written, or that it is coming; then its threads. */
 function PageView({ reading, page, number, total }: { reading: Reading; page: PageRecord; number: number; total: number }) {
-    const tick = useTick();
+    const markRead = useMarkRead();
     const unread = useSelector(
         (view) => page.pieces.filter((piece) => !shownRead(view, reading.round, piece.id)).map((piece) => piece.id),
         deepEqual
@@ -1044,7 +1139,8 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
     const tests = new Map(content?.tests?.map((test) => [test.piece, test]) ?? []);
     const added = (piece?: string) => page.added.filter((addition) => addition.piece === piece);
     return (
-        <section className="read-page" aria-labelledby={`page-title-${page.id}`}>
+        // Any of its words is commentable, such as a file name, beyond the passages marked below.
+        <section className="read-page" aria-labelledby={`page-title-${page.id}`} data-anchor-target={`page:${page.id}`}>
             <header className="page-head">
                 <div className="eyebrow">
                     {page.kind === 'tests' ? 'Tests' : (page.group ?? 'Concept')}
@@ -1067,9 +1163,7 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
                     <button
                         type="button"
                         className="button-secondary button-small page-read-button"
-                        onClick={() => {
-                            for (const piece of unread) tick(piece, true, 'manual');
-                        }}
+                        onClick={() => markRead(unread)}
                     >
                         Mark the page read
                     </button>
@@ -1088,35 +1182,39 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
                     {content.blocks?.map((block, index) => (
                         <BlockView key={index} block={{ ...block, id: `${page.id}-block-${index}` }} placement="question" />
                     ))}
-                    {page.kind === 'tests'
-                        ? page.pieces.map((piece) => {
-                              const test = tests.get(piece.id);
-                              return (
-                                  <TestCard
-                                      key={piece.id}
-                                      reading={reading}
-                                      page={page.id}
-                                      piece={piece}
-                                      title={test?.title ?? piece.title ?? piece.id}
-                                      {...(test?.pseudo ? { pseudo: test.pseudo } : {})}
-                                  />
-                              );
-                          })
-                        : page.pieces.map((piece) => {
-                              const words = notes.get(piece.id);
-                              return (
-                                  <PieceCard
-                                      key={piece.id}
-                                      reading={reading}
-                                      page={page.id}
-                                      piece={piece}
-                                      {...(words?.note ? { note: words.note } : {})}
-                                      {...(words?.blocks ? { blocks: words.blocks } : {})}
-                                      {...(words?.related ? { related: words.related } : {})}
-                                      additions={added(piece.id)}
-                                  />
-                              );
-                          })}
+                    {byFile(page.pieces).map(([file, pieces]) => (
+                        <FileBlock key={file} reading={reading} page={page.id} file={file} pieces={pieces}>
+                            {page.kind === 'tests'
+                                ? pieces.map((piece) => {
+                                      const test = tests.get(piece.id);
+                                      return (
+                                          <TestCard
+                                              key={piece.id}
+                                              reading={reading}
+                                              page={page.id}
+                                              piece={piece}
+                                              title={test?.title ?? piece.title ?? piece.id}
+                                              {...(test?.pseudo ? { pseudo: test.pseudo } : {})}
+                                          />
+                                      );
+                                  })
+                                : pieces.map((piece) => {
+                                      const words = notes.get(piece.id);
+                                      return (
+                                          <PieceCard
+                                              key={piece.id}
+                                              reading={reading}
+                                              page={page.id}
+                                              piece={piece}
+                                              {...(words?.note ? { note: words.note } : {})}
+                                              {...(words?.blocks ? { blocks: words.blocks } : {})}
+                                              {...(words?.related ? { related: words.related } : {})}
+                                              additions={added(piece.id)}
+                                          />
+                                      );
+                                  })}
+                        </FileBlock>
+                    ))}
                     <Additions page={page.id} additions={added(undefined)} />
                 </>
             )}
@@ -1410,10 +1508,35 @@ function FileFolder({
     );
 }
 
+/** Each round's changed files with the pages each is on, by the pages they were worked out from: ticks leave them be. */
+const filePagesCache = new WeakMap<View['pages'], { round: RoundRecord; files: FilePages[] }>();
+
+/** A changed file, the ids of the pages its lines are on, and whether Housekeeping lists it. */
+interface FilePages {
+    path: string;
+    pages: string[];
+    housekeeping: boolean;
+}
+
+/** The round's changed files, each with the pages it is on. */
+function filesWithPages(view: View, round: RoundRecord): FilePages[] {
+    const cached = filePagesCache.get(view.pages);
+    if (cached?.round === round) return cached.files;
+    const index = round.index;
+    const files = index
+        ? index.files.map((file) => {
+              const found = pagesOfFile(view, index, round.n, file.path);
+              return { path: file.path, pages: found.pages.map((page) => page.id), housekeeping: found.housekeeping };
+          })
+        : [];
+    filePagesCache.set(view.pages, { round, files });
+    return files;
+}
+
 /** The round's pages in order, each with its rail heading and how many of its pieces are read. */
 function useRailPages(round: RoundRecord) {
     return useSelector((view) => {
-        const progress = readProgress(view, round.index, round.n);
+        const progress = roundProgress(view, round);
         return roundPages(view, round.n).map((page) => {
             const { read, total } = progress.pages[page.id] ?? { read: 0, total: page.pieces.length };
             return {
@@ -1448,7 +1571,7 @@ function ReadContents({
 }) {
     const [byFile, setByFile] = useState(false);
     const pages = useRailPages(round);
-    const tick = useTick();
+    const markRead = useMarkRead();
     const unreadTests = useSelector(
         (view) =>
             roundPages(view, round.n)
@@ -1457,16 +1580,7 @@ function ReadContents({
                 .map((piece) => piece.id),
         deepEqual
     );
-    const files = useSelector(
-        (view) =>
-            round.index
-                ? round.index.files.map((file) => {
-                      const found = pagesOfFile(view, round.index!, round.n, file.path);
-                      return { path: file.path, pages: found.pages.map((page) => page.id), housekeeping: found.housekeeping };
-                  })
-                : [],
-        deepEqual
-    );
+    const files = useSelector((view) => filesWithPages(view, round), deepEqual);
     const housekeeping = useSelector((view) => housekeepingRead(view, round.n));
     const hasHousekeeping = round.index ? housekeepingEntries(round.index).length > 0 : false;
     const byId = new Map(
@@ -1511,9 +1625,7 @@ function ReadContents({
                                                 <button
                                                     type="button"
                                                     className="button-link small mark-all"
-                                                    onClick={() => {
-                                                        for (const piece of unreadTests) tick(piece, true, 'manual');
-                                                    }}
+                                                    onClick={() => markRead(unreadTests)}
                                                 >
                                                     Mark all read
                                                 </button>
@@ -1729,12 +1841,17 @@ export function Readthrough() {
     const [search, setSearch] = useState<{ name: string; uses: boolean }>();
     const reading = useReading(round, (name, uses) => setSearch({ name, uses }));
     const ids = useSelector((view) => roundPages(view, round.n).map((page) => page.id), deepEqual);
-    const progress = useSelector((view) => readProgress(view, round.index, round.n).lines, deepEqual);
+    const progress = useSelector((view) => roundProgress(view, round).lines, deepEqual);
     const hasHousekeeping = round.index ? housekeepingEntries(round.index).length > 0 : false;
     const order = hasHousekeeping ? [...ids, HOUSEKEEPING_PAGE] : ids;
-    const current = picked && order.includes(picked) ? picked : order[0];
+    // On a page the agent removed, the reviewer stays where it was, on the page that took its place.
+    const last = useRef(0);
+    const current = picked && order.includes(picked) ? picked : order[Math.min(picked ? last.current : 0, order.length - 1)];
     const page = useSelector((view) => (current ? view.pages[`${round.n}:${current}`] : undefined), deepEqual);
     const at = current ? order.indexOf(current) : -1;
+    useEffect(() => {
+        last.current = Math.max(0, at);
+    });
     const go = (id: string | undefined) => {
         if (!id) return;
         setPage(id);

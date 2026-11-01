@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentEvent } from '../shared/events.js';
 import type { SectionItem } from '../shared/records.js';
-import { currentRound, deriveComments, reviewStage, shownSlides } from '../shared/review.js';
+import { currentRound, currentTake, deriveComments, reviewStage, shownSlides } from '../shared/review.js';
 import { connect, defined, gitRepo, rejection, reviewHostWith, reviewServer, tempRepo } from '../test/serverHelpers.js';
 import { httpBitbucket } from './bitbucket.js';
 import { git } from './worktree.js';
@@ -212,6 +212,61 @@ describe('opening a review', () => {
         expect(body.reviewId).toBe('pr-412');
     });
 
+    it('reviews the open PR of a branch, unless asked for the local branch or it has none', async () => {
+        const setup = await prRepo();
+        await git(setup.dir, ['branch', 'feature/retry-policy', 'origin/feature/retry-policy']);
+        const server = await reviewServer(setup.dir);
+        server.fake.pr.source.commit = setup.head;
+        server.fake.pr.destination.commit = setup.main;
+        const branch = { target: 'feature/retry-policy' };
+        expect((await server.call('planroom_review', branch)).body.reviewId).toBe('branch-feature-retry-policy');
+        server.fake.open['feature/retry-policy'] = 412;
+        expect((await server.call('planroom_review', branch)).body).toMatchObject({
+            reviewId: 'pr-412',
+            target: { kind: 'pr', number: 412 }
+        });
+        expect((await server.call('planroom_review', { ...branch, local: true })).body).toMatchObject({
+            reviewId: 'branch-feature-retry-policy',
+            resumed: true
+        });
+        expect(server.fake.calls).toEqual([
+            'openPullRequest acme/api feature/retry-policy',
+            'openPullRequest acme/api feature/retry-policy',
+            'pullRequest acme/api#412'
+        ]);
+    });
+
+    it('serves another target on the open page, with no new window while a tab shows it, or on a new page when asked', async () => {
+        const { repo, call, opened, openBrowser } = await branchReview();
+        await repo.run(['checkout', '--quiet', '-b', 'feature/other']);
+        await repo.commit({ 'src/other.ts': 'export const other = 1;\n' }, 'other');
+        await repo.run(['checkout', '--quiet', 'main']);
+        const { url } = opened.body;
+        const reader = defined((await fetch(`${url}api/stream`)).body).getReader();
+        const decoder = new TextDecoder();
+        let received = '';
+        const readUntil = async (text: string) => {
+            while (!received.includes(text)) {
+                const chunk = await reader.read();
+                if (chunk.done) break;
+                received += decoder.decode(chunk.value, { stream: true });
+            }
+        };
+        await readUntil('"type":"snapshot"');
+
+        const other = (await call('planroom_review', { target: 'feature/other' })).body;
+        expect(other).toMatchObject({ url, reviewId: 'branch-feature-other', resumed: false, browserOpened: false });
+        expect(openBrowser).toHaveBeenCalledTimes(1);
+        await readUntil('"type":"reload"');
+        expect(received).toContain('data: {"type":"reload"}');
+
+        const separate = (await call('planroom_review', { target: 'feature/retry-policy', newPage: true })).body;
+        expect(separate).toMatchObject({ reviewId: 'branch-feature-retry-policy', resumed: true, browserOpened: true });
+        expect(separate.url).not.toBe(url);
+        expect(openBrowser).toHaveBeenLastCalledWith(separate.url);
+        expect((await fetch(url)).status).toBe(404);
+    });
+
     it('refuses a PR number with no origin remote, creating nothing', async () => {
         const { repo } = await branchRepo();
         const server = await reviewServer(repo.dir);
@@ -238,7 +293,7 @@ describe('opening a review', () => {
 });
 
 describe('the deck', () => {
-    it('publishes the deck in two parts, Trade-offs after the concerns, and fixes each part once it is out', async () => {
+    it('publishes the deck in two parts, Trade-offs after the concerns', async () => {
         const { emit, page, session } = await branchReview();
         const round = () => currentRound(defined(session().current.review));
         const chapters = () => shownSlides(session().current, round()).map((shown) => shown.chapter);
@@ -250,12 +305,6 @@ describe('the deck', () => {
         expect(reviewStage(session().current)).toBe('walkthrough');
         expect(chapters()).toEqual(['why', 'how', 'touches']);
 
-        const again = await emit([slide('why', 'why', ['why-text', 'trade-text'])]);
-        expect(again).toMatchObject({ isError: true, body: { issues: [{ path: 'events[0].slide.chapter' }] } });
-        for (const id of ['why-text', 'billing-text']) {
-            const edit = await emit([{ type: 'doc.block.upsert', block: { id, type: 'text', config: { body: 'Changed' } } }]);
-            expect(edit).toMatchObject({ isError: true, body: { issues: [{ path: 'events[0].block.id' }] } });
-        }
         const early = await emit([{ type: 'deck.publish' }]);
         expect(early.body.issues[0].message).toMatch(/waits for the reviewer/);
         const more = await emit([
@@ -263,13 +312,104 @@ describe('the deck', () => {
             slide('tradeoffs', 'tradeoffs', ['trade-text', 'trade-more'])
         ]);
         expect(more.isError).toBe(false);
+        expect(chapters()).toEqual(['why', 'how', 'touches']);
 
         await page({ type: 'impact.send' });
         expect((await emit([{ type: 'deck.publish' }])).isError).toBe(false);
         expect(chapters()).toEqual(['why', 'how', 'touches', 'tradeoffs']);
-        const late = await emit([slide('tradeoffs', 'tradeoffs', ['trade-text'])]);
-        expect(late).toMatchObject({ isError: true, body: { issues: [{ path: 'events[0].type' }] } });
-        expect(session().current.blocks['why-text']?.config).toEqual({ body: 'Retries ran without a cap.' });
+        expect((await emit([{ type: 'deck.publish' }])).body.issues[0].message).toMatch(/already published/);
+    });
+
+    it('changes, adds and reorders published slides and their blocks, marking each until the reviewer sees it', async () => {
+        const { emit, session } = await branchReview();
+        await emit([...DECK, { type: 'deck.publish' }]);
+        const marked = () =>
+            session()
+                .view()
+                .activity.filter((entry) => entry.kind === 'attention')
+                .map(({ title, ref }) => ({ title, ref }));
+        const edited = await emit([
+            { type: 'doc.block.upsert', block: { id: 'why-text', type: 'text', config: { body: 'Retries never stopped.' } } },
+            { type: 'doc.block.upsert', block: { id: 'how-more', type: 'text', config: { body: 'Then it gives up.' } } },
+            {
+                type: 'slide.upsert',
+                slide: { id: 'how-2', chapter: 'how', order: 0, title: 'It gives up', blocks: ['how-more'] }
+            },
+            // Trade-offs is not out yet, so changing it is no change the reviewer sees.
+            {
+                type: 'slide.upsert',
+                slide: { id: 'tradeoffs', chapter: 'tradeoffs', order: 1, title: 'Costs', blocks: ['trade-text'] }
+            }
+        ]);
+        expect(edited.isError).toBe(false);
+        expect(session().current.blocks['why-text']?.config).toEqual({ body: 'Retries never stopped.' });
+        const round = currentRound(defined(session().current.review));
+        expect(shownSlides(session().current, round).map((shown) => shown.id)).toEqual(['why', 'how-2', 'how', 'touches']);
+        expect(marked()).toEqual([
+            { title: 'Added a slide', ref: 'slide:how-2' },
+            { title: 'Changed a slide', ref: 'slide:why' }
+        ]);
+        // A block behind the impact map belongs to its slide.
+        await emit([{ type: 'doc.block.upsert', block: { id: 'billing-text', type: 'text', config: { body: 'It retries.' } } }]);
+        expect(marked()[0]).toEqual({ title: 'Changed a slide', ref: 'slide:touches' });
+        const broken = await emit([{ type: 'doc.block.upsert', block: { id: 'why-text', type: 'text', config: {} } }]);
+        expect(broken.body.issues[0].message).toMatch(/block "why-text" on slide why does not render/);
+    });
+
+    it('removes a slide, refusing an unknown one and one a published chapter needs', async () => {
+        const { emit, session } = await branchReview();
+        const extra: AgentEvent[] = [
+            { type: 'doc.block.upsert', block: { id: 'how-more', type: 'text', config: { body: 'Then it gives up.' } } },
+            slide('how-2', 'how', ['how-more'])
+        ];
+        await emit([...DECK, ...extra, { type: 'deck.publish' }]);
+        const unknown = await emit([{ type: 'slide.remove', id: 'nope' }]);
+        expect(unknown.body.issues[0]).toEqual({ path: 'events[0].id', message: 'round 1 has no slide nope' });
+        const needed = await emit([{ type: 'slide.remove', id: 'why' }]);
+        expect(needed.body.issues[0].message).toMatch(/every chapter needs a slide; Why has none/);
+        expect(session().current.slides.why).toBeDefined();
+
+        expect((await emit([{ type: 'slide.remove', id: 'how-2' }])).isError).toBe(false);
+        expect(session().current.slides['how-2']).toBeUndefined();
+        expect(session().current.blocks['how-more']).toBeDefined();
+        expect(session().view().activity[0]).toMatchObject({
+            title: 'Removed a slide',
+            detail: 'Slide how-2',
+            kind: 'attention'
+        });
+    });
+
+    it('drops the concerns on an area the impact map loses, and takes the concerns again', async () => {
+        const { emit, page, call, session } = await branchReview();
+        await emit([...DECK, { type: 'deck.publish' }]);
+        await page({
+            type: 'impact.save',
+            concerns: { billing: ['Does the export retry?'], alerts: ['Who is paged?'] },
+            added: []
+        });
+        await page({ type: 'impact.send' });
+        const areas = [
+            { id: 'billing', title: 'Billing exports', summary: 'The export reads the retry count.', blocks: ['billing-text'] },
+            { id: 'search', title: 'Search', summary: 'The index retries too.' }
+        ];
+        await emit([{ type: 'doc.block.upsert', block: { id: 'impact-map', type: 'impactMap', config: { areas } } }]);
+        expect(currentRound(defined(session().current.review)).impact).toEqual({
+            concerns: { billing: ['Does the export retry?'] },
+            added: [],
+            reopenedAt: expect.any(String)
+        });
+        // The concerns reached the agent once, so Trade-offs need not wait for them again.
+        expect((await emit([{ type: 'deck.publish' }])).isError).toBe(false);
+        await page({ type: 'impact.save', concerns: { billing: ['Does the export retry?'], search: ['Reindex?'] }, added: [] });
+        await page({ type: 'impact.send' });
+        const { body } = await call('planroom_wait', { after: 0, timeoutSec: 1 });
+        expect(body.events.at(-1)).toMatchObject({
+            type: 'impact.send',
+            areas: [
+                { id: 'billing', concerns: ['Does the export retry?'] },
+                { id: 'search', concerns: ['Reindex?'] }
+            ]
+        });
     });
 
     it('refuses to publish while a chapter before Trade-offs has no slide', async () => {
@@ -427,6 +567,32 @@ describe('findings', () => {
         expect(deriveComments(session().current, 1)).toEqual([]);
     });
 
+    it('asks an answered take again once the agent changes its card, keeping the last answer', async () => {
+        const { emit, page, session } = await branchReview();
+        await emit([...DECK, { type: 'deck.publish' }]);
+        const guess = (text: string) =>
+            page({ type: 'take.answer', blockId: 'take-1', answer: { kind: 'predict', guess: text } });
+        await guess('Two');
+        const take = () => {
+            const state = session().current;
+            return currentTake(state.takes['take-1'], state.blocks['take-1']);
+        };
+        expect(take()).toMatchObject({ blockVersion: 1, summary: 'guessed "Two"' });
+        const card = {
+            kind: 'predict',
+            prompt: 'How many retries now, at most?',
+            options: ['One', 'Two'],
+            answer: 'Two',
+            explanation: 'Capped at two.'
+        };
+        await emit([{ type: 'doc.block.upsert', block: { id: 'take-1', type: 'yourTake', config: card } }]);
+        expect(take()).toBeUndefined();
+        expect(session().current.takes['take-1']).toMatchObject({ summary: 'guessed "Two"' });
+        await guess('One');
+        expect(take()).toMatchObject({ blockVersion: 2, summary: 'guessed "One"' });
+        expect((await rejection(guess('Two'))).message).toMatch(/already gave your take/);
+    });
+
     it('logs a take answer before the reveal, once', async () => {
         const { emit, page, call } = await branchReview();
         await emit(DECK);
@@ -560,6 +726,17 @@ describe('posting', () => {
         expect(round.postedAt).toBeDefined();
     });
 
+    it('posts a comment on a whole file to the file alone, on no line', async () => {
+        const server = await prReview();
+        await triaged(server);
+        await server.page({ type: 'note.save', anchor: { file: 'src/policy.ts', side: 'new' }, text: 'Split this file?' });
+        await server.page({ type: 'comments.post' });
+        await server.session().settled();
+        expect(server.fake.created.find((comment) => comment.body === 'Split this file?')?.inline).toStrictEqual({
+            path: 'src/policy.ts'
+        });
+    });
+
     it('keeps Post off without credentials, and a local branch has nothing to post to', async () => {
         const missing = await prReview({ problem: 'Set BITBUCKET_API_TOKEN' });
         await triaged(missing);
@@ -679,6 +856,12 @@ describe('re-review rounds', () => {
         expect(round.earlier['1/item:I-1']?.label).toBeUndefined();
         expect(round.earlier['1/note:N-1']).toMatchObject({ post: { id: policy!.id }, label: 'outdated' });
         expect((await git(defined(body.worktree), ['rev-parse', 'HEAD'])).trim()).toBe(pushed);
+        // Round 1's deck is fixed now.
+        const edit = await server.emit([
+            { type: 'doc.block.upsert', block: { id: 'why-text', type: 'text', config: { body: 'Changed' } } },
+            { type: 'slide.remove', id: 'why' }
+        ]);
+        expect(edit.body.issues.map((issue: { path: string }) => issue.path)).toEqual(['events[0].block.id', 'events[1].id']);
     });
 
     it('leaves a merge of the destination branch out of the next round', async () => {

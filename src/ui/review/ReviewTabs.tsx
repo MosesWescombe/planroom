@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { readProgress } from '../../shared/readthrough';
 import {
     currentRound,
     deckSlides,
@@ -15,7 +14,7 @@ import { CheckIcon, LockIcon } from '../components/icons';
 import { plural } from '../format';
 import { deepEqual, useSelector } from '../store';
 import { type Tab, useActions, useUiState } from '../ui';
-import { useShownRound } from './hooks';
+import { roundProgress, useShownRound } from './hooks';
 
 /**
  * The tab a review stage opens on, by the round's technique: the read-through for a round read through alone, and
@@ -80,7 +79,7 @@ export function ReviewTabs() {
         const drafted = deckSlides(view, round.n).length;
         const posted = Boolean(round.postedAt);
         const none = round.reviewers?.strength === 'none';
-        const read = readProgress(view, round.index, round.n).lines;
+        const read = roundProgress(view, round).lines;
         const tabs: Omit<TabInfo, 'number'>[] = [
             {
                 id: 'walkthrough',

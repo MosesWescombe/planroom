@@ -168,7 +168,8 @@ export function Shell() {
             {tab === 'directions' && <DirectionSwitcher />}
             <Accepted />
             {review && <EarlierRound />}
-            <div className="body">
+            {/* Text outside any card is commentable too: a comment on it is on the tab, quoting what was selected. */}
+            <div className="body" data-anchor-target={`tab:${tab}`}>
                 {tab === 'interrogate' && (ask ? <Ask /> : <Interrogate />)}
                 {tab === 'directions' && <DirectionsPhase />}
                 {tab === 'writeup' && <Writeup />}

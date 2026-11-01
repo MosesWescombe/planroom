@@ -315,6 +315,16 @@ describe('tabs and phases', () => {
         expect(threadScope(commentThread('C-1', 'qblock:Q-1:0'))).toBe('interrogate');
         expect(threadScope(commentThread('C-1', 'section:s1'))).toBe('writeup');
         expect(threadScope(commentThread('C-1', 'file:design.md'))).toBe('proposal');
+        expect(threadScope(commentThread('C-1', 'comment:item:I-1'), 'review')).toBe('review');
+    });
+
+    it('files a comment on text outside any card with its tab, and any other tab in Phase 1', () => {
+        const scope = (tab: string) => threadScope(commentThread('C-1', `tab:${tab}`));
+        expect(['readthrough', 'walkthrough', 'findings', 'comments'].map(scope)).toEqual(Array(4).fill('review'));
+        expect(scope('writeup')).toBe('writeup');
+        expect(scope('proposal')).toBe('proposal');
+        expect(scope('interrogate')).toBe('interrogate');
+        expect(scope('directions')).toBe('interrogate');
     });
 });
 
