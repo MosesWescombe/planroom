@@ -228,7 +228,8 @@ triage moves on.
 ## Rounds
 
 When the author pushed after a posted round, `planroom_review` starts the next round: `diff` runs from the reviewed head
-to the new one, and `earlier` lists the reviewer's earlier comments with the author's replies.
+to the new one, and `earlier` lists the reviewer's earlier comments with the author's replies. When the author merged
+the destination branch in since, `diff.base` is the reviewed head with that merge applied, so only their own work shows.
 
 1. Wait for the round's `reviewers.start`, then build what its technique names, for the delta only: a short **delta
    deck**, the same four chapters compressed to what changed, with new slide and block ids; and a **delta

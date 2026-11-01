@@ -18,13 +18,16 @@ import {
     fetchBranch,
     fileAt,
     git,
+    isAncestor,
     mergeBase,
+    mergeCommit,
     originUrl
 } from './worktree.js';
 
 /**
  * Opening a review: what its target names, the commits to review, and the rounds a review moves through as the author
- * pushes. Everything here reads git and, for a PR, Bitbucket; it writes nothing.
+ * pushes. Everything here reads git and, for a PR, Bitbucket; it writes nothing but the merge commit a round after a
+ * merge of the destination diffs from.
  */
 
 /** What a review needs besides its session: Bitbucket access and where this machine keeps its preferences. */
@@ -170,14 +173,30 @@ async function outdated(repoRoot: string, from: string, to: string, anchor: Code
 }
 
 /**
- * The round after the review's current one, for the author's push to `head`: the diff from the reviewed head to it,
- * and every comment posted in an earlier round and not yet resolved, with the author's replies from its thread. A
- * comment whose lines the push removed is labelled outdated.
+ * The commit a round after the first diffs from: the reviewed head, with `destination` (where the new head left the
+ * destination branch) merged in when the head took in more of it, so a merge of the destination stays out of the
+ * round. A merge that conflicts keeps the reviewed head.
+ */
+async function roundBase(repoRoot: string, reviewedHead: string, destination: string): Promise<string> {
+    if (await isAncestor(repoRoot, destination, reviewedHead)) return reviewedHead;
+    // ponytail: on a conflict the round also shows the merged-in work; resolving it as the head did would drop that.
+    return (
+        (await mergeCommit(repoRoot, reviewedHead, destination, 'Planroom: the reviewed head with the destination merged in')) ??
+        reviewedHead
+    );
+}
+
+/**
+ * The round after the review's current one, for the author's push to `head`, which left the destination branch at
+ * `destination`: the diff to it from the reviewed head (see `roundBase`), and every comment posted in an earlier round
+ * and not yet resolved, with the author's replies from its thread. A comment whose lines the push removed is labelled
+ * outdated.
  */
 export async function nextRound(
     repoRoot: string,
     review: ReviewRecord,
     head: string,
+    destination: string,
     access: BitbucketAccess,
     now: string
 ): Promise<RoundRecord> {
@@ -203,12 +222,13 @@ export async function nextRound(
         const gone = await outdated(repoRoot, previous.head, head, entry.post.anchor);
         earlier[key] = { ...entry, replies, ...(gone ? { label: 'outdated' as const } : {}) };
     }
+    const base = await roundBase(repoRoot, previous.head, destination);
     return {
         n: previous.n + 1,
-        base: previous.head,
+        base,
         head,
-        files: await changedFiles(repoRoot, previous.head, head),
-        index: await buildLineIndex(repoRoot, previous.head, head),
+        files: await changedFiles(repoRoot, base, head),
+        index: await buildLineIndex(repoRoot, base, head),
         startedAt: now,
         summary: {},
         posts: {},

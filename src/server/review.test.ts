@@ -681,6 +681,25 @@ describe('re-review rounds', () => {
         expect((await git(defined(body.worktree), ['rev-parse', 'HEAD'])).trim()).toBe(pushed);
     });
 
+    it('leaves a merge of the destination branch out of the next round', async () => {
+        const server = await posted();
+        const round1 = currentRound(defined(server.session().current.review));
+        await server.remote.repo.run(['checkout', '--quiet', 'main']);
+        const main = await server.remote.repo.commit({ 'src/api.ts': 'export const api = 2;\n' }, 'unrelated work on main');
+        await server.remote.repo.run(['checkout', '--quiet', 'feature/retry-policy']);
+        await server.remote.repo.run(['merge', '--quiet', '--no-edit', 'main']);
+        const pushed = await server.remote.repo.commit({ 'src/retry.ts': retry(1) }, 'retry once');
+        server.fake.pr.source.commit = pushed;
+        server.fake.pr.destination.commit = main;
+
+        const { body } = await server.call('planroom_review', { target: '412' });
+        expect(body).toMatchObject({ round: 2, diff: { head: pushed } });
+        const round = currentRound(defined(server.session().current.review));
+        expect(round.files.map((file) => file.path)).toEqual(['src/retry.ts']);
+        const parents = (await git(server.dir, ['rev-list', '--parents', '-n', '1', round.base])).trim().split(' ').slice(1);
+        expect(parents).toEqual([round1.head, main]);
+    });
+
     it('resolves an addressed thread and its task on Post only once the reviewer confirms it', async () => {
         const server = await posted();
         const retryComment = server.fake.created[1]!;

@@ -450,7 +450,10 @@ export type ImpactConcerns = z.infer<typeof impactConcerns>;
 /** One round of the review: the commits it covers, its deck's progress, the reviewer's progress through it, and its posting. */
 export const roundRecord = z.object({
     n: z.number().int().min(1),
-    /** The commit the diff is from: the merge base in round 1, the previous round's head after. */
+    /**
+     * The commit the diff is from: the merge base in round 1, the previous round's head after, with the destination
+     * merged in when the author merged it since.
+     */
     base: z.string(),
     head: z.string(),
     files: z.array(changedFile),

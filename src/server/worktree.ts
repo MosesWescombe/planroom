@@ -62,6 +62,37 @@ export async function mergeBase(repoRoot: string, a: string, b: string): Promise
     return (await git(repoRoot, ['merge-base', a, b])).trim();
 }
 
+/** Whether `ancestor` is in the history of `of`, or is it. */
+export async function isAncestor(repoRoot: string, ancestor: string, of: string): Promise<boolean> {
+    try {
+        await git(repoRoot, ['merge-base', '--is-ancestor', ancestor, of]);
+        return true;
+    } catch (error) {
+        if (error instanceof GitError && error.exitCode === 1) return false;
+        throw error;
+    }
+}
+
+/**
+ * A commit merging `theirs` into `ours`, made without a checkout and kept by a ref under `refs/planroom/`, or undefined
+ * when the two conflict.
+ */
+export async function mergeCommit(repoRoot: string, ours: string, theirs: string, message: string): Promise<string | undefined> {
+    let tree: string;
+    try {
+        tree = (await git(repoRoot, ['merge-tree', '--write-tree', ours, theirs])).split('\n')[0]!.trim();
+    } catch (error) {
+        if (error instanceof GitError && error.exitCode === 1) return undefined;
+        throw error;
+    }
+    // A fixed identity, so it works in a repo with none configured.
+    const identity = ['-c', 'user.name=Planroom', '-c', 'user.email=planroom@localhost'];
+    const commit = (await git(repoRoot, [...identity, 'commit-tree', tree, '-p', ours, '-p', theirs, '-m', message])).trim();
+    // Referenced, so garbage collection keeps it while a review diffs from it.
+    await git(repoRoot, ['update-ref', `refs/planroom/merges/${commit}`, commit]);
+    return commit;
+}
+
 /** The `origin` remote's URL as configured, before any `insteadOf` rewrite, or undefined when there is none. */
 export async function originUrl(repoRoot: string): Promise<string | undefined> {
     try {

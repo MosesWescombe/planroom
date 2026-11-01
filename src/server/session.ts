@@ -440,7 +440,7 @@ export class Session {
                 summary.rounds = summary.rounds.map((each) => (each.n === round.n ? { ...each, index } : each));
             }
             if (round.postedAt && resolved.head !== round.head) {
-                const next = await nextRound(this.repoRoot, review, resolved.head, host.access, draft.now);
+                const next = await nextRound(this.repoRoot, review, resolved.head, resolved.base, host.access, draft.now);
                 summary.rounds = [...summary.rounds, next];
                 draft.note({ title: `Round ${next.n} started`, detail: 'the author pushed since your review', kind: 'question' });
             }
