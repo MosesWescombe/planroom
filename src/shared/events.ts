@@ -25,7 +25,7 @@ import type { SessionKind } from './state.js';
  *   appended to the session's event log as a logged event, enriched with what the
  *   agent needs to act on it (the question title, the open questions carried as
  *   assumptions, a block's validation errors).
- * - Server events (`validation.result`, `edit.undone`) are logged the same way.
+ * - Server events (`validation.result`, `edit.undone`, `streaming.check`) are logged the same way.
  */
 
 // ---------------------------------------------------------------- agent -> page
@@ -517,6 +517,14 @@ export const loggedEvent = z.discriminatedUnion('type', [
         output: z.string().optional(),
         trigger: z.enum(['proposal.ready', 'rerun'])
     }),
+    /**
+     * The agent left these questions `streaming` while its other updates came through: re-send each in full, or close it.
+     * Asked again only after more updates leave one still streaming.
+     */
+    logged.extend({
+        type: z.literal('streaming.check'),
+        questions: z.array(z.object({ questionId, title: z.string() })).min(1)
+    }),
     logged.extend({
         type: z.literal('edit.undone'),
         revision: z.number().int(),
@@ -579,7 +587,12 @@ export type LoggedEvent = z.infer<typeof loggedEvent>;
 export type LoggedEventType = LoggedEvent['type'];
 
 /** Logged events that come from the server rather than a page action. */
-export const serverEventTypes: readonly LoggedEventType[] = ['validation.result', 'edit.undone', 'review.posted'];
+export const serverEventTypes: readonly LoggedEventType[] = [
+    'validation.result',
+    'streaming.check',
+    'edit.undone',
+    'review.posted'
+];
 
 /** A logged event before the log assigns its sequence number and time. */
 export type NewLoggedEvent = LoggedEvent extends infer E ? (E extends LoggedEvent ? Omit<E, 'seq' | 'at'> : never) : never;

@@ -321,6 +321,31 @@ describe('threads', () => {
         act(() => setAnchorStates(new Map()));
     });
 
+    it('the conversation ends on the agent status: waiting, then what it is doing, gone once it replies or the thread resolves', () => {
+        const ask = commentThread('C-1', 'block:b1');
+        const status = () => screen.queryByRole('status');
+        const store = storeWith(makeView({ threads: [ask] }));
+        renderWith(store, <Thread id="C-1" />);
+        expect(status()).toHaveTextContent('Waiting for the agent');
+        expect(status()?.querySelector('.agent-now-dots')).not.toBeNull();
+
+        const agent: AgentStatus = { mode: 'waiting', queued: 0, working: true, doing: 'researching the limiter', thread: 'C-1' };
+        act(() => store.apply([{ field: 'agent', value: agent }]));
+        expect(status()).toHaveTextContent('Agent researching the limiter');
+
+        const reply: ThreadMessage = { id: 'C-1.2', author: 'agent', text: 'Done.', at: NOW };
+        act(() =>
+            store.apply([
+                { field: 'agent', value: { mode: 'waiting', queued: 0 } },
+                { field: 'threads', id: 'C-1', value: { ...ask, messages: [...ask.messages, reply], version: 2 } }
+            ])
+        );
+        expect(status()).toBeNull();
+
+        act(() => store.apply([{ field: 'threads', id: 'C-1', value: { ...ask, status: 'resolved', version: 3 } }]));
+        expect(status()).toBeNull();
+    });
+
     it('reply with edits: the agent reply lists each section it changed', () => {
         const thread = commentThread('C-1', 'block:s4-table', {
             messages: [

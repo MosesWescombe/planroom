@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { blockCatalog } from '../../shared/blockCatalog';
@@ -788,7 +788,8 @@ describe('the comments', () => {
         expect(box).toHaveTextContent('Retry once?');
         view.focus();
         view.dispatch({ selection: { anchor: 9 } });
-        expect(box).toHaveTextContent('Retry **once**?');
+        // CodeMirror reports the focus a moment after it moves.
+        await waitFor(() => expect(box).toHaveTextContent('Retry **once**?'));
         await userEvent.click(screen.getByRole('button', { name: 'Save' }));
         expect(posted).toContainEqual({ type: 'item.react', itemId: 'I-1', verdict: 'reword', text: 'Retry **once**?' });
     });

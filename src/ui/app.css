@@ -1421,6 +1421,14 @@ input[type="checkbox"] {
     color: var(--muted);
 }
 
+/* The agent's status under a conversation's last message, lined up with the message text past the avatar. */
+.thread-status {
+    margin: 0;
+    padding-left: 38px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 .comments {
     display: flex;
     flex-direction: column;
@@ -2644,7 +2652,8 @@ button.rail-strip-item {
 }
 
 /* The waiting dots sit on the text line, after "Waiting for the agent". */
-.thread-row-meta .agent-now-dots {
+.thread-row-meta .agent-now-dots,
+.thread-status .agent-now-dots {
     margin-left: 4px;
     vertical-align: middle;
 }
@@ -4549,6 +4558,10 @@ button.rail-strip-item {
 .dialog-thread .thread-message:first-child {
     padding-top: 0;
     border-top: none;
+}
+
+.dialog-thread .thread-status {
+    padding-bottom: 14px;
 }
 
 /* The avatar's width plus the message gap, less the first button's own padding. */
@@ -6554,6 +6567,33 @@ button.nav-item {
 
 .cm-md-h3 {
     font-size: 1.15em;
+}
+
+/* A rendered quote, code block and rule, drawn as the Markdown views draw them; the line class beats CodeMirror's own. */
+.markdown-editor .cm-line.cm-md-quote {
+    padding-left: 14px;
+    border-left: 3px solid var(--line-strong);
+    color: var(--ink-2);
+}
+
+.markdown-editor .cm-line.cm-md-pre {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--sunken);
+}
+
+.markdown-editor .cm-line.cm-md-fence {
+    line-height: 8px;
+}
+
+.markdown-editor .cm-line.cm-md-hr {
+    background: linear-gradient(var(--line-strong), var(--line-strong)) center / 100% 1px no-repeat;
+}
+
+/* Indented as CodeMirror indents a line. */
+.markdown-editor .cm-md-table {
+    margin: 4px 0;
+    padding: 0 2px 0 6px;
 }
 
 .comment-signoff {

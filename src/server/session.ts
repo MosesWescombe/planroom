@@ -1,8 +1,9 @@
 import { existsSync, promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { checkCommand, currentPhase } from '../shared/derive.js';
+import { checkCommand, currentPhase, isReadOnly, orderedQuestions } from '../shared/derive.js';
 import { type LoggedEvent, type NewLoggedEvent, pageRequest } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
+import type { QuestionRecord } from '../shared/questions.js';
 import type { ValidationRecord } from '../shared/records.js';
 import {
     type CodeAnchor,
@@ -46,6 +47,11 @@ export const CHANGE_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** How long the top bar says "Agent editing …" after a write. */
 const EDITING_MS = 8_000;
+/**
+ * How long a question can sit `streaming` with the agent's other updates coming through before the server asks the
+ * agent to finish or close it, and how long after asking before it asks again.
+ */
+const STREAMING_STALE_MS = 120_000;
 export const ACTIVITY_LIMIT = 60;
 
 export interface OpenOptions {
@@ -256,6 +262,11 @@ export class Session {
     private work: Work | undefined;
     /** What the agent's running subagents are doing, as it last said. Kept across waits. */
     private subagents: string[] = [];
+    /** When the agent's last batch applied, in ms: a question it left `streaming` before then was passed by. */
+    private lastUpdate = 0;
+    /** When the server last asked the agent about each question it left `streaming`, in ms. */
+    private readonly askedAbout = new Map<string, number>();
+    private streamingTimer: NodeJS.Timeout | undefined;
     private proposal: ProposalView;
     /** Validations in flight; more than one when the user re-runs while one is still going. */
     private validations = 0;
@@ -623,6 +634,8 @@ export class Session {
             if (revision) await this.store.saveRevision(revision);
             await this.store.saveState(draft.state);
             this.commit(draft, revision);
+            this.lastUpdate = Date.parse(draft.now);
+            this.scheduleStreamingCheck();
             if (doing) this.work = { ...this.work, doing: followsAgent(doing) };
             if (subagents) {
                 this.subagents = subagents.map(followsAgent);
@@ -633,6 +646,45 @@ export class Session {
             if (validate) this.startValidation('proposal.ready');
             return result;
         });
+    }
+
+    /** When a question last went quiet: its last change, or the last time the server asked the agent about it. */
+    private quietSince(question: QuestionRecord): number {
+        return Math.max(Date.parse(question.updatedAt), this.askedAbout.get(question.id) ?? 0);
+    }
+
+    /** Questions still `streaming` that the agent's later updates passed by, while Phase 1 takes questions. */
+    private passedBy(): QuestionRecord[] {
+        if (isReadOnly(this.state) || this.state.phases.phase1.completed) return [];
+        return orderedQuestions(this.state).filter(
+            (question) => question.status === 'streaming' && this.lastUpdate > this.quietSince(question)
+        );
+    }
+
+    /** Check on the questions left streaming once the first of them has been quiet for `STREAMING_STALE_MS`. */
+    private scheduleStreamingCheck(): void {
+        clearTimeout(this.streamingTimer);
+        const due = Math.min(...this.passedBy().map((question) => this.quietSince(question) + STREAMING_STALE_MS));
+        if (due === Infinity) return;
+        this.streamingTimer = setTimeout(() => void this.checkStreaming(), Math.max(0, due - this.clock().getTime()));
+        this.streamingTimer.unref();
+    }
+
+    /** Ask the agent to finish or close each question it has left streaming that long, then schedule the next check. */
+    private async checkStreaming(): Promise<void> {
+        await this.exclusive(async () => {
+            if (this.closed) return;
+            const draft = new Draft(this.state, this.nowIso());
+            const now = Date.parse(draft.now);
+            const stale = this.passedBy().filter((question) => now - this.quietSince(question) >= STREAMING_STALE_MS);
+            if (!stale.length) return;
+            for (const question of stale) this.askedAbout.set(question.id, now);
+            await this.appendServerEvent(draft, {
+                type: 'streaming.check',
+                questions: stale.map((question) => ({ questionId: question.id, title: question.title }))
+            });
+        }).catch((error: unknown) => console.error(`planroom: could not check on the questions of ${this.changeId}`, error));
+        if (!this.closed) this.scheduleStreamingCheck();
     }
 
     /** Wait for page events after `after`. Also records the agent's cursor for the next resume. */
@@ -952,6 +1004,7 @@ export class Session {
         this.delivery.close();
         this.stopWatching?.();
         clearTimeout(this.editingTimer);
+        clearTimeout(this.streamingTimer);
         await this.queue.catch(() => undefined);
         await this.posting;
         await this.activityLog;

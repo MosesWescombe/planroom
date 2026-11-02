@@ -79,6 +79,8 @@ function workFor(event: LoggedEvent, events: readonly LoggedEvent[], state: Sess
             return { doing: 'revising the proposal', ...(event.threadId ? { thread: event.threadId } : {}) };
         case 'validation.result':
             return event.passed ? undefined : { doing: 'fixing validation errors' };
+        case 'streaming.check':
+            return { doing: `finishing ${event.questions.map((question) => question.questionId).join(', ')}` };
         case 'take.answer':
             return { doing: 'noting your take' };
         case 'reviewers.start':

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defined, harness, rejection, upsert } from '../test/serverHelpers.js';
 import { RejectedError } from './draft.js';
 
@@ -206,6 +206,65 @@ describe('completing Phase 1', () => {
         expect(session.current.questions['Q-3']).toBeUndefined();
         await session.emit({ events: [upsert('Q-2')] });
         expect(session.current.questions['Q-2']?.status).toBe('open');
+    });
+});
+
+describe('questions left streaming', () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+    afterEach(() => vi.useRealTimers());
+
+    /** Move the session clock and its timers on together, then let any check land. */
+    const pass = async ({ clock, session }: Awaited<ReturnType<typeof harness>>, ms: number) => {
+        clock.advance(ms);
+        await vi.advanceTimersByTimeAsync(ms);
+        await session.settled();
+    };
+    const checks = ({ session }: Awaited<ReturnType<typeof harness>>) =>
+        session.delivery.after(0).filter((event) => event.type === 'streaming.check');
+
+    it('asks the agent about a question it left streaming while its other updates came through, and says so on the page', async () => {
+        const run = await harness();
+        const { session } = run;
+        await session.emit({ events: [upsert('Q-1', { status: 'streaming' })] });
+        await pass(run, 10_000);
+        await session.emit({ events: [upsert('Q-2')] });
+        await pass(run, 100_000);
+        expect(checks(run)).toEqual([]);
+        await pass(run, 10_000);
+        expect(checks(run)).toEqual([
+            expect.objectContaining({ type: 'streaming.check', questions: [{ questionId: 'Q-1', title: 'Question Q-1' }] })
+        ]);
+        await session.wait(0, 1);
+        expect(session.agentStatus().doing).toBe('finishing Q-1');
+    });
+
+    it('leaves alone a question the agent is still writing with nothing else coming through, or finished', async () => {
+        const run = await harness();
+        const { session } = run;
+        await session.emit({ events: [upsert('Q-1', { status: 'streaming' })] });
+        await pass(run, 10 * 60_000);
+        expect(checks(run)).toEqual([]);
+        await session.emit({ events: [upsert('Q-1'), upsert('Q-2', { status: 'streaming' })] });
+        await pass(run, 10_000);
+        await session.emit({ events: [upsert('Q-3')] });
+        await pass(run, 10_000);
+        await session.emit({ events: [upsert('Q-2')] });
+        await pass(run, 10 * 60_000);
+        expect(checks(run)).toEqual([]);
+    });
+
+    it('asks again only once more updates pass the question by', async () => {
+        const run = await harness();
+        const { session } = run;
+        await session.emit({ events: [upsert('Q-1', { status: 'streaming' })] });
+        await pass(run, 1_000);
+        await session.emit({ events: [], doing: 'Reading the billing service' });
+        await pass(run, 119_000);
+        await pass(run, 10 * 60_000);
+        expect(checks(run)).toHaveLength(1);
+        await session.emit({ events: [upsert('Q-2')] });
+        await pass(run, 120_000);
+        expect(checks(run)).toHaveLength(2);
     });
 });
 

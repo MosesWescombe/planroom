@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { editorOf, editorText, makeView, renderWith, storeWith, typeInto } from '../../test/harness';
@@ -67,6 +67,46 @@ describe('the Markdown editor', () => {
         fireEvent.paste(box, { clipboardData: { getData: () => log, files: [] } });
         expect(editorText(box)).toBe('');
         expect(screen.getByRole('button', { name: 'Pasted text, 40 lines' })).toBeInTheDocument();
+    });
+
+    it('renders code blocks, lists, quotes, rules and tables, and shows the Markdown of the one the caret is in', async () => {
+        const text = [
+            '- one',
+            '1. first',
+            '> quoted',
+            '',
+            '```ts',
+            'const a = 1;',
+            '```',
+            '',
+            '---',
+            '',
+            '| Key | Value |',
+            '| --- | --- |',
+            '| **a** | |'
+        ].join('\n');
+        render(<MarkdownEditor id="box" labelId="box" value={text} onChange={() => {}} />);
+        const box = screen.getByRole('textbox');
+        expect(box).toHaveTextContent('• one');
+        expect(box).toHaveTextContent('1. first');
+        expect(box).not.toHaveTextContent('>');
+        expect(box.querySelector('.cm-md-quote')).toHaveTextContent('quoted');
+        expect(box).not.toHaveTextContent('```');
+        expect(box.querySelector('.cm-md-pre:not(.cm-md-fence)')).toHaveTextContent('const a = 1;');
+        expect(box.querySelectorAll('.cm-md-fence')).toHaveLength(2);
+        expect(box.querySelector('.cm-md-hr')).toHaveTextContent('');
+        const rows = Array.from(box.querySelectorAll('table tr'), (row) => Array.from(row.children, (cell) => cell.textContent));
+        expect(rows).toEqual([
+            ['Key', 'Value'],
+            ['a', '']
+        ]);
+        expect(box.querySelector('td .cm-md-strong')).toHaveTextContent('a');
+        const view = editorOf(box);
+        view.focus();
+        view.dispatch({ selection: { anchor: text.length } });
+        await waitFor(() => expect(box.querySelector('table')).toBeNull());
+        expect(box).toHaveTextContent('| Key | Value || --- | --- |');
+        expect(box).toHaveTextContent('• one');
     });
 
     it('shows a value changed from outside, as a discarded draft is', () => {

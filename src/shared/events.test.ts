@@ -170,6 +170,7 @@ const loggedSamples: Record<LoggedEventType, unknown> = {
         issues: [{ level: 'ERROR', path: 'specs', message: 'x' }],
         trigger: 'rerun'
     },
+    'streaming.check': { ...at, type: 'streaming.check', questions: [{ questionId: 'Q-3', title: 'Which store?' }] },
     'edit.undone': { ...at, type: 'edit.undone', revision: 3, newRevision: 5, blocks: ['b1'], sections: [] },
     'take.answer': {
         ...at,

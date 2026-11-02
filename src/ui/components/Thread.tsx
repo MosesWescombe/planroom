@@ -31,6 +31,11 @@ const INTENT: Record<NonNullable<ThreadRecord['intent']>, string> = {
     wrong: "It's wrong"
 };
 
+/** What the agent says it is doing about thread `id`, while it works on that thread. */
+function useAgentOn(id: string): string | undefined {
+    return useSelector((view) => (view.agent.working && view.agent.thread === id ? view.agent.doing : undefined));
+}
+
 /** A message's author badge: AI for the agent, You for the user. */
 function Avatar({ author }: { author: 'user' | 'agent' }) {
     return author === 'agent' ? (
@@ -46,7 +51,7 @@ function Avatar({ author }: { author: 'user' | 'agent' }) {
 
 /**
  * A comment thread or a direct-message thread in full, as its dialog shows it: every message as markdown, the
- * agent's diagrams and what its replies touched.
+ * agent's diagrams and what its replies touched, then, while a reply is due or the agent works on it, the agent's status.
  */
 export const Thread = memo(function Thread({ id }: { id: string }) {
     const thread = useRecord('threads', id);
@@ -58,8 +63,10 @@ export const Thread = memo(function Thread({ id }: { id: string }) {
     const [busy, track] = useBusy();
     const pastes = usePastes();
     const now = useNow();
+    const agentOn = useAgentOn(id);
     if (!thread) return null;
     const resolved = thread.status === 'resolved';
+    const awaiting = !resolved && thread.messages.at(-1)?.author === 'user';
 
     const sendReply = () => {
         const text = reply.trim();
@@ -132,6 +139,12 @@ export const Thread = memo(function Thread({ id }: { id: string }) {
                     </div>
                 </div>
             ))}
+            {(agentOn || awaiting) && (
+                <p className="thread-status" role="status">
+                    {agentOn ? `Agent ${agentOn}` : 'Waiting for the agent'}
+                    <AgentDots />
+                </p>
+            )}
             {!readOnly && (
                 <div className="thread-actions">
                     {replying ? (
@@ -216,7 +229,7 @@ export const ThreadRow = memo(function ThreadRow({
 }) {
     const thread = useRecord('threads', id);
     const anchorState = useAnchorState(id);
-    const agentOn = useSelector((view) => (view.agent.working && view.agent.thread === id ? view.agent.doing : undefined));
+    const agentOn = useAgentOn(id);
     const now = useNow();
     const seen = useSeen();
     if (!thread) return null;
