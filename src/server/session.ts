@@ -209,7 +209,8 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         takes,
         notes,
         pages,
-        ticks
+        ticks,
+        quiz
     } = state;
     return {
         changeId,
@@ -239,6 +240,7 @@ export function viewOf(state: SessionState, live: LiveFields): View {
         notes,
         pages,
         ticks,
+        quiz,
         ...live
     };
 }

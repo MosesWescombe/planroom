@@ -2,6 +2,7 @@ import { type ReactNode, useState } from 'react';
 import { planDir } from '../../shared/state';
 import { useNarrow } from '../hooks';
 import { readSetting, writeSetting } from '../local';
+import { QuizButton } from '../quiz/Quiz';
 import { useSelector } from '../store';
 import { Logo, PanelIcon } from './icons';
 import { PlanSwitcher } from './PlanSwitcher';
@@ -41,7 +42,8 @@ function Brand({ compact = false }: { compact?: boolean }) {
 /**
  * The left rail each tab puts its navigation in, running the full height of the page under the brand. On a wide screen
  * it collapses to a strip and resizes from its right edge, both remembered per browser; on a narrow one it is the
- * navigation drawer instead. `strip` is what the collapsed strip shows under its expand button.
+ * navigation drawer instead. `strip` is what the collapsed strip shows under its expand button. Quiz me sits at its
+ * foot wherever it is offered.
  */
 export function Rail({ children, strip }: { children: ReactNode; strip?: ReactNode }) {
     const narrow = useNarrow();
@@ -59,6 +61,7 @@ export function Rail({ children, strip }: { children: ReactNode; strip?: ReactNo
                     <Brand />
                 </div>
                 {children}
+                <QuizButton />
             </div>
         );
     }
@@ -78,6 +81,7 @@ export function Rail({ children, strip }: { children: ReactNode; strip?: ReactNo
                     <PanelIcon open={false} />
                 </button>
                 {strip}
+                <QuizButton compact />
             </div>
         );
     }
@@ -96,6 +100,7 @@ export function Rail({ children, strip }: { children: ReactNode; strip?: ReactNo
                 </button>
             </div>
             <div className="rail-scroll">{children}</div>
+            <QuizButton />
             <ResizeHandle label="Resize navigation" edge="right" size={RAIL_SIZE} width={width} setWidth={setWidth} />
         </div>
     );

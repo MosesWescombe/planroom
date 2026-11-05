@@ -435,6 +435,48 @@ interface ReviewBatch {
 
 type Fail = (index: number, path: string, message: string) => void;
 
+/**
+ * Add quiz questions, refusing one about anything the reader's requests did not list as seen, and settle the request
+ * they answer.
+ */
+function addQuiz(
+    draft: Draft,
+    event: Extract<AgentEvent, { type: 'quiz.add' }>,
+    index: number,
+    fail: Fail,
+    result: BatchResult
+): void {
+    const { quiz } = draft.state;
+    const seen = new Set(quiz.seen);
+    event.questions.forEach((question, at) => {
+        if (!seen.has(question.about))
+            fail(
+                index,
+                `.questions[${at}].about`,
+                `the reader has not seen "${question.about}"; ask only about a ref a quiz.request listed in \`seen\``
+            );
+        if (question.answer >= question.choices.length)
+            fail(index, `.questions[${at}].answer`, `the index of the right choice, below ${question.choices.length}`);
+    });
+    const added = event.questions.map((question, at) => ({
+        ...question,
+        id: `Z-${quiz.questions.length + at + 1}`,
+        at: draft.now
+    }));
+    draft.setQuiz({
+        seen: quiz.seen,
+        questions: [...quiz.questions, ...added],
+        ...(event.note ? { note: event.note } : {})
+    });
+    if (added.length) draft.note({ title: 'Wrote quiz questions', detail: `${added.length} on what you have read` });
+    result.applied.push({
+        index,
+        type: event.type,
+        ref: added.map((question) => question.id).join(', ') || 'quiz',
+        changed: true
+    });
+}
+
 /** The agent-owned fields of a slide, to tell a re-send from a change. */
 function slideContentOf(slide: SlideContent): SlideContent {
     const { id, chapter, order, title, blocks } = slide;
@@ -461,7 +503,8 @@ function applyReviewEvent(
                 | 'earlier.label'
                 | 'read.outline'
                 | 'read.page.upsert'
-                | 'read.page.add';
+                | 'read.page.add'
+                | 'read.page.walk';
         }
     >,
     index: number,
@@ -720,6 +763,22 @@ function applyReviewEvent(
             applied(event.page, true, draft.state.pages[key]?.version);
             return;
         }
+        case 'read.page.walk': {
+            const key = pageKey(round.n, event.page);
+            const page = ownRecord(draft.state.pages, key);
+            if (!page) {
+                fail(index, '.page', `round ${round.n}'s read-through has no page ${event.page}`);
+                return;
+            }
+            const { walkAsked, ...rest } = page;
+            const changed = walkAsked !== undefined || !isEqual(page.walk, event.walk);
+            if (changed) {
+                draft.putPage(key, { ...rest, walk: event.walk, version: page.version + 1, updatedAt: now });
+                if (!page.walk) draft.note({ title: 'Wrote a code walk', detail: page.title, ref: `page:${event.page}` });
+            }
+            applied(event.page, changed, draft.state.pages[key]?.version);
+            return;
+        }
     }
 }
 
@@ -836,9 +895,9 @@ function pieceLinesSpec({ file, lines, oldLines, repeat, from }: PieceSpec): Par
 }
 
 /**
- * Replace the round's pages with `pages`. A page kept by its id keeps its words, each piece's note and test case
- * follow the piece by its id from whichever page it was on, and an addition under a piece the page lost moves to the
- * page's end; a new page is coming until written, and a page left out goes, its threads detached. A piece removed or
+ * Replace the round's pages with `pages`. A page kept by its id keeps its words and its code walk, each piece's note
+ * and test case follow the piece by its id from whichever page it was on, and an addition under a piece the page lost
+ * moves to the page's end; a new page is coming until written, and a page left out goes, its threads detached. A piece removed or
  * whose lines changed is unticked, with every piece sharing a changed line with it on the pages as they were.
  */
 function restructure(
@@ -885,6 +944,8 @@ function restructure(
             round: round.n,
             ...(content ? { content } : {}),
             added,
+            ...(before?.walk ? { walk: before.walk } : {}),
+            ...(before?.walkAsked ? { walkAsked: before.walkAsked } : {}),
             version: (before?.version ?? 0) + 1,
             updatedAt: now
         });
@@ -1401,7 +1462,11 @@ export function applyAgentBatch(
             case 'read.outline':
             case 'read.page.upsert':
             case 'read.page.add':
+            case 'read.page.walk':
                 applyReviewEvent(draft, event, index, fail, result, { slideEvents, itemEvents }, quoted);
+                break;
+            case 'quiz.add':
+                addQuiz(draft, event, index, fail, result);
                 break;
             default:
                 break;

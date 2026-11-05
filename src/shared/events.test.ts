@@ -72,6 +72,34 @@ const agentSamples: Record<AgentEventType, unknown> = {
         threadId: 'C-1',
         piece: 'send',
         text: 'The caller locks first.'
+    },
+    'read.page.walk': {
+        type: 'read.page.walk',
+        page: 'retry-limit',
+        walk: {
+            steps: [
+                {
+                    title: 'The send fails',
+                    fn: 'send()',
+                    pseudo: 'try deliver\ncatch -> retry?',
+                    file: 'src/send.ts',
+                    lines: '4-8'
+                },
+                { title: 'Ask the policy', fn: 'shouldRetry()', depth: 1, note: 'Stops at `maxAttempts`.' }
+            ]
+        }
+    },
+    'quiz.add': {
+        type: 'quiz.add',
+        questions: [
+            {
+                about: 'block:how-flow',
+                question: 'What does the limiter do when Redis is down?',
+                choices: ['Fails open', 'Fails closed'],
+                answer: 0,
+                explanation: 'The write-up keeps requests flowing and counts the misses.'
+            }
+        ]
     }
 };
 
@@ -109,6 +137,7 @@ const pageSamples: Record<PageRequestType, unknown> = {
     },
     'read.tick': { type: 'read.tick', piece: 'send', read: true, how: 'auto' },
     'read.mark': { type: 'read.mark', pieces: ['send', 'retry'] },
+    'read.walk': { type: 'read.walk', page: 'retry-limit' },
     'comments.handoff': { type: 'comments.handoff' },
     'item.react': { type: 'item.react', itemId: 'I-1', verdict: 'reject', reason: 'Handled in the caller' },
     'comment.choose': { type: 'comment.choose', key: 'item:I-1', task: true },
@@ -125,7 +154,8 @@ const pageSamples: Record<PageRequestType, unknown> = {
             density: 'light',
             views: { pins: true, diff: true, charts: false, heatmap: true, matrix: true }
         }
-    }
+    },
+    'quiz.request': { type: 'quiz.request', seen: ['block:how-flow', 'item:I-1', 'piece:1:send'] }
 };
 
 const at = { seq: 1, at: '2026-09-29T00:00:00.000Z' };
@@ -207,7 +237,14 @@ const loggedSamples: Record<LoggedEventType, unknown> = {
             views: { pins: true, diff: true, charts: true, heatmap: true, matrix: true }
         }
     },
-    'review.posted': { ...at, type: 'review.posted', round: 1, posted: 6, total: 7, failed: ['item:I-5'], drafts: true }
+    'review.posted': { ...at, type: 'review.posted', round: 1, posted: 6, total: 7, failed: ['item:I-5'], drafts: true },
+    'read.walk': { ...at, type: 'read.walk', round: 1, page: 'retry-limit', title: 'The retry limit is a setting' },
+    'quiz.request': {
+        ...at,
+        type: 'quiz.request',
+        seen: [{ ref: 'block:how-flow', what: 'flow block in §3 "How it works"' }],
+        asked: []
+    }
 };
 
 describe('agent events', () => {

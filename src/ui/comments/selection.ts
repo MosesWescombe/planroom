@@ -144,6 +144,20 @@ export function captureSelection(selection: Selection | null = window.getSelecti
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return undefined;
     const range = selection.getRangeAt(0);
     if (elementOf(range.startContainer)?.closest('input, textarea, select, button, [contenteditable="true"]')) return undefined;
+    return captureRange(range);
+}
+
+/** Whether a comment can anchor in `element`: it sits in a commentable element, and in nothing marked `data-no-comment`. */
+export function commentable(element: Element): boolean {
+    return targetOf(element) !== null && !element.closest('[data-no-comment]');
+}
+
+/**
+ * A range as a comment anchor on the nearest commentable element around all of it, as if it were selected: what a
+ * button that asks about some text, such as a code walk's step, quotes. Nothing when either end sits in text marked
+ * `data-no-comment`.
+ */
+export function captureRange(range: Range): SelectionAnchor | undefined {
     // The side panel, and code with a Comment bar of its own, are marked as no place for one.
     if ([range.startContainer, range.endContainer].some((node) => elementOf(node)?.closest('[data-no-comment]')))
         return undefined;

@@ -179,10 +179,12 @@ Throughout:
   say what happens and why it matters in everyday words, with no jargon, file names or code. When the user needs the
   internals (a code path, a schema, a config), put them in a block with `technical: true`: the page folds it behind a
   "Technical detail" toggle, under the plain-words version.
-- **Reach for analogies.** Whenever an idea is new to the user (a flow, a trade-off, why one direction beats another),
-  compare it to something everyday with an `analogy` block in `context.blocks`, a direction's `blocks` or a reply's
-  `blocks`, and always say in `breaks` where the comparison stops holding. Pick one the user would know without
-  thinking: a queue at a counter, a library card, a spare key.
+- **Intuition before detail.** Whenever an idea is new to the user (a flow, a trade-off, why one direction beats
+  another), build the intuition first with an `intuition` block in `context.blocks`, a direction's `blocks` or a
+  reply's `blocks`, ahead of any detail: the gist in a sentence or two of plain words, made concrete with an everyday
+  analogy (`like`), a picture (`illustration`) and a small worked example with real numbers (`example`), as many as
+  each add something. Pick an analogy the user would know without thinking (a queue at a counter, a library card, a
+  spare key), and always say in `breaks` where the intuition stops holding.
 - **Show, don't describe.** Put a diagram, table or option matrix in `context.blocks` when the choice turns on a flow
   or trade-off (see [the block catalog](references/blocks.md)). Compare options in an `optionMatrix`, never a table:
   one column per option, a row per criterion, each cell a score, a short text or a text with a verdict.
@@ -228,9 +230,9 @@ interactive checklist with every item `done: true`, so it starts fully agreed an
 and assumptions.
 
 - **ELI5 first.** The first section, titled "ELI5", explains the whole change as you would to a five-year-old: a
-  `text` block of three or four short sentences with no jargon, then an `analogy` block for the change as a whole.
+  `text` block of three or four short sentences with no jargon, then an `intuition` block for the change as a whole.
 - **Every section starts plain.** Open each later section with its own one- or two-sentence ELI5 in a `text` block,
-  and an `analogy` where the idea is new. The detail follows; code, schemas, config and internals only an engineer
+  and an `intuition` where the idea is new. The detail follows; code, schemas, config and internals only an engineer
   needs go in `technical: true` blocks.
 
 - **The page writes the decisions.** It ends the write-up with a Decisions section built from the answered questions:
@@ -240,6 +242,9 @@ and assumptions.
   `text` block. Never send HTML. Pick the diagram that fits: `flow`, `sequence`, `architecture`, `state`, `schema`
   for tables and migrations, `c4` for a system's context or containers, `mindmap` for scope, `gantt` for a dated or
   sized schedule (`timeline` for plain ordered steps), `sankey` for volumes that split and merge.
+- Where the order the code runs in is the point, as in how a request reaches the new code or how a retry loops, add a
+  `codeWalk` (`technical: true`): the path followed a step at a time through the functions it calls, each step in
+  plain words and pseudo code, naming the real `file` and `lines` once they exist so the user can switch to them.
 - Sections are `doc.section.upsert { id, title, order, blocks }`; send each block before or with the section listing it.
 - To set two or three blocks side by side, list their ids as a row inside `blocks`:
   `["how-text", ["how-before", "how-after"], "how-seq"]`. The row stacks on a narrow screen. Columns need no labels,
@@ -253,6 +258,14 @@ Handling Phase 3 events: the user's reviewed ticks are theirs alone and never re
 information. `assumption.confirm` settles one, or with `confirmed: false` reopens one the user took back. `block.fix` names a block and its schema errors: re-send it fixed.
 `edit.undone` means the user reverted revision `revision`; do not re-apply it. A comment reply that edited content lists
 what it changed in `touched`, or the server fills it in.
+
+`quiz.request` means the user pressed Quiz me on the write-up, to check themselves against what they have read. Answer
+with one `quiz.add` of three to five multiple-choice questions on the substance (what the change does, why, and its
+trade-offs), not on wording. `seen` lists every block they have had on screen (`block:<id>`), each with what it is: ask
+only about those blocks' content, each question's `about` the ref it tests. Never ask about anything they have not seen;
+the server refuses a question about any other ref. Repeat nothing in `asked`. Give two to five plausible `choices`,
+`answer` the index of the right one, and an `explanation` of a sentence or two saying why. When what they have seen is
+too thin for new questions, send only a `note` saying what to read next.
 
 ## Phase 4: Proposal
 

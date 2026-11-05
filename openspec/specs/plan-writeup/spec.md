@@ -11,10 +11,11 @@ the app renders, and the user reviews it section by section, with history and un
 The write-up SHALL be a list of titled sections, each listing its blocks in order. The page SHALL render the block
 types `text`, `callout`, `checklist`, `table`, `stats`, `flow`, `sequence`, `architecture`, `state`, `schema`, `c4`,
 `mindmap`, `compare`, `timeline`, `gantt`, `bar`, `line`, `sankey`, `riskMatrix`, `optionMatrix`, `fileTree`, `code`,
-`image`, `mermaid`, `analogy` and `stepThrough`, each from its config with the app's own component. A review session
+`image`, `mermaid`, `intuition` and `stepThrough`, each from its config with the app's own component. A review session
 SHALL also render `yourTake` and `html`, which MUST be refused in any other session. A `compare` side SHALL be a diagram,
-a `code` block or an `image` block, whether inline or by block id. An `analogy` SHALL map each real part of the change to
-its counterpart in the analogy, with an optional illustration and where the analogy breaks down. A `stepThrough` SHALL
+a `code` block or an `image` block, whether inline or by block id. An `intuition` SHALL explain a concept before any detail: its
+gist in plain words, with an optional everyday analogy mapping each real part to its counterpart, an optional worked
+example, an optional illustration and where the intuition breaks down. A `stepThrough` SHALL
 pair a `flow` or `sequence` diagram with ordered steps, each lighting up nodes or messages under a caption, advanced by
 the arrow keys or buttons. `text` SHALL carry prose as a markdown subset
 rendered as elements. Text in any config MUST render as text, never as markup.
@@ -86,11 +87,12 @@ pasted image.
 - **THEN** the options are the columns with the first one marked "Recommended", and each verdict shows its icon and its
   word for screen readers
 
-#### Scenario: Analogy
+#### Scenario: Intuition
 
-- **WHEN** an `analogy` block maps a queue to a ticket counter, three parts to three counterparts, and names one place
-  the analogy breaks down
-- **THEN** each pair shows side by side with the break-down shown after them, in any session kind
+- **WHEN** an `intuition` block gives the gist of rate limiting, compares it to a ticket counter with three parts
+  mapped to three counterparts, works an example and names one place the intuition breaks down
+- **THEN** the gist shows first, then each pair side by side, the example, and the break-down after them, in any
+  session kind
 
 #### Scenario: Step-through
 

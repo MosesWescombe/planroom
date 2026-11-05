@@ -21,7 +21,8 @@ import {
 } from '../shared/derive.js';
 import { type LoggedAttachment, type NewLoggedEvent, PAGE_REQUESTS, type PageRequest } from '../shared/events.js';
 import { answerProblem, describeAnswer, type QuestionRecord } from '../shared/questions.js';
-import { HOUSEKEEPING_PAGE, repeatOf, roundPages, sharedTicks, tickKey } from '../shared/readthrough.js';
+import { describeQuizPlace, quizPlace } from '../shared/quiz.js';
+import { HOUSEKEEPING_PAGE, pageKey, repeatOf, roundPages, sharedTicks, tickKey } from '../shared/readthrough.js';
 import {
     type Attachment,
     type BlockRecord,
@@ -258,6 +259,22 @@ function reopenSession(draft: Draft): PageOutcome {
     draft.setPhases({ ...phases, acceptedAt: null });
     noteYours(draft, { title: 'You reopened the session' });
     return { event: { type: 'session.reopen', from } };
+}
+
+/**
+ * Ask the agent for quiz questions on what the reader has seen. The refs that name something still on show join those
+ * of earlier requests, and the agent gets them all in words with the questions it already asked. One request at a time.
+ */
+function requestQuiz(draft: Draft, refs: readonly string[]): PageOutcome {
+    const { quiz } = draft.state;
+    if (quiz.requestedAt) reject('The agent is still writing your last questions');
+    const seen = [...new Set([...quiz.seen, ...refs])].flatMap((ref) => {
+        const place = quizPlace(draft.state, ref);
+        return place ? [{ ref, what: describeQuizPlace(draft.state, place) }] : [];
+    });
+    if (seen.length === 0) reject('There is nothing you have read yet to quiz you on', 'seen');
+    draft.setQuiz({ seen: seen.map((entry) => entry.ref), questions: quiz.questions, requestedAt: draft.now });
+    return { event: { type: 'quiz.request', seen, asked: quiz.questions.map((question) => question.question) } };
 }
 
 /** The requests every kind with comment threads takes the same way. */
@@ -576,6 +593,17 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
             }
             return {};
         }
+        case 'read.walk': {
+            if (!round.readthrough) reject('The read-through is not open yet');
+            const key = pageKey(round.n, request.page);
+            const page =
+                ownRecord(state.pages, key) ?? reject(`round ${round.n}'s read-through has no page ${request.page}`, 'page', 404);
+            if (page.walk) reject('This page has a code walk already');
+            if (page.walkAsked) reject("The agent is still writing this page's code walk");
+            draft.putPage(key, { ...page, walkAsked: now, version: page.version + 1, updatedAt: now });
+            noteYours(draft, { title: 'You asked for a code walk', detail: page.title });
+            return { event: { type: 'read.walk', round: round.n, page: page.id, title: page.title } };
+        }
         case 'comments.handoff': {
             if (!findingsUnlocked(round)) reject('Finish or skip the walkthrough first');
             if (deriveComments(state, round.n).length === 0) reject('There is nothing to hand to an agent yet');
@@ -620,6 +648,7 @@ export function applyPageRequest(
                   ? 'You ended this review; it is read-only.'
                   : `You ${state.phases.ended.how} this session; it is read-only.`
         );
+    if (request.type === 'quiz.request') return requestQuiz(draft, request.seen);
     if (state.kind === 'review' && request.type !== 'session.end' && !THREAD_REQUESTS.has(request.type))
         return applyReviewRequest(draft, request, context);
 

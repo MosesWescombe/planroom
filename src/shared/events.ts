@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { blockEnvelope, recordId, TAKE_KINDS } from './blocks.js';
+import { blockEnvelope, codeWalkConfig, recordId, TAKE_KINDS } from './blocks.js';
 import { answer, contextBlock, questionContent, questionId } from './questions.js';
+import { quizQuestion } from './quiz.js';
 import { outlinePage, pageContent } from './readthrough.js';
 import { anchor, attachment, commentIntent, outstanding, sectionContent, touched, validationIssue } from './records.js';
 import {
@@ -148,6 +149,25 @@ export const agentEvent = z.discriminatedUnion('type', [
         .refine((add) => add.text !== undefined || add.blocks !== undefined, {
             message: 'send `text`, `blocks` or both',
             path: ['text']
+        }),
+    /**
+     * Put a code walk on a page, the page's code followed in the order it runs: unasked where it helps, or answering a
+     * `read.walk`. Sending it again replaces it. It never changes the page's words or unticks anything.
+     */
+    z.object({ type: z.literal('read.page.walk'), page: recordId, walk: codeWalkConfig }),
+    /**
+     * Answer a `quiz.request`: multiple-choice questions, each about one of the refs it listed in `seen`, and a `note`
+     * to say why there are few or none, such as what the reader has yet to read.
+     */
+    z
+        .object({
+            type: z.literal('quiz.add'),
+            questions: z.array(quizQuestion).max(10),
+            note: z.string().trim().min(1).max(1000).optional()
+        })
+        .refine((add) => add.questions.length > 0 || add.note !== undefined, {
+            message: 'send `questions`, a `note` or both',
+            path: ['questions']
         })
 ]);
 export type AgentEvent = z.infer<typeof agentEvent>;
@@ -167,7 +187,8 @@ const REVIEW_ONLY_AGENT_EVENTS: readonly AgentEventType[] = [
     'earlier.label',
     'read.outline',
     'read.page.upsert',
-    'read.page.add'
+    'read.page.add',
+    'read.page.walk'
 ];
 
 /** The agent events an ask takes: its question and info cards, and replies. The rest belong to a plan's phases. */
@@ -180,11 +201,12 @@ export const ASK_AGENT_EVENTS: ReadonlySet<AgentEventType> = new Set<AgentEventT
     'suggestion.decline'
 ]);
 
-/** The agent events a review takes: its blocks, slides and findings, the summary, and replies. */
+/** The agent events a review takes: its blocks, slides and findings, the summary, replies and quiz questions. */
 export const REVIEW_AGENT_EVENTS: ReadonlySet<AgentEventType> = new Set<AgentEventType>([
     'doc.block.upsert',
     'comment.reply',
     'comment.edit',
+    'quiz.add',
     ...REVIEW_ONLY_AGENT_EVENTS
 ]);
 
@@ -291,6 +313,8 @@ export const pageRequest = z.discriminatedUnion('type', [
     }),
     /** Tick several read-through pieces read by hand at once, as "Mark the page read" and "Mark all read" do. */
     z.object({ type: z.literal('read.mark'), pieces: z.array(recordId).min(1).max(8000) }),
+    /** Ask the agent for a code walk of a read-through page. */
+    z.object({ type: z.literal('read.walk'), page: recordId }),
     /** Write the round's comments to a task file for an agent to work through, and hand back the prompt to copy. */
     z.object({ type: z.literal('comments.handoff') }),
     /** Finish or skip the round's walkthrough, which unlocks its findings. */
@@ -355,7 +379,9 @@ export const pageRequest = z.discriminatedUnion('type', [
     }),
     /** Confirm an earlier comment the agent labelled addressed, so Post resolves it. */
     z.object({ type: z.literal('earlier.confirm'), key: z.string().min(1).max(200), confirmed: z.boolean() }),
-    z.object({ type: z.literal('preferences.set'), preferences: reviewPreferences })
+    z.object({ type: z.literal('preferences.set'), preferences: reviewPreferences }),
+    /** Ask the agent for quiz questions on what has been on screen in this browser, by its refs (see `quiz.ts`). */
+    z.object({ type: z.literal('quiz.request'), seen: z.array(z.string().min(1).max(200)).max(5000) })
 ]);
 export type PageRequest = z.infer<typeof pageRequest>;
 export type PageRequestType = PageRequest['type'];
@@ -378,6 +404,7 @@ const REVIEW_ONLY_PAGE_REQUESTS: readonly PageRequestType[] = [
     'preferences.set',
     'read.tick',
     'read.mark',
+    'read.walk',
     'comments.handoff'
 ];
 
@@ -394,12 +421,13 @@ export const ASK_PAGE_REQUESTS: ReadonlySet<PageRequestType> = new Set<PageReque
     'ask.done'
 ]);
 
-/** The page requests a review takes: its own, comments and messages, and ending or reopening it. */
+/** The page requests a review takes: its own, comments and messages, a quiz, and ending or reopening it. */
 export const REVIEW_PAGE_REQUESTS: ReadonlySet<PageRequestType> = new Set<PageRequestType>([
     'comment.create',
     'thread.reply',
     'comment.resolve',
     'message.send',
+    'quiz.request',
     'session.end',
     'session.reopen',
     ...REVIEW_ONLY_PAGE_REQUESTS
@@ -570,6 +598,11 @@ export const loggedEvent = z.discriminatedUnion('type', [
         text: z.string().optional(),
         reason: z.string().optional()
     }),
+    /**
+     * The reviewer asked for a code walk of read-through page `page` of round `round`: follow its code in the order it
+     * runs and send it with `read.page.walk`.
+     */
+    logged.extend({ type: z.literal('read.walk'), round: z.number().int(), page: z.string(), title: z.string() }),
     /** The reviewer changed their preferences: follow them for slides you have not written yet. */
     logged.extend({ type: z.literal('preferences.change'), preferences: reviewPreferences }),
     /** Post ended: how many of the round's comments are on the PR's host, and which failed. */
@@ -581,6 +614,15 @@ export const loggedEvent = z.discriminatedUnion('type', [
         failed: z.array(z.string()),
         /** Whether the comments went up as drafts the reviewer finishes on the host: on Bitbucket, never on Azure DevOps. */
         drafts: z.boolean()
+    }),
+    /**
+     * The reader asked to be quizzed on what they have seen, every ref of it listed in `seen` with what it is: answer
+     * with `quiz.add`, each question about one of them, none repeating a question in `asked`.
+     */
+    logged.extend({
+        type: z.literal('quiz.request'),
+        seen: z.array(z.object({ ref: z.string(), what: z.string() })),
+        asked: z.array(z.string())
     })
 ]);
 export type LoggedEvent = z.infer<typeof loggedEvent>;

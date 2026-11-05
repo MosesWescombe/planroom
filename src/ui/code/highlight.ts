@@ -3,6 +3,33 @@ import { common, createLowlight } from 'lowlight';
 const lowlight = createLowlight(common);
 
 type HastNode = ReturnType<typeof lowlight.highlight>['children'][number];
+/** A highlight.js grammar, typed from lowlight's own `register`: highlight.js is not a direct dependency. */
+type LanguageFn = Parameters<typeof lowlight.register>[1];
+
+/**
+ * Pseudo code as the agent writes it: plain words among the code's names, values and comments. Control words,
+ * literals, numbers, double-quoted and backticked strings, `#` and `//` comments, `->` arrows, calls and properties
+ * colour as they would in code. Single quotes are left alone: in pseudo code they are mostly apostrophes.
+ */
+const pseudo: LanguageFn = (hljs) => ({
+    name: 'Pseudo code',
+    case_insensitive: true,
+    keywords: {
+        keyword: 'if else otherwise then for each while until loop return try catch throw await break continue and or not',
+        literal: 'true false null undefined none yes no'
+    },
+    contains: [
+        hljs.HASH_COMMENT_MODE,
+        hljs.C_LINE_COMMENT_MODE,
+        hljs.QUOTE_STRING_MODE,
+        { scope: 'string', begin: '`', end: '`' },
+        { scope: 'number', match: /\b\d+(?:\.\d+)?(?:ms|s)?\b/ },
+        { scope: 'keyword', match: /->|=>/ },
+        { scope: 'title.function', match: /\b[A-Za-z_$][\w$]*(?=\()/ },
+        { scope: 'property', match: /(?<=\.)[A-Za-z_$][\w$]*/ }
+    ]
+});
+lowlight.register({ pseudo });
 
 /** One run of highlighted text: its text and the highlight.js classes of each span around it, outermost first. */
 export interface Token {

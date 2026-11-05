@@ -86,6 +86,12 @@ Channels are optional. Launch Claude Code with
 reaches Claude while it is busy rather than waiting. Without them, those events wait for
 its next poll. Channels are a research preview; on claude.ai Team and Enterprise an Owner must allow them.
 
+**Quiz me.** On a plan's write-up, and anywhere in a review, Quiz me at the foot of the left bar asks Claude for
+multiple-choice questions on what you have read so far, to check yourself against it. Each shows whether your pick was
+right, why, and a link back to where you read it; More asks for another set. Only what has been on screen in this
+browser for two seconds counts as read: a write-up or slide block, a finding, a read-through piece. Planroom refuses a
+question about anything else. Your picks stay in this browser.
+
 | Command                               | Does                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------ |
 | `planroom open [change-id]`           | Open this repo's plans read-only in the browser, or one plan             |
@@ -105,14 +111,14 @@ As the page opens it asks how to review: the overview deck, the line-by-line rea
 and whether agents review the change too. Your choice is kept as the next review's default.
 
 1. **Walkthrough.** Claude builds a deck of 6 to 15 slides in four chapters (Why, How it works, What it might impact,
-   Trade-offs) from diagrams, step-throughs, analogies and pictures it draws as SVG itself. You see its progress while
+   Trade-offs) from diagrams, step-throughs, intuitions and pictures it draws as SVG itself. You see its progress while
    it builds, then the deck up to What it might impact at once. Move with the arrow keys, the chapter bar or the
    overview. Your-take cards ask for your prediction, pros and cons, risk ratings or an answer before they show
    Claude's view. What it might impact maps the areas the change might reach: open one to see how, and write your
    questions and concerns under it, or add an area Claude missed. Moving on sends them to Claude, which investigates
    them and writes Trade-offs, answering each of your concerns beside its own.
 
-   ![A walkthrough slide: an analogy with Claude's own picture, beside a prediction card answered before Claude's view shows](docs/screenshots/review-walkthrough.png)
+   ![A walkthrough slide: an intuition with Claude's own picture, beside a prediction card answered before Claude's view shows](docs/screenshots/review-walkthrough.png)
 
    ![What it might impact: six areas the change reaches around it, one carrying the reviewer's concern](docs/screenshots/review-impact.png)
 
@@ -125,6 +131,9 @@ and whether agents review the change too. Your choice is kept as the next review
    appears in the reviewed commit. Tick what you have read, or let a piece tick itself after 10 seconds on screen; the
    side list shows how far you are on each page, and By file lists the pages each file is on. Click a line number or
    drag across several to comment, or to ask Claude about them; its answer can add code to the page, marked as asked.
+   Walk me through the code asks Claude for a code walk of a page: its code followed step by step in the order it runs,
+   through the functions it calls, each step in plain words and pseudo code with the real code a switch away and a
+   button to ask about it. Claude puts one up unasked where the flow is the point.
    Pages appear as they are written, so you start on the first while the rest are on their way.
 
 3. **Review.** Reviewer subagents, then a verify pass that drops what it cannot confirm. Claude starts none until you

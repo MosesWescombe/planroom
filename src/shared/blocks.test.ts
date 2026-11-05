@@ -83,13 +83,22 @@ const broken: Record<BlockType, { config: Record<string, unknown>; path: string 
     code: { config: { mode: 'excerpt', file: 'src/a.ts' }, path: 'lines' },
     image: { config: { src: 'https://example.com/a.png', alt: 'A' }, path: 'src' },
     mermaid: { config: { source: '' }, path: 'source' },
-    analogy: { config: { title: 'A queue', pairs: [] }, path: 'pairs' },
+    intuition: { config: { concept: 'Rate limiting', gist: '' }, path: 'gist' },
     stepThrough: {
         config: {
             diagram: { type: 'flow', config: { nodes: [{ id: 'a', label: 'A' }], edges: [] } },
             steps: [{ caption: 'Start', nodes: ['ghost'] }]
         },
         path: 'steps[0].nodes[0]'
+    },
+    codeWalk: {
+        config: {
+            steps: [
+                { title: 'Read the cap', file: 'src/send.ts' },
+                { title: 'Retry', note: 'Loops.' }
+            ]
+        },
+        path: 'steps[0].lines'
     },
     yourTake: { config: { kind: 'check', question: 'Q?', options: ['a', 'b'], correct: 2 }, path: 'correct' },
     impactMap: {
@@ -106,7 +115,7 @@ const broken: Record<BlockType, { config: Record<string, unknown>; path: string 
 
 describe('block catalog', () => {
     it('has the handoff catalog of 18 types, text, the schema, c4, mindmap, gantt and sankey diagrams, and the review blocks', () => {
-        expect(blockTypes).toHaveLength(29);
+        expect(blockTypes).toHaveLength(30);
         expect(Object.keys(blockCatalog).sort()).toEqual([...blockTypes].sort());
     });
 
@@ -257,6 +266,17 @@ describe('the diagram and chart schemas', () => {
             ]
         });
         expect(check.ok ? [] : check.issues.map((issue) => issue.path)).toEqual(['steps[0].messages[1]', 'steps[1].nodes']);
+    });
+
+    it('a code walk step says something: a note, pseudo code or real code, its file and lines together', () => {
+        const check = checkBlockConfig('codeWalk', {
+            steps: [
+                { title: 'Empty' },
+                { title: 'Lines alone', note: 'Reads it.', lines: '4' },
+                { title: 'Fine', pseudo: 'retry' }
+            ]
+        });
+        expect(check.ok ? [] : check.issues.map((issue) => issue.path)).toEqual(['steps[0].note', 'steps[1].file']);
     });
 
     it('a predict take with options gives one of them as its answer', () => {

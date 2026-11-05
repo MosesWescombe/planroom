@@ -278,6 +278,12 @@ export class Draft {
         this.setReview({ ...review, rounds: review.rounds.map((round) => (round.n === n ? change(round) : round)) });
     }
 
+    /** Replace the quiz and record the page patch. */
+    setQuiz(value: SessionState['quiz']): void {
+        this.state.quiz = value;
+        this.patches.set('quiz', { field: 'quiz', value });
+    }
+
     /** Replace the agent's understanding and record the page patch. */
     setUnderstanding(value: SessionState['understanding']): void {
         this.state.understanding = value;

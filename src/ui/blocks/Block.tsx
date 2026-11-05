@@ -20,6 +20,7 @@ import {
     TimelineBlock
 } from './basic';
 import { BarBlock, GanttBlock, LineBlock, OptionMatrixBlock, RiskMatrixBlock, SankeyBlock } from './charts';
+import { CodeWalkBlock } from './codeWalk';
 import {
     ArchitectureBlock,
     C4Block,
@@ -31,7 +32,7 @@ import {
     StateBlock
 } from './diagrams';
 import { ImpactMapBlock } from './impact';
-import { AnalogyBlock, HtmlBlock, StepThroughBlock, YourTakeBlock } from './review';
+import { HtmlBlock, IntuitionBlock, StepThroughBlock, YourTakeBlock } from './review';
 
 /**
  * Where a block sits: the write-up and a review's slides own interactive blocks; question context, replies and history
@@ -77,8 +78,9 @@ export const renderers: { [T in BlockType]: Renderer<T> } = {
     code: CodeBlock,
     image: ImageBlock,
     mermaid: MermaidBlock,
-    analogy: AnalogyBlock,
+    intuition: IntuitionBlock,
     stepThrough: StepThroughBlock,
+    codeWalk: CodeWalkBlock,
     yourTake: YourTakeBlock,
     impactMap: ImpactMapBlock,
     html: HtmlBlock

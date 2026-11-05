@@ -527,6 +527,39 @@ describe('the kind gate', () => {
     });
 });
 
+describe('quiz me', () => {
+    it('names the slide blocks and findings the reviewer saw, and takes questions on them', async () => {
+        const { emit, page, call, session } = await branchReview();
+        await emit([...DECK, issue(), { type: 'deck.publish' }]);
+        await page({ type: 'walkthrough.done', how: 'skipped' });
+        await page({ type: 'quiz.request', seen: ['block:how-flow', 'item:I-1'] });
+        const { body } = await call('planroom_wait', { after: 0, timeoutSec: 1 });
+        expect(body.events.at(-1)).toMatchObject({
+            type: 'quiz.request',
+            seen: [
+                { ref: 'block:how-flow', what: 'flow block on slide "Slide how"' },
+                { ref: 'item:I-1', what: 'finding I-1: Two retries can outlast the caller timeout' }
+            ]
+        });
+        const added = await emit([
+            {
+                type: 'quiz.add',
+                questions: [
+                    {
+                        about: 'item:I-1',
+                        question: 'Why can two retries fail the caller?',
+                        choices: ['They outlast its timeout', 'They retry the wrong call'],
+                        answer: 0,
+                        explanation: 'Two retries at 100 ms each outlast its 150 ms timeout.'
+                    }
+                ]
+            }
+        ]);
+        expect(added.isError).toBe(false);
+        expect(session().current.quiz.questions.map((question) => question.id)).toEqual(['Z-1']);
+    });
+});
+
 describe('findings', () => {
     it('refuses an anchor outside the diff and a pin on a node the diagram lacks', async () => {
         const { emit } = await branchReview();

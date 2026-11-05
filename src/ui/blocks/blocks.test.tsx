@@ -21,6 +21,7 @@ import { formatValue } from '../format';
 import { type BlockInput, BlockView } from './Block';
 import { ImageBlock } from './basic';
 import { niceTicks } from './charts';
+import { callStack } from './codeWalk';
 import {
     c4Graph,
     curvePath,
@@ -538,6 +539,127 @@ describe('block interactions', () => {
                 }
             ])
         );
+    });
+
+    it('code walk: the steps on the left, the one on show on the right, moved by the list, the buttons and the keys', () => {
+        renderBlock({ id: 'walk', type: 'codeWalk', config: blockCatalog.codeWalk.example });
+        const walk = screen.getByRole('group', { name: 'Code walk: A failed send, to its next attempt' });
+        const rows = within(within(walk).getByRole('list', { name: 'Steps' })).getAllByRole('button');
+        const stack = () =>
+            within(walk)
+                .getAllByRole('listitem')
+                .filter((item) => item.closest('[aria-label="Call stack"]'))
+                .map((item) => item.textContent);
+        // The bar fills from the left up to the step on show.
+        const filled = () =>
+            [...walk.querySelectorAll('.walk-progress > span')].map((part) => part.classList.contains('is-done'));
+        expect(rows).toHaveLength(3);
+        expect(rows[0]).toHaveAttribute('aria-current', 'step');
+        expect(filled()).toEqual([true, false, false]);
+        expect(within(walk).getByRole('heading', { name: 'The send fails' })).toBeInTheDocument();
+        expect(within(walk).getByText('Step 1 of 3 · 1 seen')).toBeInTheDocument();
+
+        fireEvent.click(within(walk).getByRole('button', { name: 'Next step' }));
+        expect(within(walk).getByRole('heading', { name: 'Ask the policy whether to retry' })).toBeInTheDocument();
+        expect(stack()).toEqual(['send()', 'shouldRetry()']);
+        // The arrow key is taken while there is a step to go to, and left to scroll the view past the last.
+        expect(fireEvent.keyDown(walk, { key: 'ArrowRight' })).toBe(false);
+        expect(within(walk).getByRole('heading', { name: 'Wait, then go round again' })).toBeInTheDocument();
+        expect(stack()).toEqual(['send()']);
+        expect(filled()).toEqual([true, true, true]);
+        expect(within(walk).getByRole('progressbar', { name: 'Progress' })).toHaveAttribute('aria-valuenow', '3');
+        expect(fireEvent.keyDown(walk, { key: 'ArrowRight' })).toBe(true);
+
+        fireEvent.click(defined(rows[0]));
+        expect(rows[0]).toHaveAttribute('aria-current', 'step');
+        expect(filled()).toEqual([true, false, false]);
+        expect(within(walk).getByText('Step 1 of 3 · 3 seen')).toBeInTheDocument();
+        expect(within(walk).getByRole('button', { name: 'Back' })).toBeDisabled();
+    });
+
+    it('code walk: pseudo code switches to the real code, read live, and the choice holds from step to step', async () => {
+        const fetched: string[] = [];
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async (url: string) => {
+                fetched.push(url);
+                const file = new URLSearchParams(url.split('?')[1]).get('file');
+                return Response.json({ file, start: 4, end: 5, lines: ['try {', '    deliver(job);'] });
+            })
+        );
+        renderBlock({ id: 'walk', type: 'codeWalk', config: blockCatalog.codeWalk.example });
+        expect(screen.getByLabelText('Pseudo code')).toHaveTextContent('try deliver(job)');
+        fireEvent.click(screen.getByRole('tab', { name: 'Real code' }));
+        expect(await screen.findByLabelText('Excerpt of src/send.ts')).toBeInTheDocument();
+        expect(fetched).toEqual(['api/code?file=src%2Fsend.ts&lines=4-8']);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+        expect(await screen.findByLabelText('Excerpt of src/policy.ts')).toBeInTheDocument();
+        // The last step has only pseudo code: nothing to switch to.
+        fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+        expect(screen.getByLabelText('Pseudo code')).toHaveTextContent('sleep(min(200ms * 2^attempt, 5s))');
+        expect(screen.queryByRole('tab', { name: 'Real code' })).toBeNull();
+    });
+
+    it('code walk: asks about the step on show by quoting its title, where the page takes comments', async () => {
+        const walk = { id: 'walk', type: 'codeWalk', config: blockCatalog.codeWalk.example };
+        const store = storeWith(
+            makeView({ blocks: [blockRecord(walk.id, walk.type, walk.config)], sections: [sectionRecord('s1', 1, ['walk'])] })
+        );
+        renderWith(
+            store,
+            <>
+                <BlockView block={walk} placement="writeup" />
+                <CommentLayer />
+            </>,
+            'writeup'
+        );
+        const user = userEvent.setup();
+        await user.click(screen.getByRole('button', { name: 'Next step' }));
+        await user.click(screen.getByRole('button', { name: 'Ask about this step' }));
+        const composer = screen.getByRole('dialog', { name: 'Comment' });
+        typeInto(within(composer).getByLabelText('Comment'), 'Why never on a 4xx?');
+        await user.click(within(composer).getByRole('button', { name: 'Send to agent' }));
+        await waitFor(() =>
+            expect(posted).toEqual([
+                expect.objectContaining({
+                    type: 'comment.create',
+                    anchor: expect.objectContaining({
+                        target: 'block:walk',
+                        quote: expect.objectContaining({ exact: 'Ask the policy whether to retry' })
+                    }),
+                    text: 'Why never on a 4xx?'
+                })
+            ])
+        );
+    });
+
+    it('code walk: offers no ask where nothing takes comments, such as a reply', () => {
+        renderWith(
+            storeWith(makeView()),
+            <BlockView block={{ id: 'walk', type: 'codeWalk', config: blockCatalog.codeWalk.example }} placement="thread" />
+        );
+        expect(screen.getByRole('button', { name: 'Next step' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Ask about this step' })).toBeNull();
+    });
+
+    it('a code walk call stack follows each call in and each return out', () => {
+        const steps = [
+            { fn: 'main()', depth: 0 },
+            { fn: 'send()', depth: 1 },
+            { depth: 1 },
+            { fn: 'retry()', depth: 2 },
+            { depth: 0 },
+            { fn: 'deep()', depth: 2 }
+        ];
+        expect(steps.map((_, at) => callStack(steps, at))).toEqual([
+            ['main()'],
+            ['main()', 'send()'],
+            ['main()', 'send()'],
+            ['main()', 'send()', 'retry()'],
+            ['main()'],
+            ['main()', 'deep()']
+        ]);
     });
 
     it('offers no block comment outside the write-up', () => {

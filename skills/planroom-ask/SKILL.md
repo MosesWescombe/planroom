@@ -71,8 +71,9 @@ Each card is a `question.upsert`.
   and no `direction` field: the server refuses them.
 - **Write for a non-technical reader.** Titles, options, `why`, info cards and replies use everyday words, with no
   jargon, file names or code. Put internals the user may want in a block with `technical: true`, which the page folds
-  behind a "Technical detail" toggle. When an idea is new to them, compare it to something everyday with an `analogy`
-  block, and always say in `breaks` where the comparison stops holding.
+  behind a "Technical detail" toggle. When an idea is new to them, build the intuition first with an `intuition`
+  block: the gist in plain words, made concrete with an everyday analogy, a picture or a small worked example, and
+  always say in `breaks` where the intuition stops holding.
 - **Show, don't describe.** Put a diagram, table or option matrix in `context.blocks` when the choice turns on a flow
   or trade-off, shaped as in [the block catalog](references/blocks.md). An ask has no write-up, so a block goes only in
   a question's `context.blocks` or a reply's `blocks`, with no `id`. Compare options in an `optionMatrix`, never a

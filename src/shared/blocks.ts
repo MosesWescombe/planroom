@@ -800,18 +800,28 @@ export const mermaidConfig = z.object({ source: z.string().min(1).max(20000) });
 export const textConfig = z.object({ body: z.string().min(1).max(40000) });
 
 /**
- * `analogy`: "this change is like X", each real part of the change mapped to its counterpart in the analogy, with an
- * optional illustration and where the analogy breaks down.
+ * `intuition`: a concept as a simple intuition before any detail. The gist in plain words, made concrete by an
+ * everyday comparison, a picture and a worked example, and where the intuition stops holding.
  */
-export const analogyConfig = z.object({
-    /** The analogy itself, e.g. "A ticket counter". */
-    title: label,
-    pairs: z
-        .array(z.object({ real: label, like: label, note: label.optional() }))
-        .min(1)
-        .max(12),
+export const intuitionConfig = z.object({
+    /** The concept it builds the intuition for, e.g. "Rate limiting". */
+    concept: label,
+    /** The intuition itself, in a sentence or two of plain words. Markdown. */
+    gist: text.min(1),
+    /** An everyday comparison, e.g. "A ticket counter", with each real part mapped to its counterpart. */
+    like: z
+        .object({
+            title: label,
+            pairs: z
+                .array(z.object({ real: label, like: label, note: label.optional() }))
+                .max(12)
+                .default([])
+        })
+        .optional(),
+    /** A small worked example with concrete values. Markdown. */
+    example: text.min(1).optional(),
     illustration: imageConfig.optional(),
-    /** Where the analogy stops holding. */
+    /** Where the intuition stops holding. */
     breaks: text.optional()
 });
 
@@ -877,6 +887,53 @@ export const stepThroughConfig = z
             }
         });
     });
+
+/** One step of a code walk: what happens and where, in plain words, pseudo code or both, and where the real code is. */
+const walkStep = z
+    .object({
+        /** What happens, in a few words, e.g. "Cap the delay". */
+        title: label,
+        /** The function the step is in, e.g. `scheduleRetry()`. */
+        fn: z.string().min(1).max(120).optional(),
+        /** How deep in the calls from the walk's start: 0 at its entry point, 1 inside a function that calls, and so on. */
+        depth: z.number().int().min(0).max(8).default(0),
+        /** What the code does to its data here: plain words, inline or fenced code, or both. Markdown. */
+        note: text.min(1).optional(),
+        /** The step as pseudo code. With `file` and `lines` the reader can switch to the real code. */
+        pseudo: text.min(1).optional(),
+        /** Where the real code is: a tracked file and its lines, read live. */
+        file: repoPath.optional(),
+        lines: z
+            .string()
+            .regex(/^\d+(-\d+)?$/, 'must be a line number or a range such as "12-15"')
+            .optional(),
+        lang: z.string().max(20).optional()
+    })
+    .superRefine((step, ctx) => {
+        if ((step.file === undefined) !== (step.lines === undefined))
+            ctx.addIssue({
+                code: 'custom',
+                path: [step.file === undefined ? 'file' : 'lines'],
+                message: 'the real code needs both its `file` and its `lines`'
+            });
+        if (step.note === undefined && step.pseudo === undefined && step.file === undefined)
+            ctx.addIssue({
+                code: 'custom',
+                path: ['note'],
+                message: 'give a `note`, `pseudo` code or the real code by `file` and `lines`'
+            });
+    });
+
+/**
+ * `codeWalk`: a path through the code followed a step at a time, jumping between functions. Each step says what happens
+ * where, in plain words, pseudo code or both, with the real code a switch away.
+ */
+export const codeWalkConfig = z.object({
+    /** What the walk follows, e.g. "A failed send, to its next attempt". */
+    title: label.optional(),
+    steps: z.array(walkStep).min(2).max(40)
+});
+export type CodeWalkConfig = z.output<typeof codeWalkConfig>;
 
 /** The four areas a risk-rating take rates, 1 (low risk) to 5 (high). */
 export const RISK_AREAS = ['correctness', 'performance', 'security', 'maintainability'] as const;
@@ -1001,8 +1058,9 @@ export const blockConfigSchemas = {
     code: codeConfig,
     image: imageConfig,
     mermaid: mermaidConfig,
-    analogy: analogyConfig,
+    intuition: intuitionConfig,
     stepThrough: stepThroughConfig,
+    codeWalk: codeWalkConfig,
     yourTake: yourTakeConfig,
     impactMap: impactMapConfig,
     html: htmlConfig
@@ -1065,8 +1123,9 @@ export const block = z.discriminatedUnion('type', [
     blockEnvelope.extend({ type: z.literal('code'), config: codeConfig }),
     blockEnvelope.extend({ type: z.literal('image'), config: imageConfig }),
     blockEnvelope.extend({ type: z.literal('mermaid'), config: mermaidConfig }),
-    blockEnvelope.extend({ type: z.literal('analogy'), config: analogyConfig }),
+    blockEnvelope.extend({ type: z.literal('intuition'), config: intuitionConfig }),
     blockEnvelope.extend({ type: z.literal('stepThrough'), config: stepThroughConfig }),
+    blockEnvelope.extend({ type: z.literal('codeWalk'), config: codeWalkConfig }),
     blockEnvelope.extend({ type: z.literal('yourTake'), config: yourTakeConfig }),
     blockEnvelope.extend({ type: z.literal('impactMap'), config: impactMapConfig }),
     blockEnvelope.extend({ type: z.literal('html'), config: htmlConfig })

@@ -109,6 +109,17 @@ export function ReviewIcon({ size = 18 }: IconProps) {
     );
 }
 
+/** A question mark in a circle, for Quiz me. */
+export function QuizIcon({ size = 16 }: IconProps) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 20 20" {...stroke} strokeWidth="1.6" aria-hidden="true">
+            <circle cx="10" cy="10" r="7.5" />
+            <path d="M7.75 7.75a2.25 2.25 0 1 1 3.4 1.95c-.7.4-1.15.95-1.15 1.8v.5" />
+            <path d="M10 14.5h.01" />
+        </svg>
+    );
+}
+
 /** The side panel, its chevron pointing right when `open` and left when not. */
 export function PanelIcon({ size = 18, open }: IconProps & { open: boolean }) {
     return (

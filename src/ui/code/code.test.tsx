@@ -5,7 +5,7 @@ import { checkBlockConfig } from '../../shared/blocks';
 import { makeView, renderWith, storeWith } from '../../test/harness';
 import { BlockView } from '../blocks/Block';
 import { Attachments } from '../components/Attachments';
-import { CodeViewer, nowRows, oldCodePlace, parsePatch } from './CodeViewer';
+import { CodeViewer, nowRows, oldCodePlace, PseudoCode, parsePatch } from './CodeViewer';
 import { blockLength, foldRanges, indentLevel } from './folding';
 import { guessLanguage, highlightLines, looksLikeCode } from './highlight';
 
@@ -87,6 +87,33 @@ describe('highlighting', () => {
         expect(lines[0]).toEqual([{ text: '/* one', scopes: ['hljs-comment'] }]);
         expect(lines[1]).toEqual([{ text: 'two */', scopes: ['hljs-comment'] }]);
         expect(lines[2]).toContainEqual({ text: 'const', scopes: ['hljs-keyword'] });
+    });
+
+    it("colours pseudo code's control words, values, calls, properties and comments, leaving its prose and apostrophes plain", () => {
+        const scoped = (line: number) =>
+            highlightLines("if attempt >= policy.maxAttempts -> no   # out of tries\nwait backoff(2), it's 800ms", 'pseudo')
+                [line]!.filter((token) => token.scopes.length > 0)
+                .map((token) => [token.text, token.scopes.at(-1)]);
+        expect(scoped(0)).toEqual([
+            ['if', 'hljs-keyword'],
+            ['maxAttempts', 'hljs-property'],
+            ['->', 'hljs-keyword'],
+            ['no', 'hljs-literal'],
+            ['# out of tries', 'hljs-comment']
+        ]);
+        expect(scoped(1)).toEqual([
+            ['backoff', 'hljs-title function_'],
+            ['2', 'hljs-number'],
+            ['800ms', 'hljs-number']
+        ]);
+    });
+
+    it('renders pseudo code coloured, its text exactly as written', () => {
+        const source = 'if attempt >= 4 -> no\n\nreturn "done"';
+        const { container } = render(<PseudoCode source={source} aria-label="Pseudo code" />);
+        expect(screen.getByLabelText('Pseudo code').textContent).toBe(source);
+        expect([...container.querySelectorAll('.hljs-keyword')].map((span) => span.textContent)).toEqual(['if', '->', 'return']);
+        expect(container.querySelector('.hljs-string')?.textContent).toBe('"done"');
     });
 
     it('gives plain lines for an unknown language', () => {

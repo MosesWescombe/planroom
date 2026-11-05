@@ -16,33 +16,52 @@ import { GraphDiagram, SequenceDiagram } from './diagrams';
 import { flowGraph, layoutGraph, layoutSequence } from './layout';
 import { usePins } from './pins';
 
-/** `analogy`: what the change is like, part by part, and where the comparison stops holding. */
-export function AnalogyBlock({ id, config, placement }: BlockProps<'analogy'>) {
+/**
+ * `intuition`: a concept's gist in plain words, then what makes it concrete (a picture, an everyday analogy part by
+ * part, a worked example) and where the intuition stops holding.
+ */
+export function IntuitionBlock({ id, config, placement }: BlockProps<'intuition'>) {
+    const { like } = config;
     return (
-        <div className="analogy">
-            <div className="analogy-head">
-                <span className="eyebrow">This change is like</span>
-                <span className="analogy-title">{config.title}</span>
+        <div className="intuition">
+            <div className="intuition-head">
+                <span className="eyebrow">The intuition</span>
+                <span className="intuition-title">{config.concept}</span>
             </div>
+            <Markdown source={config.gist} />
             {config.illustration && <ImageBlock id={`${id}-illustration`} config={config.illustration} placement={placement} />}
-            <dl className="analogy-pairs">
-                {config.pairs.map((pair) => (
-                    <div key={`${pair.real}-${pair.like}`} className="analogy-pair">
-                        <dt>
-                            <LinkedText text={pair.real} />
-                        </dt>
-                        <dd>
-                            <span aria-hidden="true" className="analogy-arrow">
-                                is like
-                            </span>
-                            <LinkedText text={pair.like} />
-                            {pair.note && <span className="small muted">{pair.note}</span>}
-                        </dd>
-                    </div>
-                ))}
-            </dl>
+            {like && (
+                <div className="intuition-part">
+                    <span className="eyebrow">It is like</span>
+                    <span className="strong">{like.title}</span>
+                    {like.pairs.length > 0 && (
+                        <dl className="intuition-pairs">
+                            {like.pairs.map((pair) => (
+                                <div key={`${pair.real}-${pair.like}`} className="intuition-pair">
+                                    <dt>
+                                        <LinkedText text={pair.real} />
+                                    </dt>
+                                    <dd>
+                                        <span aria-hidden="true" className="intuition-arrow">
+                                            is like
+                                        </span>
+                                        <LinkedText text={pair.like} />
+                                        {pair.note && <span className="small muted">{pair.note}</span>}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    )}
+                </div>
+            )}
+            {config.example && (
+                <div className="intuition-part">
+                    <span className="eyebrow">For example</span>
+                    <Markdown source={config.example} />
+                </div>
+            )}
             {config.breaks && (
-                <p className="analogy-breaks">
+                <p className="intuition-breaks">
                     <span className="strong">Where it breaks down: </span>
                     <LinkedText text={config.breaks} />
                 </p>

@@ -131,7 +131,7 @@ Once the reviewer sends their concerns, the agent SHALL investigate each area an
 
 ### Requirement: A slide is a titled set of blocks
 
-A slide SHALL be a title, rendered as inline Markdown (bold, italic and code, a link shown as its text), and a list of blocks in the same layout as a write-up section, where an entry is a block id or a row of two or three ids shown side by side. A slide MAY use any block of the catalog, including `analogy`, `stepThrough`, `compare`, `image` and `code`.
+A slide SHALL be a title, rendered as inline Markdown (bold, italic and code, a link shown as its text), and a list of blocks in the same layout as a write-up section, where an entry is a block id or a row of two or three ids shown side by side. A slide MAY use any block of the catalog, including `intuition`, `stepThrough`, `compare`, `image` and `code`.
 
 #### Scenario: Side by side
 

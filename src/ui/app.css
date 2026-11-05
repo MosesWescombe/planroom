@@ -3433,76 +3433,76 @@ button.rail-strip-item {
     color: var(--agent-text);
 }
 
-.code-lines .hljs-keyword,
-.code-lines .hljs-selector-tag,
-.code-lines .hljs-doctag,
-.code-lines .hljs-section {
+:is(.code-lines, .pseudo-code) .hljs-keyword,
+:is(.code-lines, .pseudo-code) .hljs-selector-tag,
+:is(.code-lines, .pseudo-code) .hljs-doctag,
+:is(.code-lines, .pseudo-code) .hljs-section {
     color: var(--syntax-keyword);
 }
 
-.code-lines .hljs-string,
-.code-lines .hljs-regexp,
-.code-lines .hljs-symbol,
-.code-lines .hljs-template-tag,
-.code-lines .hljs-selector-attr,
-.code-lines .hljs-selector-pseudo,
-.code-lines .hljs-addition {
+:is(.code-lines, .pseudo-code) .hljs-string,
+:is(.code-lines, .pseudo-code) .hljs-regexp,
+:is(.code-lines, .pseudo-code) .hljs-symbol,
+:is(.code-lines, .pseudo-code) .hljs-template-tag,
+:is(.code-lines, .pseudo-code) .hljs-selector-attr,
+:is(.code-lines, .pseudo-code) .hljs-selector-pseudo,
+:is(.code-lines, .pseudo-code) .hljs-addition {
     color: var(--syntax-string);
 }
 
-.code-lines .hljs-number,
-.code-lines .hljs-literal,
-.code-lines .hljs-bullet,
-.code-lines .hljs-link {
+:is(.code-lines, .pseudo-code) .hljs-number,
+:is(.code-lines, .pseudo-code) .hljs-literal,
+:is(.code-lines, .pseudo-code) .hljs-bullet,
+:is(.code-lines, .pseudo-code) .hljs-link {
     color: var(--syntax-number);
 }
 
-.code-lines .hljs-comment,
-.code-lines .hljs-quote,
-.code-lines .hljs-meta,
-.code-lines .hljs-deletion {
+:is(.code-lines, .pseudo-code) .hljs-comment,
+:is(.code-lines, .pseudo-code) .hljs-quote,
+:is(.code-lines, .pseudo-code) .hljs-meta,
+:is(.code-lines, .pseudo-code) .hljs-deletion {
     color: var(--syntax-comment);
 }
 
-.code-lines .hljs-comment,
-.code-lines .hljs-quote {
+:is(.code-lines, .pseudo-code) .hljs-comment,
+:is(.code-lines, .pseudo-code) .hljs-quote {
     font-style: italic;
 }
 
-.code-lines .hljs-title,
-.code-lines .hljs-name,
-.code-lines .hljs-selector-id,
-.code-lines .hljs-selector-class {
+:is(.code-lines, .pseudo-code) .hljs-title,
+:is(.code-lines, .pseudo-code) .hljs-name,
+:is(.code-lines, .pseudo-code) .hljs-selector-id,
+:is(.code-lines, .pseudo-code) .hljs-selector-class {
     color: var(--syntax-title);
 }
 
-.code-lines .hljs-type,
-.code-lines .hljs-built_in,
-.code-lines .hljs-title.class_ {
+:is(.code-lines, .pseudo-code) .hljs-type,
+:is(.code-lines, .pseudo-code) .hljs-built_in,
+:is(.code-lines, .pseudo-code) .hljs-title.class_ {
     color: var(--syntax-type);
 }
 
-.code-lines .hljs-attr,
-.code-lines .hljs-attribute,
-.code-lines .hljs-property,
-.code-lines .hljs-variable,
-.code-lines .hljs-template-variable {
+:is(.code-lines, .pseudo-code) .hljs-attr,
+:is(.code-lines, .pseudo-code) .hljs-attribute,
+:is(.code-lines, .pseudo-code) .hljs-property,
+:is(.code-lines, .pseudo-code) .hljs-variable,
+:is(.code-lines, .pseudo-code) .hljs-template-variable {
     color: var(--syntax-attr);
 }
 
-.code-lines .hljs-meta .hljs-keyword {
+:is(.code-lines, .pseudo-code) .hljs-meta .hljs-keyword {
     color: var(--syntax-keyword);
 }
 
-.code-lines .hljs-meta .hljs-string {
+:is(.code-lines, .pseudo-code) .hljs-meta .hljs-string {
     color: var(--syntax-string);
 }
 
-.code-lines .hljs-strong {
+:is(.code-lines, .pseudo-code) .hljs-strong {
     font-weight: 600;
 }
 
-.code-lines .hljs-emphasis {
+:is(.code-lines, .pseudo-code) .hljs-emphasis {
     font-style: italic;
 }
 
@@ -6004,32 +6004,38 @@ button.nav-item {
     text-align: left;
 }
 
-/* Blocks a review brings: an analogy, a step-through, a your-take card and the sandboxed html frame. */
-.analogy {
+/* Blocks a review brings: an intuition, a step-through, a your-take card and the sandboxed html frame. */
+.intuition {
     display: flex;
     flex-direction: column;
     gap: 14px;
 }
 
-.analogy-head {
+.intuition-head {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
-.analogy-title {
+.intuition-title {
     font-family: var(--font-display);
     font-size: 24px;
 }
 
-.analogy-pairs {
+.intuition-part {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.intuition-pairs {
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin: 0;
 }
 
-.analogy-pair {
+.intuition-pair {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     gap: 12px;
@@ -6038,23 +6044,23 @@ button.nav-item {
     background: var(--paper);
 }
 
-.analogy-pair dt {
+.intuition-pair dt {
     font-weight: 600;
 }
 
-.analogy-pair dd {
+.intuition-pair dd {
     display: flex;
     flex-direction: column;
     gap: 2px;
     margin: 0;
 }
 
-.analogy-arrow {
+.intuition-arrow {
     font-size: 12px;
     color: var(--muted);
 }
 
-.analogy-breaks {
+.intuition-breaks {
     padding: 10px 14px;
     border-left: 3px solid var(--agent-border);
     background: var(--agent-wash);
@@ -6082,6 +6088,245 @@ button.nav-item {
 .step-captions {
     margin: 0;
     padding-left: 20px;
+}
+
+/* A code walk: the steps listed on the left, the one on show large on the right; stacked when the block is narrow. */
+.code-walk {
+    container: code-walk / inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 10px;
+}
+
+.walk-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+}
+
+/* Room for the block's tools, which show over its top right corner on hover. */
+.block .walk-head {
+    padding-right: 52px;
+}
+
+.walk-title {
+    font-weight: 600;
+}
+
+.walk-count {
+    margin-left: auto;
+}
+
+/* One segment per step, filled from the left up to the step on show: the last step fills it. */
+.walk-progress {
+    display: flex;
+    flex-basis: 100%;
+    gap: 3px;
+}
+
+.walk-progress span {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line);
+    transition: background 0.2s;
+}
+
+.walk-progress .is-done {
+    background: var(--accent);
+}
+
+.walk-body {
+    display: grid;
+    grid-template-columns: minmax(180px, 32%) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.walk-steps {
+    position: relative;
+    max-height: 520px;
+    margin: 0;
+    padding: 4px;
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--sunken);
+}
+
+/* Deeper in the calls, further in, with a guide line per level under the caller's step number, as an editor draws them. */
+.walk-steps li {
+    --indent: 16px;
+    padding-left: calc(var(--depth, 0) * var(--indent));
+    background:
+        repeating-linear-gradient(to right, transparent 0 11px, var(--line-strong) 11px 12px, transparent 12px var(--indent)) 0 0
+        / calc(var(--depth, 0) * var(--indent)) 100% no-repeat;
+}
+
+.walk-step-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 13px;
+    text-align: left;
+    color: var(--ink-2);
+}
+
+.walk-step-row:hover {
+    background: var(--surface);
+}
+
+.walk-step-row[aria-current="step"] {
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow:
+        inset 3px 0 0 var(--accent),
+        0 1px 2px var(--shadow);
+}
+
+.walk-step-n {
+    flex: none;
+    min-width: 1.6em;
+    color: var(--muted);
+}
+
+.walk-step-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+/* The function a step jumps into, over its title. */
+.walk-fn {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--accent-text);
+    overflow-wrap: anywhere;
+}
+
+.walk-seen {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+.walk-step {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.walk-stack {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.walk-stack li + li::before {
+    content: "›";
+    margin-right: 4px;
+}
+
+.walk-stack li:last-child code {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.walk-step-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.walk-code {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.walk-code .segmented {
+    align-self: flex-start;
+    margin-left: 0;
+}
+
+.walk-code .pseudo-code {
+    padding: 12px 14px;
+    font-size: 13px;
+}
+
+.walk-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.walk-print {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin: 0;
+    padding-left: 20px;
+}
+
+.walk-print > li {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+@container code-walk (max-width: 600px) {
+    .walk-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .walk-steps {
+        max-height: 200px;
+    }
+
+    .walk-step-title {
+        font-size: 20px;
+    }
+}
+
+.page-walk-button {
+    align-self: flex-start;
+}
+
+.page-walk-coming {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .diagram.has-focus .dg-message:not(.is-lit) {
@@ -7005,7 +7250,7 @@ button.nav-item {
     }
 
     .take-columns,
-    .analogy-pair {
+    .intuition-pair {
         grid-template-columns: minmax(0, 1fr);
     }
 
@@ -7870,4 +8115,135 @@ button.nav-item {
 
 .moved-from code {
     font-size: 12px;
+}
+
+/* Quiz me: its button at the rail's foot, its count of unanswered questions, and its dialog of choice cards. */
+.rail-foot {
+    flex-shrink: 0;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--paper);
+}
+
+.quiz-button {
+    width: 100%;
+}
+
+.quiz-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--agent-soft);
+    color: var(--agent-text);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+}
+
+.quiz-compact .quiz-count {
+    position: absolute;
+    top: 2px;
+    right: 0;
+}
+
+.quiz-dialog {
+    width: min(640px, 100%);
+}
+
+.quiz-score {
+    margin: 0;
+    font-weight: 600;
+}
+
+.quiz-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.quiz-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+
+.quiz-question {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+}
+
+.quiz-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.quiz-choice {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--sunken);
+    color: var(--ink);
+    text-align: left;
+}
+
+.quiz-choice:not(:disabled):hover {
+    border-color: var(--line-strong);
+}
+
+.quiz-choice:disabled {
+    cursor: default;
+}
+
+.quiz-choice.is-right {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+.quiz-choice.is-wrong {
+    border-color: var(--agent-border);
+    background: var(--agent-soft);
+    color: var(--agent-text);
+}
+
+.quiz-mark {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.quiz-reveal {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}
+
+.quiz-reveal.is-right .strong {
+    color: var(--accent-text);
+}
+
+.quiz-reveal.is-wrong .strong {
+    color: var(--agent-text);
+}
+
+.quiz-note {
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--agent-wash);
 }

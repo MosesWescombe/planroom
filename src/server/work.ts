@@ -95,6 +95,10 @@ function workFor(event: LoggedEvent, events: readonly LoggedEvent[], state: Sess
                 : { doing: `noting your reaction to ${event.itemId}` };
         case 'preferences.change':
             return { doing: 'reading your new preferences' };
+        case 'read.walk':
+            return { doing: `writing a code walk of "${event.title}"` };
+        case 'quiz.request':
+            return { doing: 'writing quiz questions on what you have read' };
         case 'block.fix': {
             const place = placeOf(`block:${event.blockId}`, state);
             return { doing: `fixing a block${place ? ` in ${place}` : ''}` };

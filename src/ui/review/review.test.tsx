@@ -926,19 +926,22 @@ describe('the html block', () => {
 });
 
 describe('the new shared blocks', () => {
-    it.each(['plan', 'ask', 'review'] as const)('render an analogy and a step-through in a %s', (kind) => {
+    it.each(['plan', 'ask', 'review'] as const)('render an intuition and a step-through in a %s', (kind) => {
         const store = storeWith(makeView({}, {}));
         store.snapshot({ ...defined(store.getView()), kind });
-        const analogy = blockRecord('an', 'analogy', blockCatalog.analogy.example);
+        const intuition = blockRecord('in', 'intuition', blockCatalog.intuition.example);
         const steps = blockRecord('st', 'stepThrough', blockCatalog.stepThrough.example);
         renderWith(
             store,
             <>
-                <BlockView block={analogy} placement="writeup" />
+                <BlockView block={intuition} placement="writeup" />
                 <BlockView block={steps} placement="writeup" />
             </>
         );
+        expect(screen.getByText('Rate limiting')).toBeInTheDocument();
+        expect(screen.getByText(/fixed number of requests an hour/)).toBeInTheDocument();
         expect(screen.getByText('A ticket counter')).toBeInTheDocument();
+        expect(screen.getByText(/sends its 101st at 2:40pm/)).toBeInTheDocument();
         expect(screen.getByText(/A counter serves one queue/)).toBeInTheDocument();
         expect(screen.getByText('Every request asks the limiter first.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Next step' }));

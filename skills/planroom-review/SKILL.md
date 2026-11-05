@@ -126,8 +126,10 @@ Change a slide only when it is wrong or the reviewer asked: they may already hav
 - **A slide** is a title and blocks, laid out like a write-up section: a row of two or three ids sits side by side.
   Slide titles say the point ("Retries now stop at two"), not the topic.
 - **Show, don't tell**: a `flow`, `sequence` or `architecture` diagram for how it works, a `stepThrough` to walk a flow
-  or sequence one step at a time, a `compare` for before and after (diagrams, code or images), `code` in diff mode for
-  the lines that matter, an `analogy` when a familiar comparison helps, always with where it breaks down. Block shapes:
+  or sequence one step at a time, a `codeWalk` to follow the code itself through the functions it calls, a `compare`
+  for before and after (diagrams, code or images), `code` in diff mode for the lines that matter. Before the detail of a concept the reviewer may not know, an `intuition`: its gist in plain
+  words, made concrete with an everyday analogy, a picture or a small worked example, always with where it breaks
+  down. Block shapes:
   [the block catalog](references/blocks.md).
 - **Pictures** are `image` blocks of the illustrator's SVG (`src: "asset:<name>.svg"`) with alt text, which is
   required. No image service is ever called.
@@ -192,10 +194,19 @@ up one by one as they are written, so the reviewer starts reading the first whil
    tests? } }`: a piece's `blocks`, up to four, show between its note and its code. For a test page, `tests` is the
    pseudo-code writer's `[{ piece, title, pseudo }]`. Re-sending a page rewrites it and unticks what the reviewer read
    on it, so get it right first.
+   **Code walks.** Every page with its words up offers the reviewer "Walk me through the code", which asks you for a
+   `codeWalk` of it (`read.walk`). Write one unasked, so it shows from the start, where the page's code is a path
+   through several functions that reads best in the order it runs: a request through its handlers, a retry loop, a
+   state change across modules. Have the page's writer return it as the page's `walk`, check it as you check the
+   page, and send `read.page.walk { page, walk }` with or after its `read.page.upsert`. Follow the code the page is
+   about, in order, through the functions it calls: each step's `fn` and call `depth`, a plain `note` on what it does
+   to the data, `pseudo` code, and the real `file` and `lines` in the worktree. A walk never changes the page's words
+   or unticks anything; sending one again replaces it.
 4. **Answer questions on lines.** A `comment.create` on `page:<id>` carries the lines the reviewer selected in
    `anchor.lines`, and in `anchor.lines.text` the code they highlighted, which can start and end partway through a
    line: answer about that code, using the whole lines as context. One on the page's words instead carries what they
-   selected of them, such as the summary, a note, a file name, pseudo code or an addition, in `anchor.quote`. Reply with `comment.reply`. To show more code or explain on the page itself, add to it with
+   selected of them, such as the summary, a note, a file name, pseudo code or an addition, in `anchor.quote`. A
+   question asked from a code walk's step quotes that step's `title`. Reply with `comment.reply`. To show more code or explain on the page itself, add to it with
    `read.page.add { page, threadId, piece?, text?, blocks? }`, under the piece it is about: it is marked as added at
    their request, never changes what the page showed, and unticks that piece.
 
@@ -237,7 +248,9 @@ architecture node id, or a sequence actor), and a `draft`: the comment to post.
 | `walkthrough.done` | The findings now show. Make sure every verified finding is sent. `how: "skipped"` means they knew the change; if Trade-offs is not published yet, still write and publish it. |
 | `item.react` | `agree` and `reword` need nothing. On `reject`, read the `reason`: withdraw or soften any finding it undermines that the reviewer has not reacted to yet. |
 | `comment.create`, `thread.reply`, `message.send` | Reply with `comment.reply`. A thread on `slide:<id>` or `item:<id>` is about that slide or finding; one on `page:<id>` is about a read-through page, with the selected lines in `anchor.lines` and the code highlighted in `anchor.lines.text`, or the words selected in `anchor.quote` (see step 4 of the read-through); one on `comment:<key>` is about a comment the round will post, by its key (`comment:item:<id>`, `comment:note:<id>` or `comment:summary`); one on `tab:<name>` is on words outside all of those on that tab (`walkthrough`, `readthrough`, `findings` or `comments`), selected in `anchor.quote`. |
+| `read.walk` | The reviewer asked for a code walk of read-through page `page`: write one as in step 3's **Code walks**, reading its code in the worktree, and send it with `read.page.walk { page, walk }`. |
 | `preferences.change` | Follow the new preferences for slides you have not written yet. |
+| `quiz.request` | The reviewer pressed Quiz me, to check themselves against what they have read. Answer with one `quiz.add` of three to five multiple-choice questions on the substance of the change (what it does, why, what it risks), not on wording. `seen` lists every slide block (`block:<id>`), finding (`item:<id>`) and read-through piece (`piece:<round>:<id>`) they have had on screen, each with what it is: ask only about those, each question's `about` the ref it tests, reading a piece's code in the worktree. Never ask about anything they have not seen; the server refuses a question about any other ref. Repeat nothing in `asked`. Give two to five plausible `choices`, `answer` the index of the right one, and an `explanation` of a sentence or two saying why. When what they have seen is too thin for new questions, send only a `note` saying what to read next. |
 | `review.posted` | Say what was posted. With `failed` non-empty, the reviewer retries from the page. |
 | `session.end` | The reviewer ended the review: stop. |
 

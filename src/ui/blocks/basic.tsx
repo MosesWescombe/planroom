@@ -257,7 +257,7 @@ export function FileTreeBlock({ config }: BlockProps<'fileTree'>) {
 }
 
 /** A tracked file's lines, fetched when the block mounts or its range changes, with a note while loading or on failure. */
-function Excerpt({ file, lines, lang, title }: { file: string; lines: string; lang?: string; title: string }) {
+export function Excerpt({ file, lines, lang, title }: { file: string; lines: string; lang?: string; title: string }) {
     const [state, setState] = useState<{ excerpt?: CodeExcerpt; error?: string }>({});
     useEffect(() => {
         let live = true;

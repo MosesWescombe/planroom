@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { barConfig, fileTreeConfig, riskMatrixConfig } from '../../shared/blocks';
 import {
     type ChangedFile,
@@ -28,6 +28,7 @@ import { plural } from '../format';
 import { useReadOnly } from '../readOnly';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
+import { useViewed } from '../viewed';
 import { BitbucketComment, CommentEditor } from './BitbucketComment';
 import { buildTree, commonRoot, type Folder } from './FileTreeSelect';
 import { useIsCurrentRound, useShownRound } from './hooks';
@@ -238,9 +239,12 @@ const Finding = memo(function Finding({ id }: { id: string }) {
         const replyTo = view.items[id]?.replyTo;
         return replyTo ? view.review?.rounds.at(-1)?.earlier[replyTo]?.post.body : undefined;
     });
+    const ref = useRef<HTMLElement>(null);
+    useViewed(`item:${id}`, ref);
     if (!item) return null;
     return (
         <article
+            ref={ref}
             id={`item-${id}`}
             className={`finding is-${item.kind}${item.severity ? ` is-${item.severity}` : ''}`}
             data-anchor-target={`item:${id}`}

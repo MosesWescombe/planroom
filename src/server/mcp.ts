@@ -110,8 +110,9 @@ const SESSION_TOOLS: Tool[] = [
         name: 'planroom_emit',
         description:
             'Apply a batch of agent events to the open page, atomically: question.upsert/close/merge, understanding.update, ' +
-            'doc.section.upsert, doc.block.upsert, comment.reply (markdown `text`, optionally with diagram, table or other `blocks`), comment.edit (rewrite your reply in place), suggestion.decline, proposal.trace, proposal.ready; ' +
-            'in a review, slide.upsert, slide.remove, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft, earlier.label, and for the read-through read.outline, read.page.upsert and read.page.add. ' +
+            'doc.section.upsert, doc.block.upsert, comment.reply (markdown `text`, optionally with diagram, table or other `blocks`), comment.edit (rewrite your reply in place), suggestion.decline, proposal.trace, proposal.ready, ' +
+            'quiz.add (multiple-choice questions answering a quiz.request, each `about` a ref it listed as seen); ' +
+            'in a review, slide.upsert, slide.remove, deck.progress, deck.publish, item.upsert, item.withdraw, summary.draft, earlier.label, and for the read-through read.outline, read.page.upsert, read.page.add and read.page.walk. ' +
             'Slides and their blocks can change or go at any time, also once published, and read.outline can be sent again to restructure the read-through. Each session kind refuses the events of the others. ' +
             'A malformed batch applies nothing and lists every problem by path. A block whose config fails its type is still stored, ' +
             'shown as an error card, and listed in blockProblems: fix it in place by re-sending it, never by adding a new one. `summary` labels the write-up revision. `doing` tells the user what you are on next, ' +

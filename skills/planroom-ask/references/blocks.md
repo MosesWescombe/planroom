@@ -43,8 +43,9 @@ Send a block before, or in the same batch as, the section that lists it. A block
 - [`code`](#code): Code / diff
 - [`image`](#image): Annotated image
 - [`mermaid`](#mermaid): Mermaid fallback
-- [`analogy`](#analogy): Analogy
+- [`intuition`](#intuition): Intuition
 - [`stepThrough`](#stepthrough): Step-through
+- [`codeWalk`](#codewalk): Code walk
 
 ## text
 
@@ -1196,33 +1197,40 @@ Config schema:
 {"type":"object","properties":{"source":{"type":"string","minLength":1,"maxLength":20000}},"required":["source"]}
 ```
 
-## analogy
+## intuition
 
-**Analogy.** "This change is like X": each real part of the change mapped to its counterpart in something familiar, and where the comparison stops holding.
+**Intuition.** A concept as a simple intuition before any detail: the gist in plain words, made concrete with an everyday analogy, a picture and a worked example. Put it before the detail it introduces.
 
-- `title` names the analogy. Each pair maps a `real` part to what it is `like`, with an optional `note`.
-- `illustration` is an optional `image` config (`src`, `alt`, `pins`). `breaks` says where the analogy breaks down: always give it when it does.
+- `concept` names what it explains. `gist` is the intuition in a sentence or two of plain words, no jargon or code. Markdown.
+- `like` is an everyday analogy: a `title` and, when the parts map, `pairs` of a `real` part and what it is `like`, with an optional `note`.
+- `example` is a small worked example with concrete values. Markdown. `illustration` is an optional `image` config (`src`, `alt`, `pins`).
+- Give an analogy, a picture or an example whenever one fits, and more than one when they each add something. `breaks` says where the intuition stops holding: always give it when it does.
 
 Example config:
 
 ```json
 {
-  "title": "A ticket counter",
-  "pairs": [
-    {
-      "real": "Request",
-      "like": "Customer in the queue"
-    },
-    {
-      "real": "Token bucket",
-      "like": "Tickets left for this hour"
-    },
-    {
-      "real": "429 with Retry-After",
-      "like": "\"Come back at 3pm\"",
-      "note": "the client is told when"
-    }
-  ],
+  "concept": "Rate limiting",
+  "gist": "Each API key gets a fixed number of requests an hour. Once they are used up, the caller waits.",
+  "like": {
+    "title": "A ticket counter",
+    "pairs": [
+      {
+        "real": "Request",
+        "like": "Customer in the queue"
+      },
+      {
+        "real": "Token bucket",
+        "like": "Tickets left for this hour"
+      },
+      {
+        "real": "429 with Retry-After",
+        "like": "\"Come back at 3pm\"",
+        "note": "the client is told when"
+      }
+    ]
+  },
+  "example": "A key with 100 requests an hour sends its 101st at 2:40pm. It gets a 429 saying to retry at 3pm, when the bucket refills.",
   "breaks": "A counter serves one queue; the limiter keeps a bucket per API key."
 }
 ```
@@ -1230,7 +1238,7 @@ Example config:
 Config schema:
 
 ```json
-{"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":400},"pairs":{"minItems":1,"maxItems":12,"type":"array","items":{"type":"object","properties":{"real":{"type":"string","minLength":1,"maxLength":400},"like":{"type":"string","minLength":1,"maxLength":400},"note":{"type":"string","minLength":1,"maxLength":400}},"required":["real","like"]}},"illustration":{"type":"object","properties":{"src":{"type":"string","pattern":"^asset:[\\w.-]+\\.(png|jpe?g|gif|webp|svg)$"},"alt":{"type":"string","minLength":1,"maxLength":400},"pins":{"default":[],"maxItems":20,"type":"array","items":{"type":"object","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"text":{"type":"string","minLength":1,"maxLength":400}},"required":["x","y","text"]}}},"required":["src","alt"]},"breaks":{"type":"string","maxLength":20000}},"required":["title","pairs"]}
+{"type":"object","properties":{"concept":{"type":"string","minLength":1,"maxLength":400},"gist":{"type":"string","minLength":1,"maxLength":20000},"like":{"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":400},"pairs":{"default":[],"maxItems":12,"type":"array","items":{"type":"object","properties":{"real":{"type":"string","minLength":1,"maxLength":400},"like":{"type":"string","minLength":1,"maxLength":400},"note":{"type":"string","minLength":1,"maxLength":400}},"required":["real","like"]}}},"required":["title"]},"example":{"type":"string","minLength":1,"maxLength":20000},"illustration":{"type":"object","properties":{"src":{"type":"string","pattern":"^asset:[\\w.-]+\\.(png|jpe?g|gif|webp|svg)$"},"alt":{"type":"string","minLength":1,"maxLength":400},"pins":{"default":[],"maxItems":20,"type":"array","items":{"type":"object","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"text":{"type":"string","minLength":1,"maxLength":400}},"required":["x","y","text"]}}},"required":["src","alt"]},"breaks":{"type":"string","maxLength":20000}},"required":["concept","gist"]}
 ```
 
 ## stepThrough
@@ -1307,4 +1315,52 @@ Config schema:
 
 ```json
 {"type":"object","properties":{"diagram":{"oneOf":[{"type":"object","properties":{"type":{"type":"string","const":"flow"},"config":{"type":"object","properties":{"direction":{"default":"LR","type":"string","enum":["LR","RL","TB","BT"]},"nodes":{"minItems":1,"maxItems":60,"type":"array","items":{"type":"object","properties":{"id":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"emphasis":{"type":"string","enum":["new","changed"]},"shape":{"default":"box","type":"string","enum":["box","decision"]}},"required":["id","label"]}},"edges":{"maxItems":120,"type":"array","items":{"type":"object","properties":{"from":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"to":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"},"label":{"type":"string","minLength":1,"maxLength":400},"style":{"default":"solid","type":"string","enum":["solid","dashed"]}},"required":["from","to"]}}},"required":["nodes","edges"]}},"required":["type","config"]},{"type":"object","properties":{"type":{"type":"string","const":"sequence"},"config":{"type":"object","properties":{"actors":{"minItems":2,"maxItems":8,"type":"array","items":{"type":"string","minLength":1,"maxLength":400}},"messages":{"maxItems":60,"type":"array","items":{"type":"object","properties":{"from":{"type":"integer","minimum":0,"maximum":9007199254740991},"to":{"type":"integer","minimum":0,"maximum":9007199254740991},"text":{"type":"string","minLength":1,"maxLength":400},"reply":{"type":"boolean"}},"required":["from","to","text"]}}},"required":["actors","messages"]}},"required":["type","config"]}]},"steps":{"minItems":1,"maxItems":20,"type":"array","items":{"type":"object","properties":{"caption":{"type":"string","minLength":1,"maxLength":400},"nodes":{"default":[],"maxItems":60,"type":"array","items":{"type":"string","minLength":1,"maxLength":120,"pattern":"^[A-Za-z0-9][\\w.:-]*$"}},"messages":{"default":[],"maxItems":60,"type":"array","items":{"type":"integer","minimum":0,"maximum":9007199254740991}}},"required":["caption"]}}},"required":["diagram","steps"]}
+```
+
+## codeWalk
+
+**Code walk.** A path through the code followed a step at a time, as a debugger would, jumping into the functions it calls: the steps listed on the left, the one on show large on the right with what it does to the data. Use it where the order things run in matters more than where the code sits: a request through its handlers, a retry loop, a state change across modules.
+
+- Each step has a short `title`, the `fn` it is in, and its call `depth`: 0 at the entry point, 1 inside a function it calls, and back to 0 when that returns. The page shows the call stack from them.
+- `note` says what the step does to the data, in a sentence or two of plain words, with inline or fenced code where it helps. Markdown.
+- `pseudo` is the step as pseudo code: a few short lines that keep the names in the code and drop the noise. The page colours it as code: control words (`if`, `for each`, `return`), `->`, numbers, "strings", `calls()` and `.properties`, and a `#` or `//` comment to the end of the line, such as `# attempt = 2`. With `file` and `lines` the reader switches to the real code, read live from the repo (in a review, the commit under review). Give `file` and `lines` whenever the step is in a tracked file.
+- Every step needs a `note`, `pseudo` or the real code. Keep to the steps that matter, 3 to 12 as a rule. The reader can ask about any step; the question quotes its title, so make titles distinct.
+
+Example config:
+
+```json
+{
+  "title": "A failed send, to its next attempt",
+  "steps": [
+    {
+      "title": "The send fails",
+      "fn": "send()",
+      "note": "The delivery throws, so the loop catches it with `attempt` at 1.",
+      "pseudo": "try deliver(job)\ncatch error -> handle it",
+      "file": "src/send.ts",
+      "lines": "4-8"
+    },
+    {
+      "title": "Ask the policy whether to retry",
+      "fn": "shouldRetry()",
+      "depth": 1,
+      "note": "Stops once `attempt` reaches `policy.maxAttempts`; a 4xx never retries.",
+      "pseudo": "if attempt >= policy.maxAttempts -> no\nif error is a client error -> no\notherwise -> yes",
+      "file": "src/policy.ts",
+      "lines": "12-20"
+    },
+    {
+      "title": "Wait, then go round again",
+      "fn": "send()",
+      "note": "Sleeps `200ms * 2^attempt`, capped at 5s, then loops with `attempt + 1`.",
+      "pseudo": "sleep(min(200ms * 2^attempt, 5s))\nattempt += 1, loop"
+    }
+  ]
+}
+```
+
+Config schema:
+
+```json
+{"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":400},"steps":{"minItems":2,"maxItems":40,"type":"array","items":{"type":"object","properties":{"title":{"type":"string","minLength":1,"maxLength":400},"fn":{"type":"string","minLength":1,"maxLength":120},"depth":{"default":0,"type":"integer","minimum":0,"maximum":8},"note":{"type":"string","minLength":1,"maxLength":20000},"pseudo":{"type":"string","minLength":1,"maxLength":20000},"file":{"type":"string","minLength":1,"maxLength":400},"lines":{"type":"string","pattern":"^\\d+(-\\d+)?$"},"lang":{"type":"string","maxLength":20}},"required":["title"]}}},"required":["steps"]}
 ```

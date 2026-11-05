@@ -436,20 +436,28 @@ export const blockCatalog: Record<BlockType, CatalogEntry> = {
             source: 'gitGraph\n  commit\n  branch limiter\n  commit\n  commit\n  checkout main\n  merge limiter'
         }
     },
-    analogy: {
-        title: 'Analogy',
-        use: '"This change is like X": each real part of the change mapped to its counterpart in something familiar, and where the comparison stops holding.',
+    intuition: {
+        title: 'Intuition',
+        use: 'A concept as a simple intuition before any detail: the gist in plain words, made concrete with an everyday analogy, a picture and a worked example. Put it before the detail it introduces.',
         notes: [
-            '`title` names the analogy. Each pair maps a `real` part to what it is `like`, with an optional `note`.',
-            '`illustration` is an optional `image` config (`src`, `alt`, `pins`). `breaks` says where the analogy breaks down: always give it when it does.'
+            '`concept` names what it explains. `gist` is the intuition in a sentence or two of plain words, no jargon or code. Markdown.',
+            '`like` is an everyday analogy: a `title` and, when the parts map, `pairs` of a `real` part and what it is `like`, with an optional `note`.',
+            '`example` is a small worked example with concrete values. Markdown. `illustration` is an optional `image` config (`src`, `alt`, `pins`).',
+            'Give an analogy, a picture or an example whenever one fits, and more than one when they each add something. `breaks` says where the intuition stops holding: always give it when it does.'
         ],
         example: {
-            title: 'A ticket counter',
-            pairs: [
-                { real: 'Request', like: 'Customer in the queue' },
-                { real: 'Token bucket', like: 'Tickets left for this hour' },
-                { real: '429 with Retry-After', like: '"Come back at 3pm"', note: 'the client is told when' }
-            ],
+            concept: 'Rate limiting',
+            gist: 'Each API key gets a fixed number of requests an hour. Once they are used up, the caller waits.',
+            like: {
+                title: 'A ticket counter',
+                pairs: [
+                    { real: 'Request', like: 'Customer in the queue' },
+                    { real: 'Token bucket', like: 'Tickets left for this hour' },
+                    { real: '429 with Retry-After', like: '"Come back at 3pm"', note: 'the client is told when' }
+                ]
+            },
+            example:
+                'A key with 100 requests an hour sends its 101st at 2:40pm. It gets a 429 saying to retry at 3pm, when the bucket refills.',
             breaks: 'A counter serves one queue; the limiter keeps a bucket per API key.'
         }
     },
@@ -478,6 +486,44 @@ export const blockCatalog: Record<BlockType, CatalogEntry> = {
                 { caption: 'Every request asks the limiter first.', messages: [0, 1] },
                 { caption: 'Redis says the bucket is empty.', messages: [2] },
                 { caption: 'The client gets 429 and when to retry.', messages: [3] }
+            ]
+        }
+    },
+    codeWalk: {
+        title: 'Code walk',
+        use: 'A path through the code followed a step at a time, as a debugger would, jumping into the functions it calls: the steps listed on the left, the one on show large on the right with what it does to the data. Use it where the order things run in matters more than where the code sits: a request through its handlers, a retry loop, a state change across modules.',
+        notes: [
+            'Each step has a short `title`, the `fn` it is in, and its call `depth`: 0 at the entry point, 1 inside a function it calls, and back to 0 when that returns. The page shows the call stack from them.',
+            '`note` says what the step does to the data, in a sentence or two of plain words, with inline or fenced code where it helps. Markdown.',
+            '`pseudo` is the step as pseudo code: a few short lines that keep the names in the code and drop the noise. The page colours it as code: control words (`if`, `for each`, `return`), `->`, numbers, "strings", `calls()` and `.properties`, and a `#` or `//` comment to the end of the line, such as `# attempt = 2`. With `file` and `lines` the reader switches to the real code, read live from the repo (in a review, the commit under review). Give `file` and `lines` whenever the step is in a tracked file.',
+            'Every step needs a `note`, `pseudo` or the real code. Keep to the steps that matter, 3 to 12 as a rule. The reader can ask about any step; the question quotes its title, so make titles distinct.'
+        ],
+        example: {
+            title: 'A failed send, to its next attempt',
+            steps: [
+                {
+                    title: 'The send fails',
+                    fn: 'send()',
+                    note: 'The delivery throws, so the loop catches it with `attempt` at 1.',
+                    pseudo: 'try deliver(job)\ncatch error -> handle it',
+                    file: 'src/send.ts',
+                    lines: '4-8'
+                },
+                {
+                    title: 'Ask the policy whether to retry',
+                    fn: 'shouldRetry()',
+                    depth: 1,
+                    note: 'Stops once `attempt` reaches `policy.maxAttempts`; a 4xx never retries.',
+                    pseudo: 'if attempt >= policy.maxAttempts -> no\nif error is a client error -> no\notherwise -> yes',
+                    file: 'src/policy.ts',
+                    lines: '12-20'
+                },
+                {
+                    title: 'Wait, then go round again',
+                    fn: 'send()',
+                    note: 'Sleeps `200ms * 2^attempt`, capped at 5s, then loops with `attempt + 1`.',
+                    pseudo: 'sleep(min(200ms * 2^attempt, 5s))\nattempt += 1, loop'
+                }
             ]
         }
     },

@@ -54,7 +54,8 @@ the same thing.
   - a `state` diagram when something moves between states;
   - a `compare` of the old behaviour and the new, as two diagrams;
   - a `table` of cases, inputs and outcomes;
-  - an `analogy` when a familiar comparison helps, always saying where it breaks down;
+  - an `intuition`, first, when the concept is new: its gist in plain words, made concrete with an everyday analogy
+    or a small worked example, always saying where it breaks down;
   - a `callout` for the one thing a reviewer must not miss.
 
   Label diagrams with the names in the code, so the reader can find them. Shapes are in the planroom-review skill's
@@ -67,6 +68,10 @@ the same thing.
   page's diagrams do not already show: its own small flow, a before and after, a table of its cases.
 - **`related`**: up to six pieces of code the reader needs beside the piece, folded until opened: a caller, a
   definition, a config, a test. Each is a `file` and `lines` range in the worktree, with a short `note`.
+- **`walk`**: only for a page the brief asks a code walk of, a `codeWalk` config (shape in `references/blocks.md`):
+  the page's code followed in the order it runs, through the functions it calls, 3 to 12 steps. Each step has a short
+  distinct `title`, its `fn` and call `depth`, a plain `note` on what it does to the data, `pseudo` code that keeps the
+  code's names, and its real `file` and `lines` in the worktree.
 - On a test page, write the `summary` (what the tests cover and what they leave out) and leave the test cases to the
   pseudo code pass.
 

@@ -95,6 +95,7 @@ export interface View
         | 'notes'
         | 'pages'
         | 'ticks'
+        | 'quiz'
     > {
     agent: AgentStatus;
     activity: ActivityEntry[];

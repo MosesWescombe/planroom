@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { loggedEvent } from './events.js';
 import { questionRecord } from './questions.js';
+import { EMPTY_QUIZ, quizState } from './quiz.js';
 import { pageRecord, tickRecord } from './readthrough.js';
 import {
     blockRecord,
@@ -102,6 +103,8 @@ export const sessionState = z.object({
     pages: z.record(z.string(), pageRecord).default({}),
     /** Page-owned: what the reviewer has read in the read-through, by `<round>:<piece id>`. */
     ticks: z.record(z.string(), tickRecord).default({}),
+    /** Quiz me: what the reader has seen, and the agent's questions on it. */
+    quiz: quizState.default(EMPTY_QUIZ),
     /** The number of write-up revisions recorded; the next one is `revision + 1`. */
     revision: z.number().int().min(0),
     counters: z.object({
@@ -155,6 +158,7 @@ export function emptyState(changeId: string, title: string, now: string, format:
         notes: {},
         pages: {},
         ticks: {},
+        quiz: EMPTY_QUIZ,
         revision: 0,
         counters: { thread: 0, message: 0, suggestion: 0, note: 0 },
         agentCursor: 0,

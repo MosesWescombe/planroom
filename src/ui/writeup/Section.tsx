@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { orderedSections } from '../../shared/derive';
 import { BlockView } from '../blocks/Block';
 import { relativeTime } from '../format';
@@ -6,14 +6,17 @@ import { useNow } from '../hooks';
 import { useReadOnly } from '../readOnly';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy } from '../ui';
+import { useViewed } from '../viewed';
 import { latestTouching, undoReason } from './revisions';
 
-/** One write-up block, re-rendered only when its own version changes. */
+/** One write-up block, re-rendered only when its own version changes, and seen once it has been on screen a moment. */
 const SectionBlock = memo(function SectionBlock({ id }: { id: string }) {
     const block = useRecord('blocks', id);
+    const ref = useRef<HTMLDivElement>(null);
+    useViewed(`block:${id}`, ref);
     if (!block) return null;
     return (
-        <div id={`block-${id}`} className="section-block" data-scroll-anchor>
+        <div ref={ref} id={`block-${id}`} className="section-block" data-scroll-anchor>
             <BlockView block={block} placement="writeup" />
         </div>
     );

@@ -378,6 +378,46 @@ describe('the read-through tab', () => {
         expect(posted).toEqual([{ type: 'read.tick', piece: 'housekeeping', read: true, how: 'auto' }]);
     });
 
+    it('offers each page a code walk: asks the agent for one, shows it coming, then shows it to step through and ask about', async () => {
+        const moved = { ...MOVED, content: { summary: 'Moved.', pieces: [] } };
+        const walk = {
+            title: 'A send, to its retry',
+            steps: [
+                { title: 'Deliver the job', fn: 'send()', depth: 0, pseudo: 'deliver(job)' },
+                { title: 'Give up at the limit', fn: 'send()', depth: 0, note: 'Throws at `policy.maxAttempts`.' }
+            ]
+        };
+        const store = storeWith(readView());
+        render(<App store={store} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Walk me through the code' }));
+        expect(posted).toContainEqual({ type: 'read.walk', page: 'retry-limit' });
+
+        act(() => store.snapshot(readView({ pages: [{ ...RETRY, walkAsked: NOW }, moved, TESTS] })));
+        expect(screen.getByRole('progressbar', { name: 'Writing the code walk' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Walk me through the code' })).toBeNull();
+
+        act(() => store.snapshot(readView({ pages: [{ ...RETRY, walk }, moved, TESTS] })));
+        const shown = within(screen.getByRole('group', { name: 'Code walk: A send, to its retry' }));
+        await userEvent.click(shown.getByRole('button', { name: 'Next step' }));
+        expect(shown.getByRole('heading', { name: 'Give up at the limit' })).toBeInTheDocument();
+        // A question on a step is a question on the page, quoting the step.
+        await userEvent.click(shown.getByRole('button', { name: 'Ask about this step' }));
+        const composer = screen.getByRole('dialog', { name: 'Comment' });
+        typeInto(within(composer).getByLabelText('Comment'), 'Is the limit inclusive?');
+        await userEvent.click(within(composer).getByRole('button', { name: 'Send to agent' }));
+        await waitFor(() =>
+            expect(posted).toContainEqual(
+                expect.objectContaining({
+                    type: 'comment.create',
+                    anchor: expect.objectContaining({
+                        target: 'page:retry-limit',
+                        quote: expect.objectContaining({ exact: 'Give up at the limit' })
+                    })
+                })
+            )
+        );
+    });
+
     it('stays in place when the agent restructures away the page on show, a new page there coming', async () => {
         const store = storeWith(readView());
         render(<App store={store} />);

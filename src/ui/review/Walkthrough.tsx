@@ -29,14 +29,17 @@ import { useUnseen } from '../seen';
 import { StepperContext, useSteppers } from '../stepper';
 import { deepEqual, useRecord, useSelector } from '../store';
 import { quietly, useActions, useBusy, useUiState } from '../ui';
+import { useViewed } from '../viewed';
 import { typing, useIsCurrentRound, useShownRound } from './hooks';
 
-/** One block of a slide, re-rendered only when its own version changes. */
+/** One block of a slide, re-rendered only when its own version changes, and seen once it has been on screen a moment. */
 const SlideBlock = memo(function SlideBlock({ id }: { id: string }) {
     const block = useRecord('blocks', id);
+    const ref = useRef<HTMLDivElement>(null);
+    useViewed(`block:${id}`, ref);
     if (!block) return null;
     return (
-        <div id={`block-${id}`} className="slide-block">
+        <div ref={ref} id={`block-${id}`} className="slide-block">
             <BlockView block={block} placement="slide" />
         </div>
     );

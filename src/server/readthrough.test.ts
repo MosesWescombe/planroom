@@ -234,6 +234,16 @@ describe('the read-through layout', () => {
 });
 
 describe('reading', () => {
+    it("names a piece the reviewer saw for a quiz by its file, lines and page, in that piece's round only", async () => {
+        const server = await readingNow();
+        await server.page({ type: 'quiz.request', seen: ['piece:1:send', 'piece:2:send'] });
+        const { body } = await server.call('planroom_wait', { after: 0, timeoutSec: 1 });
+        expect(body.events.at(-1)).toMatchObject({
+            type: 'quiz.request',
+            seen: [{ ref: 'piece:1:send', what: 'src/send.ts 3-11 on read-through page "The retry limit is a setting"' }]
+        });
+    });
+
     it('saves ticks with the review without telling the agent, and keeps them across a reopen', async () => {
         const server = await readingNow();
         const before = (await server.call('planroom_wait', { after: 0, timeoutSec: 1 })).body.cursor;
@@ -457,6 +467,60 @@ async function prReading() {
     expect((await server.emit([{ type: 'read.outline', pages: outline() }])).isError).toBe(false);
     return { ...server, repo, head, dir };
 }
+
+describe('code walks', () => {
+    const walk = {
+        title: 'A send, to its retry',
+        steps: [
+            { title: 'Deliver', fn: 'send()', depth: 0, pseudo: 'deliver(job)', file: 'src/send.ts', lines: '6' },
+            { title: 'Give up at the limit', fn: 'send()', depth: 0, note: 'Throws once `attempt` reaches `policy.maxAttempts`.' }
+        ]
+    };
+
+    it('asks the agent for a page walk once, puts its answer on the page, and lets it be written unasked', async () => {
+        const server = await readingNow();
+        const ack = await server.page({ type: 'read.walk', page: 'retry-limit' });
+        const { events } = await server.session().wait(defined(ack.seq) - 1, 1);
+        expect(events[0]).toMatchObject({
+            type: 'read.walk',
+            round: 1,
+            page: 'retry-limit',
+            title: 'The retry limit is a setting'
+        });
+        const page = () => defined(server.session().current.pages['1:retry-limit']);
+        expect(page().walkAsked).toEqual(expect.any(String));
+        expect((await rejection(server.page({ type: 'read.walk', page: 'retry-limit' }))).message).toBe(
+            "The agent is still writing this page's code walk"
+        );
+        expect((await rejection(server.page({ type: 'read.walk', page: 'nope' }))).status).toBe(404);
+
+        await server.page({ type: 'read.tick', piece: 'send', read: true, how: 'manual' });
+        expect((await server.emit([{ type: 'read.page.walk', page: 'retry-limit', walk }])).isError).toBe(false);
+        expect(page().walk).toEqual(walk);
+        expect(page().walkAsked).toBeUndefined();
+        // A walk only adds to the page: what was read stays read.
+        expect(server.session().current.ticks['1:send']).toBeDefined();
+        expect((await rejection(server.page({ type: 'read.walk', page: 'retry-limit' }))).message).toBe(
+            'This page has a code walk already'
+        );
+
+        expect((await server.emit([{ type: 'read.page.walk', page: 'send-tests', walk }])).isError).toBe(false);
+        expect(defined(server.session().current.pages['1:send-tests']).walk).toBeDefined();
+        expect(JSON.stringify(await server.emit([{ type: 'read.page.walk', page: 'nope', walk }]))).toContain(
+            "round 1's read-through has no page nope"
+        );
+    });
+
+    it("keeps a kept page's walk, and a walk still asked for, through a restructure", async () => {
+        const server = await readingNow();
+        await server.emit([{ type: 'read.page.walk', page: 'retry-limit', walk }]);
+        await server.page({ type: 'read.walk', page: 'send-tests' });
+        expect((await server.emit([{ type: 'read.outline', pages: outline() }])).isError).toBe(false);
+        const { pages } = server.session().current;
+        expect(pages['1:retry-limit']?.walk?.title).toBe('A send, to its retry');
+        expect(pages['1:send-tests']?.walkAsked).toEqual(expect.any(String));
+    });
+});
 
 describe('restructuring', () => {
     /** The layout with the callers on a page of their own, beside the limit check on line 8, which the send loop holds too. */

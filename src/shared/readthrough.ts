@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { recordId, repoPath } from './blocks.js';
+import { codeWalkConfig, recordId, repoPath } from './blocks.js';
 import { contextBlock } from './questions.js';
 import type { Anchor } from './records.js';
 
@@ -227,11 +227,18 @@ export const pageAddition = z.object({
 });
 export type PageAddition = z.infer<typeof pageAddition>;
 
-/** A stored page: its layout, its round, its words once written, the additions asked for, and its version. */
+/**
+ * A stored page: its layout, its round, its words once written, the additions asked for, its code walk, and its
+ * version.
+ */
 export const pageRecord = outlinePage.extend({
     round: z.number().int().min(1),
     content: pageContent.omit({ id: true }).optional(),
     added: z.array(pageAddition).default([]),
+    /** The page's code walk, written by the agent unasked or because the reviewer asked. */
+    walk: codeWalkConfig.optional(),
+    /** When the reviewer asked for a code walk the agent has yet to write. */
+    walkAsked: z.string().optional(),
     version: z.number().int().min(1),
     updatedAt: z.string()
 });

@@ -19,7 +19,7 @@ describe('the generated block reference', () => {
 
     it.each(['plan', 'ask'] as const)('gives the %s skill the shared new blocks and leaves out the review-only ones', (kind) => {
         const doc = renderBlocksDoc(kind);
-        for (const type of ['analogy', 'stepThrough', 'compare']) expect(doc).toContain(`## ${type}\n`);
+        for (const type of ['intuition', 'stepThrough', 'compare']) expect(doc).toContain(`## ${type}\n`);
         for (const type of ['yourTake', 'html']) expect(doc).not.toContain(`## ${type}\n`);
     });
 });

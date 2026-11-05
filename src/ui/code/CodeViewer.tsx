@@ -1,6 +1,16 @@
 import clamp from 'lodash/clamp';
 import isEqual from 'lodash/isEqual';
-import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+    type ComponentProps,
+    Fragment,
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState
+} from 'react';
 import { createPortal } from 'react-dom';
 import { boxOf, type SelectionBox, textOffset } from '../comments/selection';
 import { ChevronIcon } from '../components/icons';
@@ -210,6 +220,24 @@ function renderToken(token: Token, key: number, names = false): ReactNode {
                 text
             )}
         </Fragment>
+    );
+}
+
+/**
+ * Pseudo code, coloured as code by the `pseudo` grammar. Its text is the source as written, so a comment anchored in it
+ * still finds its quote.
+ */
+export function PseudoCode({ source, className, ...rest }: { source: string } & ComponentProps<'pre'>) {
+    const lines = useMemo(() => highlightLines(source, 'pseudo'), [source]);
+    return (
+        <pre className={className ? `pseudo-code ${className}` : 'pseudo-code'} {...rest}>
+            {lines.map((tokens, index) => (
+                <Fragment key={index}>
+                    {index > 0 && '\n'}
+                    {tokens.map((token, at) => renderToken(token, at))}
+                </Fragment>
+            ))}
+        </pre>
     );
 }
 
