@@ -1,7 +1,7 @@
 # review-comments Specification
 
 ## Purpose
-How a review becomes comments on the PR: the Bitbucket-faithful preview, the AI sign-off rule, the summary, tasks, and posting by the Planroom server with a head check, retry safety and credential handling.
+How a review becomes comments on the PR: the preview faithful to the PR's host, the AI sign-off rule, the summary, tasks, and posting by the Planroom server with a head check, retry safety and credential handling.
 
 ## Requirements
 
@@ -120,7 +120,7 @@ Before creating anything, Post SHALL fetch the PR's current head commit. If it d
 
 ### Requirement: Posting never double-posts
 
-Each comment SHALL record its Bitbucket id as soon as it is created. A partial failure SHALL list the comments that failed, and a retry SHALL send only those.
+Each comment SHALL record its id on the host as soon as it is created. A partial failure SHALL list the comments that failed, and a retry SHALL send only those.
 
 #### Scenario: Partial failure
 
@@ -160,18 +160,32 @@ A review of a local branch SHALL offer "Copy as Markdown" in place of Post and M
 - **WHEN** the reviewer opens Comments on a local-branch review and presses Copy as Markdown
 - **THEN** the approved comments and summary are on the clipboard as Markdown and no request is made to Bitbucket
 
-### Requirement: Only approved comments and tasks go to Bitbucket
+### Requirement: Only approved comments and tasks go to the PR's host
 
-The only data sent to Bitbucket as a result of a review SHALL be the comments and tasks the reviewer approved, plus read requests for the PR.
+The only data sent to Bitbucket or Azure DevOps as a result of a review SHALL be the comments and tasks the reviewer approved, plus read requests for the PR.
 
 #### Scenario: Nothing unapproved
 
 - **WHEN** a review has rejected findings, a deleted summary and unanswered takes
-- **THEN** none of that appears in any request to Bitbucket
+- **THEN** none of that appears in any request to the host
+
+### Requirement: Azure DevOps takes each comment as a thread, published at once
+
+On Azure DevOps, which has no draft comments and no tasks, Post SHALL create each comment as an active thread, published at once, the summary last, and SHALL create no task; the page SHALL name Azure DevOps, say the comments are published at once, and offer no task toggle. A comment SHALL sit on its own lines, a range as a range and a line Bitbucket's diff would not show on that line, with no opening line range, selecting its lines whole. A follow-up SHALL be a reply in its earlier comment's thread, an author's replies SHALL be read from that thread, and resolving a confirmed comment SHALL mark its thread Resolved. The server SHALL sign in with `AZURE_DEVOPS_EXT_PAT` when it is set, or else with a token from the Azure CLI's sign-in, fetched again before it expires; while neither works, Post SHALL be disabled saying to run `az login` or set the token, and the credentials SHALL stay on the server as Bitbucket's do.
+
+#### Scenario: Range on Azure DevOps
+
+- **WHEN** a comment covers lines 12 to 18 of `src/send.ts` on an Azure DevOps PR
+- **THEN** it is created as an active thread on lines 12 to 18, its text without "Lines 12-18", and no task is created
+
+#### Scenario: Not signed in
+
+- **WHEN** `AZURE_DEVOPS_EXT_PAT` is not set and the Azure CLI gives no token
+- **THEN** Post is disabled and the page says to run `az login` or set `AZURE_DEVOPS_EXT_PAT`
 
 ### Requirement: Comments on ranges, off-diff lines and repeats are placed by fixed rules
 
-A comment on several lines SHALL be sent to Bitbucket on the last of those lines, its text opening with the line range, for example "Lines 12-18", unless a test on a scratch PR shows Bitbucket's API takes a span, in which case the span SHALL be used. A comment on a line that Bitbucket's diff does not show, meaning a line outside a diff hunk with three lines of context either side, SHALL become a comment on the file, quoting the line number and its code. A comment on the example of a repeated edit SHALL be sent once, on the example, ending with the list of the other places it applies to, unless the reviewer ticked "only here", in which case it is about that place alone and lists none. The preview SHALL show each such comment exactly as it will land, and the posted body SHALL equal the previewed body. The comment a finding drafts, opened from its card before it is agreed, SHALL be placed by the same rules, and the code a preview shows SHALL scroll sideways rather than be cut off.
+On Bitbucket, a comment on several lines SHALL be sent on the last of those lines, its text opening with the line range, for example "Lines 12-18", unless a test on a scratch PR shows Bitbucket's API takes a span, in which case the span SHALL be used. A comment on a line that Bitbucket's diff does not show, meaning a line outside a diff hunk with three lines of context either side, SHALL become a comment on the file, quoting the line number and its code. A comment on the example of a repeated edit SHALL be sent once, on the example, ending with the list of the other places it applies to, unless the reviewer ticked "only here", in which case it is about that place alone and lists none. The preview SHALL show each such comment exactly as it will land, and the posted body SHALL equal the previewed body. The comment a finding drafts, opened from its card before it is agreed, SHALL be placed by the same rules, and the code a preview shows SHALL scroll sideways rather than be cut off.
 
 #### Scenario: Range
 

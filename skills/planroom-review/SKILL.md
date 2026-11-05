@@ -1,6 +1,6 @@
 ---
 name: planroom-review
-description: Review a Bitbucket Cloud pull request or a local branch with the reviewer on Planroom's live page - a walkthrough deck of the change with your-take cards, a line-by-line read-through of every changed line, or both, then verified review findings they agree with, reword or reject, then comments previewed as Bitbucket shows them, posted as drafts or handed to an agent. Use whenever the user asks to review, walk through or explain a PR or a branch ("review PR 412", "walk me through feature/x", "help me review this pull request"), or to follow up a review after the author pushed.
+description: Review a Bitbucket Cloud or Azure DevOps pull request or a local branch with the reviewer on Planroom's live page - a walkthrough deck of the change with your-take cards, a line-by-line read-through of every changed line, or both, then verified review findings they agree with, reword or reject, then comments previewed as the PR's host shows them, posted (as drafts on Bitbucket) or handed to an agent. Use whenever the user asks to review, walk through or explain a PR or a branch ("review PR 412", "walk me through feature/x", "help me review this pull request"), or to follow up a review after the author pushed.
 ---
 
 # Planroom Review
@@ -11,13 +11,14 @@ and a **Comments** tab that previews what will be posted and posts it, or writes
 the `planroom-review` MCP server, which `planroom install` registers beside this skill, and it needs no `openspec/`.
 You write to the page with typed events; the reviewer reads, answers and reacts there; their events come back to you.
 
-Only the Planroom server talks to Bitbucket, with credentials you never see. Never ask the reviewer for a token, and
-never post comments yourself.
+Only the Planroom server talks to Bitbucket or Azure DevOps, with credentials you never see. Never ask the reviewer for
+a token, and never post comments yourself. The checkout's `origin` remote says which host its PRs are on; on Azure
+DevOps comments are published at once as threads, with no drafts and no tasks.
 
 ## Start
 
-1. Call `planroom_review({ target })`. `target` is a Bitbucket PR link, a PR number of this checkout's `origin` repo,
-   or a branch name. A branch with an open PR in the `origin` repo opens that PR's review; with none, or with
+1. Call `planroom_review({ target })`. `target` is a Bitbucket or Azure DevOps PR link, a PR number of this checkout's
+   `origin` repo, or a branch name. A branch with an open PR in the `origin` repo opens that PR's review; with none, or with
    `local: true` when the reviewer asks for the local changes only or to resume an earlier review of the branch, it is
    the local branch, reviewed against its merge base with the default branch (nothing is posted for a branch). Print the returned `url` every time. Keep `cursor`:
    it is your `after` for the first `planroom_wait`.
@@ -220,7 +221,7 @@ architecture node id, or a sequence actor), and a `draft`: the comment to post.
   `compare` for a before and after, a `flow` or `sequence` for the path it breaks, or a `table` of the cases it misses,
   when the text alone would not carry it. They show on the finding's card and are never posted.
 
-- Write `draft` in the Markdown Bitbucket renders: fenced code, tables, emphasis, lists and links. No raw HTML, no task
+- Write `draft` in the Markdown Bitbucket and Azure DevOps both render: fenced code, tables, emphasis, lists and links. No raw HTML, no task
   lists, no suggestion blocks: put a suggested fix in a fenced code block. Never sign it; the page adds "- Claude".
 - Send findings while the deck or read-through builds. With a deck, the reviewer sees none, anywhere, until they finish
   or skip the walkthrough; with the read-through alone they show at once, under their lines.

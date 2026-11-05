@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { defined } from '../test/serverHelpers.js';
-import { BitbucketError, bitbucketRepo, httpBitbucket, parseTarget } from './bitbucket.js';
+import { bitbucketRepo, httpBitbucket } from './bitbucket.js';
+import { HostError, type PullRequestRef } from './hosts.js';
+import { parseTarget } from './review.js';
 
-const PR = { workspace: 'acme', repo: 'api', number: 412 };
+const PR: PullRequestRef = { host: 'bitbucket', workspace: 'acme', repo: 'api', number: 412 };
 
 /** A fetch that answers each request in turn from `answers`, recording what was asked. */
 function scripted(answers: Response[]) {
@@ -25,9 +27,11 @@ describe('the Bitbucket client', () => {
     it('signs in with the email and token, and creates draft comments, replies and tasks', async () => {
         const { asked, fetchStub } = scripted([Response.json({ id: 7 }), Response.json({ id: 8 }), Response.json({ id: 9 })]);
         const client = httpBitbucket({ email: 'dev@example.com', token: 'tok' }, { fetch: fetchStub });
-        expect(await client.createComment(PR, { body: 'Hi', inline: { path: 'a.ts', to: 3 }, pending: true })).toBe(7);
+        expect(
+            await client.createComment(PR, { body: 'Hi', anchor: { file: 'a.ts', side: 'new', start: 1, end: 3 }, pending: true })
+        ).toBe(7);
         expect(await client.createComment(PR, { body: 'Again', parent: 7, pending: true })).toBe(8);
-        expect(await client.createTask(PR, { comment: 7, body: 'Fix it', pending: true })).toBe(9);
+        expect(await client.createTask?.(PR, { comment: 7, body: 'Fix it', pending: true })).toBe(9);
         expect(asked[0]).toEqual({
             url: 'https://api.bitbucket.org/2.0/repositories/acme/api/pullrequests/412/comments',
             method: 'POST',
@@ -59,7 +63,7 @@ describe('the Bitbucket client', () => {
         const error = await httpBitbucket({ email: 'a', token: 'b' }, { fetch: fetchStub })
             .pullRequest(PR)
             .catch((caught: unknown) => caught);
-        expect(error).toBeInstanceOf(BitbucketError);
+        expect(error).toBeInstanceOf(HostError);
         expect(String(error)).toMatch(/read:pullrequest:bitbucket.*write:pullrequest:bitbucket.*read:repository:bitbucket/);
     });
 
@@ -74,8 +78,8 @@ describe('the Bitbucket client', () => {
             Response.json({ values: [] })
         ]);
         const client = httpBitbucket(undefined, { fetch: fetchStub });
-        expect(await client.openPullRequest({ workspace: 'acme', repo: 'api' }, 'feature/"x"')).toBe(412);
-        expect(await client.openPullRequest({ workspace: 'acme', repo: 'api' }, 'feature/y')).toBeUndefined();
+        expect(await client.openPullRequest({ host: 'bitbucket', workspace: 'acme', repo: 'api' }, 'feature/"x"')).toBe(412);
+        expect(await client.openPullRequest({ host: 'bitbucket', workspace: 'acme', repo: 'api' }, 'feature/y')).toBeUndefined();
         const url = new URL(defined(asked[0]).url);
         expect(url.pathname).toBe('/2.0/repositories/acme/api/pullrequests');
         expect(Object.fromEntries(url.searchParams)).toEqual({
@@ -83,6 +87,25 @@ describe('the Bitbucket client', () => {
             sort: '-updated_on',
             q: 'source.branch.name = "feature/\\"x\\""'
         });
+    });
+
+    it('reads a pull request, naming the fork it comes from', async () => {
+        const raw = (repo: string) =>
+            Response.json({
+                title: 'Cap retries',
+                source: { branch: { name: 'feature/x' }, commit: { hash: 'abc' }, repository: { full_name: repo } },
+                destination: { branch: { name: 'main' }, commit: { hash: 'def' } }
+            });
+        const { fetchStub } = scripted([raw('acme/api'), raw('someone/api')]);
+        const client = httpBitbucket(undefined, { fetch: fetchStub });
+        expect(await client.pullRequest(PR)).toEqual({
+            title: 'Cap retries',
+            description: '',
+            link: 'https://bitbucket.org/acme/api/pull-requests/412',
+            source: { branch: 'feature/x', commit: 'abc' },
+            destination: { branch: 'main', commit: 'def' }
+        });
+        expect((await client.pullRequest(PR)).fork).toBe('someone/api');
     });
 
     it('reads every page of comments with their parents', async () => {
@@ -106,11 +129,11 @@ describe('review targets', () => {
     it.each([
         [
             'https://bitbucket.org/acme/api/pull-requests/412',
-            { kind: 'pr', number: 412, repo: { workspace: 'acme', repo: 'api' } }
+            { kind: 'pr', number: 412, repo: { host: 'bitbucket', workspace: 'acme', repo: 'api' } }
         ],
         [
             'https://bitbucket.org/acme/api/pull-requests/412/overview',
-            { kind: 'pr', number: 412, repo: { workspace: 'acme', repo: 'api' } }
+            { kind: 'pr', number: 412, repo: { host: 'bitbucket', workspace: 'acme', repo: 'api' } }
         ],
         ['412', { kind: 'pr', number: 412 }],
         ['#7', { kind: 'pr', number: 7 }],
@@ -120,9 +143,9 @@ describe('review targets', () => {
     });
 
     it.each([
-        ['git@bitbucket.org:acme/api.git', { workspace: 'acme', repo: 'api' }],
-        ['https://dev@bitbucket.org/acme/api.git', { workspace: 'acme', repo: 'api' }],
-        ['ssh://git@bitbucket.org/acme/api', { workspace: 'acme', repo: 'api' }],
+        ['git@bitbucket.org:acme/api.git', { host: 'bitbucket', workspace: 'acme', repo: 'api' }],
+        ['https://dev@bitbucket.org/acme/api.git', { host: 'bitbucket', workspace: 'acme', repo: 'api' }],
+        ['ssh://git@bitbucket.org/acme/api', { host: 'bitbucket', workspace: 'acme', repo: 'api' }],
         ['git@github.com:acme/api.git', undefined]
     ])('finds the workspace and repo of %s', (url, repo) => {
         expect(bitbucketRepo(url)).toEqual(repo);

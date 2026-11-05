@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { bitbucketAccess } from './server/bitbucket.js';
 import { startPageServer } from './server/http.js';
 import { type ClaudeCli, claudeConfigDir, type InstallTarget, install, uninstall } from './server/install.js';
 import { createPlanroom } from './server/mcp.js';
@@ -13,6 +12,7 @@ import { findOpenSpecRoot, openSpecCli } from './server/openspec.js';
 import { listPlans } from './server/plans.js';
 import { preferencesFile } from './server/preferences.js';
 import { plansDirOf, readRegistry, registryFile, rememberRepo } from './server/registry.js';
+import { hostAccess } from './server/review.js';
 import { PlanViewer } from './server/viewer.js';
 
 /**
@@ -82,14 +82,15 @@ function repo(): { repoRoot: string } {
 
 /**
  * Serve the planning server, with `--ask` the question server or with `--review` the review server, over stdio until
- * Claude Code closes it. A review reads its Bitbucket credentials from the environment and git, on the server only.
+ * Claude Code closes it. A review reads its PR host's credentials from the environment, git or the Azure CLI, on the
+ * server only.
  */
 async function mcp(): Promise<void> {
     const { repoRoot } = repo();
     if (values.ask && values.review) fail('choose --ask or --review, not both');
     const planroom = createPlanroom({
         kind: values.ask ? 'ask' : values.review ? 'review' : 'plan',
-        reviewHost: async () => ({ access: await bitbucketAccess(repoRoot), preferencesFile: preferencesFile() }),
+        reviewHost: async () => ({ access: await hostAccess(repoRoot), preferencesFile: preferencesFile() }),
         version,
         repoRoot,
         uiDir,
@@ -189,9 +190,9 @@ if (values.version) {
         'Running Claude Code sessions keep their old servers: reconnect planroom, planroom-ask and planroom-review in /mcp.'
     );
     console.log('To turn planning, asking or reviewing off, disable its server in /mcp and its skill in /skills.');
-    if (!process.env.BITBUCKET_API_TOKEN)
+    if (!process.env.BITBUCKET_API_TOKEN && !process.env.AZURE_DEVOPS_EXT_PAT)
         console.log(
-            'To post reviews to Bitbucket, set BITBUCKET_API_TOKEN (scopes read:pullrequest:bitbucket and write:pullrequest:bitbucket) for Claude Code; local branches need none.'
+            'To post reviews, set BITBUCKET_API_TOKEN (scopes read:pullrequest:bitbucket and write:pullrequest:bitbucket) for Bitbucket, or sign in with az login (or set AZURE_DEVOPS_EXT_PAT, scope Code read & write) for Azure DevOps; local branches need none.'
         );
 } else if (command === 'uninstall') {
     uninstall(target, claude);

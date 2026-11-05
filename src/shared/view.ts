@@ -108,7 +108,7 @@ export interface View
     elsewhere?: string;
     /** A review's preferences, from this machine's `review.json`. */
     preferences?: ReviewPreferences;
-    /** Whether a review can post to Bitbucket, and if not, what to set up. The credentials themselves never reach the page. */
+    /** Whether a review can post to its PR's host, and if not, what to set up. The credentials themselves never reach the page. */
     postable?: { ready: boolean; problem?: string };
     /** A review's worktree, as an absolute path, for links that open its files in an editor. */
     worktreeDir?: string;

@@ -137,12 +137,13 @@ and whether agents review the change too. Your choice is kept as the next review
 
    ![The Review tab: eight verified findings, all reacted to, by severity, kind, likelihood and impact, and by file](docs/screenshots/review-findings.png)
 
-4. **Comments.** Every comment as Bitbucket will show it. Text Claude drafted ends with "- Claude" until more than half
-   of it is your own words. A comment on several lines goes on the last of them, opening with "Lines 12-18"; one on a
-   line Bitbucket's diff does not show goes on the file, quoting the line; one on a repeated edit's example lists the
-   other places, unless you ticked "only here". Post creates them as Bitbucket drafts, the summary last, with a task on
-   each you toggle; you finish the review in Bitbucket. Post checks the PR has not moved under your comments first, and
-   a retry sends only what failed. A local branch copies the comments as Markdown instead and makes no network call.
+4. **Comments.** Every comment as Bitbucket or Azure DevOps will show it. Text Claude drafted ends with "- Claude"
+   until more than half of it is your own words. One on a repeated edit's example lists the other places, unless you
+   ticked "only here". On Bitbucket, a comment on several lines goes on the last of them, opening with "Lines 12-18";
+   one on a line Bitbucket's diff does not show goes on the file, quoting the line. Post creates them as Bitbucket
+   drafts, the summary last, with a task on each you toggle; you finish the review in Bitbucket. Azure DevOps has
+   neither drafts nor tasks: each comment is an active thread on its lines, whatever lines they are, published at once,
+   the summary last. Post checks the PR has not moved under your comments first, and a retry sends only what failed. A local branch copies the comments as Markdown instead and makes no network call.
    Hand to agent, for a PR or a branch, writes the comments to `.planroom/reviews/<id>/handoff-round-<n>.md` and copies
    a one-line prompt to paste into any Claude session, which then makes the changes in your own checkout.
 
@@ -152,11 +153,19 @@ When the author pushes and you ask for the review again, a new round covers only
 comments addressed, partly, not addressed or outdated, shows the author's replies, and drafts follow-ups. Earlier rounds
 stay readable.
 
+**Which host.** The checkout's `origin` remote says where its pull requests are: `dev.azure.com` or `visualstudio.com`
+for Azure DevOps, anything else for Bitbucket Cloud. A PR link must be of that repo.
+
 **Bitbucket access.** Set `BITBUCKET_API_TOKEN` to a Bitbucket Cloud API token (Atlassian account settings, Security,
 API tokens) with the scopes `read:pullrequest:bitbucket` and `write:pullrequest:bitbucket`, and `read:repository:bitbucket`
 if reading the PR is refused, in the environment Claude Code starts in. It signs in with your `git config user.email`,
 which must be the token's Atlassian account. Only the Planroom server reads them: they never reach the page, Claude, a log or a file. Without
 them a public PR still opens, and Post stays off saying what to set.
+
+**Azure DevOps access.** Sign in with the Azure CLI (`az login`), or set `AZURE_DEVOPS_EXT_PAT` to a personal access
+token with the Code (Read & write) scope in the environment Claude Code starts in; the token wins when both are there.
+The server asks the Azure CLI for a fresh token before each one expires. Like Bitbucket's, they stay on the server, and
+without them Post stays off saying what to do.
 
 **Preferences.** Settings has a Review section: which your-take cards Claude uses and how many, how to review and the
 reviewer agents each review offers to start, which views of the findings show, and the read-through's code view (Auto,

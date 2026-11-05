@@ -602,16 +602,11 @@ describe('comments from the read-through', () => {
 
         await server.page({ type: 'comments.post' });
         await server.session().settled();
-        expect(server.fake.created.map((comment) => [comment.body, comment.inline])).toEqual(
-            previewed.map((comment) => [
-                comment.body,
-                comment.placed?.start === undefined
-                    ? { path: comment.placed?.file }
-                    : { path: comment.placed.file, to: comment.placed.end ?? comment.placed.start }
-            ])
+        expect(server.fake.created.map((comment) => [comment.body, comment.anchor])).toEqual(
+            previewed.map((comment) => [comment.body, comment.placed])
         );
-        expect(server.fake.created[2]!.inline).toEqual({ path: 'src/send.ts', to: 8 });
-        expect(server.fake.created[3]!.inline).toEqual({ path: 'src/send.ts' });
+        expect(server.fake.created[2]!.anchor).toMatchObject({ file: 'src/send.ts', side: 'new', end: 8 });
+        expect(server.fake.created[3]!.anchor).toEqual({ file: 'src/send.ts', side: 'new' });
 
         // Post, then hand the same comments to an agent.
         const { handoff } = await server.page({ type: 'comments.handoff' });

@@ -572,14 +572,14 @@ export const loggedEvent = z.discriminatedUnion('type', [
     }),
     /** The reviewer changed their preferences: follow them for slides you have not written yet. */
     logged.extend({ type: z.literal('preferences.change'), preferences: reviewPreferences }),
-    /** Post ended: how many of the round's comments are on Bitbucket, and which failed. */
+    /** Post ended: how many of the round's comments are on the PR's host, and which failed. */
     logged.extend({
         type: z.literal('review.posted'),
         round: z.number().int(),
         posted: z.number().int(),
         total: z.number().int(),
         failed: z.array(z.string()),
-        /** Whether the comments went up as drafts the reviewer finishes in Bitbucket. */
+        /** Whether the comments went up as drafts the reviewer finishes on the host: on Bitbucket, never on Azure DevOps. */
         drafts: z.boolean()
     })
 ]);

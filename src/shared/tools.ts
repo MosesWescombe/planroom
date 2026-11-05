@@ -92,8 +92,9 @@ export const reviewInput = z.object({
         .min(1)
         .max(400)
         .describe(
-            'What to review: a Bitbucket Cloud PR link (https://bitbucket.org/<workspace>/<repo>/pull-requests/<n>), a bare PR ' +
-                "number of the checkout's origin repo, or a branch name. A branch with an open PR in the origin repo reviews " +
+            'What to review: a Bitbucket Cloud PR link (https://bitbucket.org/<workspace>/<repo>/pull-requests/<n>), an Azure ' +
+                'DevOps PR link (https://dev.azure.com/<organization>/<project>/_git/<repo>/pullrequest/<n>), a bare PR ' +
+                "number of the checkout's origin repo, whose remote names the host, or a branch name. A branch with an open PR in the origin repo reviews " +
                 'that PR; otherwise, or with `local`, the local branch against its merge base with the default branch'
         ),
     local: z

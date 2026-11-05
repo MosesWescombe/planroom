@@ -23,9 +23,9 @@ import { roundPages } from '../shared/readthrough.js';
 import { currentRound, deckSlides, deriveComments, reviewStage, roundItems, slideShown } from '../shared/review.js';
 import { type PlanFormat, planDir, type SessionKind, StateFileError } from '../shared/state.js';
 import { askInput, DEFAULT_WAIT_SEC, openInput, reviewInput, stateInput, waitInput } from '../shared/tools.js';
-import { BitbucketError } from './bitbucket.js';
 import type { ChannelNotifier } from './delivery.js';
 import { RejectedError } from './draft.js';
+import { HostError } from './hosts.js';
 import { type PageServer, startPageServer } from './http.js';
 import { ChangeLockedError } from './lock.js';
 import type { BrowserOpener } from './opener.js';
@@ -89,7 +89,8 @@ const ASK_TOOL: Tool = {
 const REVIEW_TOOL: Tool = {
     name: 'planroom_review',
     description:
-        'Open or resume a Planroom Review of a Bitbucket Cloud PR (a link or a number of the origin repo) or a branch: a branch with an ' +
+        'Open or resume a Planroom Review of a Bitbucket Cloud or Azure DevOps PR (a link or a number of the origin repo; the origin remote ' +
+        'names the host) or a branch: a branch with an ' +
         'open PR in the origin repo reviews that PR, otherwise or with local: true the local branch (nothing is posted for it). ' +
         TAKES_OVER +
         'The server fetches the PR, adds a temporary git worktree at its head under .planroom/reviews/<id>/worktree, ' +
@@ -181,7 +182,7 @@ export const INSTRUCTIONS: Record<SessionKind, string> = {
         delivery(SERVER_NAMES.ask)
     ].join(' '),
     review: [
-        'Planroom Review walks a reviewer through a Bitbucket PR or a local branch on a live page: a deck of slides, then the review',
+        'Planroom Review walks a reviewer through a Bitbucket or Azure DevOps PR or a local branch on a live page: a deck of slides, then the review',
         'findings they agree with, reword or reject, then the comments to post. Load the planroom-review skill before calling these tools.',
         'planroom_review returns the page URL: always print it for the user.',
         delivery(SERVER_NAMES.review)
@@ -191,7 +192,7 @@ export const INSTRUCTIONS: Record<SessionKind, string> = {
 export interface PlanroomOptions {
     /** Which server this is: `plan` serves planroom_open, `ask` planroom_ask, `review` planroom_review. */
     kind: SessionKind;
-    /** For the review server: Bitbucket access and the preferences file, worked out on its first review. */
+    /** For the review server: access to the origin's PR host and the preferences file, worked out on its first review. */
     reviewHost?: () => Promise<ReviewHost>;
     /** Planroom's version, which the server reports when the agent connects. */
     version: string;
@@ -223,7 +224,7 @@ function failed(error: unknown): CallToolResult {
     let body: Record<string, unknown>;
     if (error instanceof RejectedError) body = { error: 'Rejected; nothing was applied.', issues: error.issues };
     else if (error instanceof ChangeLockedError) body = { error: error.message, url: error.holder.url };
-    else if (error instanceof StateFileError || error instanceof BitbucketError || error instanceof GitError)
+    else if (error instanceof StateFileError || error instanceof HostError || error instanceof GitError)
         body = { error: error.message };
     else body = { error: error instanceof Error ? error.message : String(error) };
     return { content: [{ type: 'text', text: JSON.stringify(body) }], isError: true };
@@ -487,7 +488,7 @@ export function createPlanroom(options: PlanroomOptions): Planroom {
         };
     };
 
-    /** The review server's Bitbucket access and preferences file, worked out once. */
+    /** The review server's access to its PR host and its preferences file, worked out once. */
     let host: Promise<ReviewHost> | undefined;
 
     /** What the agent works from in a review: where it stands, the change, the worktree and the preferences. */

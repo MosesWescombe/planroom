@@ -4,26 +4,26 @@ import {
     currentRound,
     type DerivedComment,
     deriveComments,
-    POST_AS_DRAFTS,
+    HOSTS,
     type PostRecord,
     type RoundRecord
 } from '../shared/review.js';
 import type { SessionState } from '../shared/state.js';
-import type { BitbucketClient, InlineAnchor } from './bitbucket.js';
 import type { Draft } from './draft.js';
+import type { PullRequestClient } from './hosts.js';
 import { pullRequestOf, reanchor } from './review.js';
 import { changedLines, commitOf, fetchBranch, fileAt } from './worktree.js';
 
 /**
- * Post: the Planroom server sends a round's comments to Bitbucket from the same records, through the same derivation,
- * the preview renders, so each body sent is the body the reviewer saw. It checks the PR head first, records each
- * comment's id the moment Bitbucket returns it, and a retry sends only what failed.
+ * Post: the Planroom server sends a round's comments to the PR's host from the same records, through the same
+ * derivation, the preview renders, so each body sent is the body the reviewer saw. It checks the PR head first, records
+ * each comment's id the moment the host returns it, and a retry sends only what failed.
  */
 
 /** What posting needs from its session. */
 export interface PostingContext {
     repoRoot: string;
-    client: BitbucketClient;
+    client: PullRequestClient;
     /** The session's committed state now. */
     state: () => SessionState;
     /** Apply a change through a draft, persisted before it resolves, logging the event it returns. */
@@ -32,12 +32,11 @@ export interface PostingContext {
     closed: () => boolean;
 }
 
-/** A comment's place as Bitbucket takes it: a line on either side of the diff, a file, or none for the summary. */
-function inlineOf(anchor: CodeAnchor | undefined): InlineAnchor | undefined {
-    if (!anchor) return undefined;
-    if (anchor.start === undefined) return { path: anchor.file };
-    const line = anchor.end ?? anchor.start;
-    return anchor.side === 'old' ? { path: anchor.file, from: line } : { path: anchor.file, to: line };
+/** The text of `anchor`'s last line at `commit`, or its base for the old side; none for a whole file. */
+async function lastLineOf(repoRoot: string, round: RoundRecord, commit: string, anchor: CodeAnchor | undefined) {
+    if (anchor?.start === undefined) return undefined;
+    const lines = await fileAt(repoRoot, anchor.side === 'old' ? round.base : commit, anchor.file);
+    return lines?.[(anchor.end ?? anchor.start) - 1];
 }
 
 /** A task's text: the comment's first line of prose, cut to a task's length. */
@@ -101,6 +100,7 @@ export async function postRound(context: PostingContext, choices: Record<string,
         const state = context.state();
         const review = state.review!;
         const pr = pullRequestOf(review.target)!;
+        const host = HOSTS[pr.host];
         const round = currentRound(review);
         const comments = deriveComments(state, round.n);
 
@@ -140,13 +140,14 @@ export async function postRound(context: PostingContext, choices: Record<string,
                       ? { file: reanchored.file, side: reanchored.side }
                       : reanchored;
             const parent = comment.replyTo ? round.earlier[comment.replyTo]?.post.id : undefined;
-            const inline = inlineOf(anchor);
             try {
+                const lastLine = await lastLineOf(repoRoot, round, reanchored && movedTo ? movedTo : round.head, anchor);
                 const id = await client.createComment(pr, {
                     body: comment.body,
-                    ...(inline ? { inline } : {}),
+                    ...(anchor ? { anchor } : {}),
+                    ...(lastLine !== undefined ? { lastLine } : {}),
                     ...(parent !== undefined ? { parent } : {}),
-                    pending: POST_AS_DRAFTS
+                    pending: host.drafts
                 });
                 sent[comment.key] = { id, body: comment.body, ...(anchor ? { anchor } : {}), at };
             } catch (error) {
@@ -158,12 +159,12 @@ export async function postRound(context: PostingContext, choices: Record<string,
         for (const comment of comments) {
             const post = sent[comment.key];
             if (context.closed()) return;
-            if (!comment.task || post?.id === undefined || post.taskId !== undefined) continue;
+            if (!client.createTask || !comment.task || post?.id === undefined || post.taskId !== undefined) continue;
             try {
                 const taskId = await client.createTask(pr, {
                     comment: post.id,
                     body: taskText(comment),
-                    pending: POST_AS_DRAFTS
+                    pending: host.drafts
                 });
                 sent[comment.key] = { ...post, taskId };
             } catch (error) {
@@ -178,7 +179,7 @@ export async function postRound(context: PostingContext, choices: Record<string,
             if (!entry.confirmed || entry.resolvedAt || entry.post.id === undefined) continue;
             try {
                 await client.resolveComment(pr, entry.post.id);
-                if (entry.post.taskId !== undefined) await client.resolveTask(pr, entry.post.taskId);
+                if (entry.post.taskId !== undefined) await client.resolveTask?.(pr, entry.post.taskId);
                 resolved[key] = new Date().toISOString();
             } catch (error) {
                 failedResolves.push(key);
@@ -212,7 +213,7 @@ export async function postRound(context: PostingContext, choices: Record<string,
                     ? { detail: `${failed.length} failed; retry to send only those`, kind: 'attention' as const }
                     : {})
             });
-            return { type: 'review.posted', round: n, posted, total: comments.length, failed, drafts: POST_AS_DRAFTS };
+            return { type: 'review.posted', round: n, posted, total: comments.length, failed, drafts: host.drafts };
         });
     } catch (error) {
         await stopWith({ posting: { state: 'error', at: new Date().toISOString(), error: reason(error) } });

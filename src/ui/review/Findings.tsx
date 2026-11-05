@@ -6,6 +6,7 @@ import {
     commentBody,
     describeCodeAnchor,
     findingsUnlocked,
+    hostOf,
     type ItemKind,
     type ItemRecord,
     placement,
@@ -204,13 +205,14 @@ function AnchorLink({ item, anchor }: { item: ItemRecord; anchor: CodeAnchor }) 
 }
 
 /**
- * The comment a finding drafts, opened over the page as Bitbucket will show it once agreed: placed as posting places it,
- * so a range opens with its lines and a line off Bitbucket's diff becomes a comment on the file quoting it.
+ * The comment a finding drafts, opened over the page as its host will show it once agreed: placed as posting places it,
+ * so on Bitbucket a range opens with its lines and a line off its diff becomes a comment on the file quoting it.
  */
 function DraftPreview({ item }: { item: ItemRecord }) {
     const [open, setOpen] = useState(false);
     const index = useSelector((view) => view.review?.rounds.find((round) => round.n === item.round)?.index);
-    const { placed, opening } = placement(index, item.anchor, item.code);
+    const anyLine = useSelector((view) => (view.review ? hostOf(view.review.target)?.anyLine : undefined));
+    const { placed, opening } = placement(index, item.anchor, item.code, anyLine);
     return (
         <>
             <button type="button" className="button-link small finding-draft" onClick={() => setOpen(true)}>

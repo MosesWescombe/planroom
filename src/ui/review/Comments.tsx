@@ -6,7 +6,8 @@ import {
     describeCodeAnchor,
     type EarlierLabel,
     findingsUnlocked,
-    POST_AS_DRAFTS,
+    type HostTraits,
+    hostOf,
     type RoundRecord,
     SIGN_OFF,
     SIGN_OFF_LOCK,
@@ -26,6 +27,11 @@ import { FileTreeSelect } from './FileTreeSelect';
 import { KIND_NAMES } from './Findings';
 import { useIsCurrentRound, useShownRound } from './hooks';
 
+/** The traits of the host the shown review posts to; none for a local branch. */
+function useHost(): HostTraits | undefined {
+    return useSelector((view) => (view.review ? hostOf(view.review.target) : undefined));
+}
+
 /** Where each comment came from, as its card says. */
 const SOURCES: Record<DerivedComment['source'], string> = {
     agree: 'You agreed',
@@ -35,10 +41,11 @@ const SOURCES: Record<DerivedComment['source'], string> = {
 };
 
 /**
- * One comment as Bitbucket will show it, anchored to its diff lines, with how much of it is the reviewer's own, its
- * sign-off and its task, and what happened when it was posted.
+ * One comment as its host will show it, anchored to its diff lines, with how much of it is the reviewer's own, its
+ * sign-off and its task where the host has tasks, and what happened when it was posted.
  */
 function CommentCard({ comment, round, editable }: { comment: DerivedComment; round: RoundRecord; editable: boolean }) {
+    const host = useHost();
     const { send } = useActions();
     const [busy, track] = useBusy();
     const [editing, setEditing] = useState(false);
@@ -123,15 +130,17 @@ function CommentCard({ comment, round, editable }: { comment: DerivedComment; ro
                         {comment.locked && <span className="small muted">(locked: agent text)</span>}
                     </label>
                 )}
-                <label className="toggle-inline">
-                    <input
-                        type="checkbox"
-                        checked={comment.task}
-                        disabled={!editable || sent}
-                        onChange={(event) => choose({ task: event.target.checked })}
-                    />
-                    <span>Make it a task</span>
-                </label>
+                {(host?.tasks ?? true) && (
+                    <label className="toggle-inline">
+                        <input
+                            type="checkbox"
+                            checked={comment.task}
+                            disabled={!editable || sent}
+                            onChange={(event) => choose({ task: event.target.checked })}
+                        />
+                        <span>Make it a task</span>
+                    </label>
+                )}
                 {canEdit && !editing && (
                     <button
                         type="button"
@@ -156,7 +165,7 @@ function CommentCard({ comment, round, editable }: { comment: DerivedComment; ro
                 )}
                 {post?.id !== undefined && (
                     <span className="small posted-mark">
-                        <CheckIcon /> {POST_AS_DRAFTS ? 'Draft on Bitbucket' : 'Posted'}
+                        <CheckIcon /> {host?.drafts ? `Draft on ${host.name}` : 'Posted'}
                         {post.taskId !== undefined ? ', with its task' : ''}
                     </span>
                 )}
@@ -335,6 +344,7 @@ const LABELS: Record<EarlierLabel, string> = {
 
 /** Your comments from earlier rounds: how each stands now, the code that shows it, the author's replies, and resolving. */
 function Earlier({ round, editable }: { round: RoundRecord; editable: boolean }) {
+    const tasks = useHost()?.tasks ?? true;
     const { send, goTo } = useActions();
     const followups = useSelector(
         (view) =>
@@ -399,7 +409,7 @@ function Earlier({ round, editable }: { round: RoundRecord; editable: boolean })
                                     quietly(send({ type: 'earlier.confirm', key, confirmed: event.target.checked }))
                                 }
                             />
-                            <span>Resolve its thread and task when you post</span>
+                            <span>Resolve its thread{tasks ? ' and task' : ''} when you post</span>
                         </label>
                     )}
                 </article>
@@ -449,12 +459,15 @@ function HandToAgent({ comments }: { comments: DerivedComment[] }) {
 }
 
 /**
- * Post, and how it went: the head check's choices, "posted 6 of 7" with the failures to retry, or the link to finish
- * the review in Bitbucket. Off while credentials are missing, with what to set. A local branch copies the comments as
- * Markdown instead, which sends nothing anywhere.
+ * Post, and how it went: the head check's choices, "posted 6 of 7" with the failures to retry, or the link to the PR,
+ * where the reviewer finishes a review posted as drafts. Off while credentials are missing, with what to set. A local
+ * branch copies the comments as Markdown instead, which sends nothing anywhere.
  */
 function PostBar({ round, comments, ready }: { round: RoundRecord; comments: DerivedComment[]; ready: boolean }) {
     const review = useSelector((view) => view.review, deepEqual);
+    const host = useHost();
+    const drafts = Boolean(host?.drafts);
+    const hostName = host?.name ?? 'the host';
     const postable = useSelector((view) => view.postable, deepEqual);
     const { send } = useActions();
     const [busy, track] = useBusy();
@@ -491,18 +504,18 @@ function PostBar({ round, comments, ready }: { round: RoundRecord; comments: Der
             <footer className="submit-bar">
                 <div className="submit-text">
                     <span className="submit-title">
-                        {POST_AS_DRAFTS ? `Posted ${plural(posted, 'draft comment')}` : `Published ${plural(posted, 'comment')}`}
+                        {drafts ? `Posted ${plural(posted, 'draft comment')}` : `Published ${plural(posted, 'comment')}`}
                     </span>
                     <span className="submit-detail">
-                        {POST_AS_DRAFTS
-                            ? 'Finish the review in Bitbucket to publish them, with one notification to the author.'
-                            : 'Bitbucket drafts could not be used, so the comments were published, the summary last.'}
+                        {drafts
+                            ? `Finish the review in ${hostName} to publish them, with one notification to the author.`
+                            : `They are on ${hostName}, the summary last.`}
                     </span>
                 </div>
                 <HandToAgent comments={comments} />
                 {review.link && (
                     <a className="button-inverse" href={review.link} target="_blank" rel="noopener noreferrer">
-                        Open in Bitbucket
+                        Open in {hostName}
                     </a>
                 )}
             </footer>
@@ -581,9 +594,9 @@ function PostBar({ round, comments, ready }: { round: RoundRecord; comments: Der
                             ? posting.error
                             : !ready
                               ? 'Every finding needs a reaction first.'
-                              : POST_AS_DRAFTS
-                                ? 'They go up as drafts; you finish the review in Bitbucket.'
-                                : 'They are published at once, the summary last.'}
+                              : drafts
+                                ? `They go up as drafts; you finish the review in ${hostName}.`
+                                : `They are published on ${hostName} at once, the summary last.`}
                 </span>
             </div>
             <HandToAgent comments={comments} />
@@ -593,11 +606,7 @@ function PostBar({ round, comments, ready }: { round: RoundRecord; comments: Der
                 disabled={!postable?.ready || !ready || busy || comments.length === 0}
                 onClick={() => post()}
             >
-                {posting?.state === 'partial' || posting?.state === 'error'
-                    ? 'Retry'
-                    : POST_AS_DRAFTS
-                      ? 'Post as drafts'
-                      : 'Post'}
+                {posting?.state === 'partial' || posting?.state === 'error' ? 'Retry' : drafts ? 'Post as drafts' : 'Post'}
             </button>
         </footer>
     );
@@ -631,7 +640,7 @@ function CommentList({ comments }: { comments: DerivedComment[] }) {
 }
 
 /**
- * The Comments tab: every comment the round would post, drawn as Bitbucket will show it, then Post. Opening it with
+ * The Comments tab: every comment the round would post, drawn as its host will show it, then Post. Opening it with
  * every finding reacted to moves the review to its preview; until then it lists the findings still waiting.
  */
 export function CommentsTab() {
@@ -655,6 +664,7 @@ export function CommentsTab() {
     }, [current, readOnly, unlocked, round.previewing, round.postedAt, waiting, send]);
     const inline = useMemo(() => parts.comments.filter((comment) => comment.key !== 'summary'), [parts.comments]);
     const summary = parts.comments.find((comment) => comment.key === 'summary');
+    const hostName = useHost()?.name ?? 'Bitbucket';
     return (
         <>
             <Rail>
@@ -666,7 +676,7 @@ export function CommentsTab() {
                         <div className="eyebrow">Comments · round {round.n}</div>
                         <h1>What you will post</h1>
                         <p className="lede">
-                            Each comment as Bitbucket will show it. Agent text ends with "{SIGN_OFF}" until more than half of it
+                            Each comment as {hostName} will show it. Agent text ends with "{SIGN_OFF}" until more than half of it
                             is yours; only what you agreed with, reworded or wrote yourself is here. Post them, hand them to an
                             agent to make the changes, or both.
                         </p>

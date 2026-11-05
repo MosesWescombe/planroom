@@ -5,8 +5,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { CallToolResultSchema, type Notification } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, vi } from 'vitest';
-import type { BitbucketAccess, BitbucketClient, InlineAnchor, PullRequestComment, PullRequestInfo } from '../server/bitbucket.js';
 import { RejectedError } from '../server/draft.js';
+import type { HostAccess, NewComment, PullRequestClient, PullRequestComment, PullRequestInfo } from '../server/hosts.js';
 import { createPlanroom } from '../server/mcp.js';
 import type { OpenSpecRunner } from '../server/openspec.js';
 import type { ReviewHost } from '../server/review.js';
@@ -201,14 +201,14 @@ export async function eventually(check: () => void | Promise<void>, timeoutMs = 
 }
 
 /**
- * A Bitbucket stand-in that records every call; `open` names the open PR from each branch, and `fail` makes the nth
- * comment creation (from 1) throw.
+ * A PR host stand-in, with Bitbucket's tasks, that records every call; `open` names the open PR from each branch, and
+ * `fail` makes the nth comment creation (from 1) throw.
  */
-export interface FakeBitbucket extends BitbucketClient {
+export interface FakeBitbucket extends PullRequestClient {
     pr: PullRequestInfo;
     open: Record<string, number>;
     thread: PullRequestComment[];
-    created: { id: number; body: string; inline?: InlineAnchor; parent?: number; pending: boolean }[];
+    created: ({ id: number } & NewComment)[];
     tasks: { id: number; comment: number; body: string; pending: boolean }[];
     resolvedComments: number[];
     resolvedTasks: number[];
@@ -225,7 +225,7 @@ export function fakeBitbucket(pr: Partial<PullRequestInfo> = {}): FakeBitbucket 
             description: 'Caps the retry policy at two attempts.',
             author: 'Ana',
             link: 'https://bitbucket.org/acme/api/pull-requests/412',
-            source: { branch: 'feature/retry-policy', commit: '', repo: 'acme/api' },
+            source: { branch: 'feature/retry-policy', commit: '' },
             destination: { branch: 'main', commit: '' },
             ...pr
         },
@@ -276,8 +276,8 @@ export function fakeBitbucket(pr: Partial<PullRequestInfo> = {}): FakeBitbucket 
 }
 
 /** A review host over `client`, ready to post unless `problem` says what is missing. */
-export function reviewHostWith(client: BitbucketClient, preferencesFile: string, problem?: string): ReviewHost {
-    const access: BitbucketAccess = problem ? { client, ready: false, problem } : { client, ready: true };
+export function reviewHostWith(client: PullRequestClient, preferencesFile: string, problem?: string): ReviewHost {
+    const access: HostAccess = problem ? { client, ready: false, problem } : { client, ready: true };
     return { access, preferencesFile };
 }
 

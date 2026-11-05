@@ -54,11 +54,23 @@ export type SlideRecord = z.infer<typeof slideRecord>;
 
 // ---------------------------------------------------------------- the change
 
-/** What a review is of: a Bitbucket Cloud pull request, or a local branch against its merge base with `base`. */
+/** The hosts a review's pull request can be on. */
+export const PR_HOSTS = ['bitbucket', 'azure'] as const;
+export type PrHost = (typeof PR_HOSTS)[number];
+
+/**
+ * What a review is of: a pull request on Bitbucket Cloud or Azure DevOps, or a local branch against its merge base with
+ * `base`.
+ */
 export const reviewTarget = z.discriminatedUnion('kind', [
     z.object({
         kind: z.literal('pr'),
+        /** Reviews saved before Azure DevOps was supported have none: they are all on Bitbucket. */
+        host: z.enum(PR_HOSTS).default('bitbucket'),
+        /** The Bitbucket workspace, or the Azure DevOps organization. */
         workspace: z.string().min(1),
+        /** The Azure DevOps project the repo is in; Bitbucket has none. */
+        project: z.string().min(1).optional(),
         repo: z.string().min(1),
         number: z.number().int().positive()
     }),
@@ -143,7 +155,7 @@ const itemFields = z.object({
     replyTo: z.string().min(1).max(200).optional(),
     /** What a reader needs to judge it without opening the code: the lines, a before and after, the path it breaks. Never posted. */
     blocks: z.array(contextBlock).max(4).optional(),
-    /** The comment to post, in the Markdown subset Bitbucket renders. */
+    /** The comment to post, in the Markdown subset Bitbucket and Azure DevOps both render. */
     draft: prose
 });
 
@@ -421,7 +433,10 @@ export type NoteRecord = z.infer<typeof noteRecord>;
 
 // ---------------------------------------------------------------- rounds
 
-/** One comment Post sent: its Bitbucket ids, recorded as soon as each is created, and what was sent where. */
+/**
+ * One comment Post sent: its ids on the host, recorded as soon as each is created, and what was sent where. On Azure
+ * DevOps `id` is its thread's, and there are no tasks.
+ */
 export const postRecord = z.object({
     id: z.number().int().optional(),
     taskId: z.number().int().optional(),
@@ -684,8 +699,8 @@ export interface DerivedComment {
     /** What it is about: the file and lines it was written on. The summary sits on the PR as a whole. */
     anchor?: CodeAnchor;
     /**
-     * Where Bitbucket gets it: the anchor, or the file alone for lines its diff does not show. A range is sent on its
-     * last line.
+     * Where the host gets it: the anchor, or on Bitbucket the file alone for lines its diff does not show, and a range
+     * on its last line.
      */
     placed?: CodeAnchor;
     /** A follow-up's earlier comment, by its key in the round's `earlier`. */
@@ -737,17 +752,19 @@ function fenced(lines: readonly string[]): string {
 }
 
 /**
- * Where a comment on `anchor` lands and what opens its text. A range is sent on its last line and opens with its
- * lines, "Lines 12-18". A line Bitbucket's diff does not show, inside a hunk with three lines of context, becomes a
+ * Where a comment on `anchor` lands and what opens its text. On a host whose comments sit on any line and span a range
+ * (`anyLine`), it lands on its anchor as it is. On Bitbucket, a range is sent on its last line and opens with its
+ * lines, "Lines 12-18", and a line Bitbucket's diff does not show, inside a hunk with three lines of context, becomes a
  * comment on the file that quotes its line number and code.
  * ponytail: the rules are the conservative ones; if a scratch PR shows Bitbucket takes a span, send it instead.
  */
 export function placement(
     index: LineIndex | undefined,
     anchor: CodeAnchor | undefined,
-    code: readonly string[] | undefined
+    code: readonly string[] | undefined,
+    anyLine = false
 ): { placed?: CodeAnchor; opening: string } {
-    if (!anchor || anchor.start === undefined) return { ...(anchor ? { placed: anchor } : {}), opening: '' };
+    if (!anchor || anchor.start === undefined || anyLine) return { ...(anchor ? { placed: anchor } : {}), opening: '' };
     const end = anchor.end ?? anchor.start;
     const range = end === anchor.start ? `${anchor.start}` : `${anchor.start}-${end}`;
     if (index && !shownOnDiff(index, anchor.file, anchor.side, end)) {
@@ -787,11 +804,12 @@ function repeatList(index: LineIndex | undefined, note: NoteRecord): string {
 export function deriveComments(parts: ReviewParts, roundNumber: number): DerivedComment[] {
     const round = parts.review?.rounds.find((candidate) => candidate.n === roundNumber);
     if (!round) return [];
+    const anyLine = hostOf(parts.review!.target)?.anyLine;
     const comments: DerivedComment[] = [];
     for (const item of roundItems(parts, roundNumber)) {
         const reaction = parts.reactions[item.id];
         if (!reaction || reaction.verdict === 'reject') continue;
-        const { placed, opening } = placement(round.index, item.anchor, item.code);
+        const { placed, opening } = placement(round.index, item.anchor, item.code, anyLine);
         const base = {
             key: `item:${item.id}`,
             itemId: item.id,
@@ -818,7 +836,7 @@ export function deriveComments(parts: ReviewParts, roundNumber: number): Derived
         }
     }
     for (const note of Object.values(parts.notes).filter((candidate) => candidate.round === roundNumber)) {
-        const { placed, opening } = placement(round.index, note.anchor, note.code);
+        const { placed, opening } = placement(round.index, note.anchor, note.code, anyLine);
         comments.push({
             key: `note:${note.id}`,
             source: 'note',
@@ -1010,3 +1028,26 @@ export function frameDocument(html: string): string {
  * says so.
  */
 export const POST_AS_DRAFTS = true;
+
+/**
+ * What posting does differently on each host: the name the page gives it, whether comments go up as drafts the reviewer
+ * finishes there, whether a comment can carry a task, and whether a comment can sit on any line of a file and span a
+ * range, where Bitbucket takes one line its diff shows. Azure DevOps has no drafts and no tasks: each comment is a
+ * thread published at once, open until someone resolves it.
+ */
+export interface HostTraits {
+    name: string;
+    drafts: boolean;
+    tasks: boolean;
+    anyLine: boolean;
+}
+
+export const HOSTS: Record<PrHost, HostTraits> = {
+    bitbucket: { name: 'Bitbucket', drafts: POST_AS_DRAFTS, tasks: true, anyLine: false },
+    azure: { name: 'Azure DevOps', drafts: false, tasks: false, anyLine: true }
+};
+
+/** The traits of the host a review posts to; a local branch posts nowhere. */
+export function hostOf(target: ReviewTarget): HostTraits | undefined {
+    return target.kind === 'pr' ? HOSTS[target.host] : undefined;
+}

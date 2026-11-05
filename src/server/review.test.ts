@@ -132,14 +132,17 @@ async function branchReview(options: { prefs?: string } = {}) {
     return { ...server, repo, head, opened };
 }
 
-/** A repo cloned from a stand-in for `acme/api` on Bitbucket, whose PR 412 is `feature/retry-policy` into main. */
-async function prRepo() {
+/**
+ * A repo cloned from a stand-in for `acme/api`, on Bitbucket unless `origin` names another host, whose PR 412 is
+ * `feature/retry-policy` into main.
+ */
+async function prRepo(origin = 'git@bitbucket.org:acme/api.git') {
     const remote = await branchRepo();
     const dir = join(await tempRepo(), 'clone');
     await git(remote.repo.dir, ['clone', '--quiet', remote.repo.dir, dir]);
-    // origin names Bitbucket; git fetches from the stand-in instead.
-    await git(dir, ['config', 'remote.origin.url', 'git@bitbucket.org:acme/api.git']);
-    await git(dir, ['config', `url.${remote.repo.dir}.insteadOf`, 'git@bitbucket.org:acme/api.git']);
+    // origin names the host; git fetches from the stand-in instead.
+    await git(dir, ['config', 'remote.origin.url', origin]);
+    await git(dir, ['config', `url.${remote.repo.dir}.insteadOf`, origin]);
     const main = (await remote.repo.run(['rev-parse', 'main'])).trim();
     return { remote, dir, head: remote.head, main };
 }
@@ -647,9 +650,9 @@ describe('posting', () => {
 
         expect(server.fake.created.map((comment) => comment.body)).toEqual(previewed.map((comment) => comment.body));
         expect(server.fake.created.every((comment) => comment.pending)).toBe(true);
-        expect(server.fake.created.map((comment) => comment.inline)).toEqual([
-            { path: 'src/policy.ts', to: 1 },
-            { path: 'src/retry.ts', to: 2 },
+        expect(server.fake.created.map((comment) => comment.anchor)).toEqual([
+            { file: 'src/policy.ts', side: 'new', start: 1 },
+            { file: 'src/retry.ts', side: 'new', start: 2, end: 2 },
             undefined
         ]);
         expect(server.fake.created[2]?.body).toBe('Good change once the cap matches the timeout.\n\n\\- Claude');
@@ -717,8 +720,8 @@ describe('posting', () => {
         );
         await server.page({ type: 'comments.post', choices: { 'note:N-1': 'reanchor', 'item:I-1': 'drop' } });
         await server.session().settled();
-        expect(server.fake.created.map(({ body, inline }) => ({ body, inline }))).toEqual([
-            { body: 'Export it as default?', inline: { path: 'src/retry.ts', to: 2 } }
+        expect(server.fake.created.map(({ body, anchor }) => ({ body, anchor }))).toEqual([
+            { body: 'Export it as default?', anchor: { file: 'src/retry.ts', side: 'new', start: 2 } }
         ]);
         expect(server.fake.tasks).toEqual([]);
         round = currentRound(defined(server.session().current.review));
@@ -732,8 +735,9 @@ describe('posting', () => {
         await server.page({ type: 'note.save', anchor: { file: 'src/policy.ts', side: 'new' }, text: 'Split this file?' });
         await server.page({ type: 'comments.post' });
         await server.session().settled();
-        expect(server.fake.created.find((comment) => comment.body === 'Split this file?')?.inline).toStrictEqual({
-            path: 'src/policy.ts'
+        expect(server.fake.created.find((comment) => comment.body === 'Split this file?')?.anchor).toStrictEqual({
+            file: 'src/policy.ts',
+            side: 'new'
         });
     });
 
@@ -807,6 +811,76 @@ describe('posting', () => {
             expect(text).not.toContain(Buffer.from(`dev@example.com:${SECRET}`).toString('base64'));
         }
         expect(currentRound(defined(session.current.review)).postedAt).toBeDefined();
+    });
+});
+
+describe('a pull request on Azure DevOps', () => {
+    const ORIGIN = 'https://dev.azure.com/acme/Platform/_git/api';
+
+    /** A review of PR 412 in a clone whose origin is on Azure DevOps, opened by its link, through a host with no tasks. */
+    async function azureReview() {
+        const setup = await prRepo(ORIGIN);
+        const server = await reviewServer(setup.dir);
+        delete server.fake.createTask;
+        delete server.fake.resolveTask;
+        server.fake.pr.source.commit = setup.head;
+        server.fake.pr.destination.commit = setup.main;
+        const opened = await server.call('planroom_review', { target: `${ORIGIN}/pullrequest/412?_a=files` });
+        return { ...server, ...setup, opened };
+    }
+
+    it('opens the PR the link names, of the origin repo in its project', async () => {
+        const { opened, fake } = await azureReview();
+        expect(opened.isError).toBe(false);
+        expect(opened.body).toMatchObject({
+            reviewId: 'pr-412',
+            target: { kind: 'pr', host: 'azure', workspace: 'acme', project: 'Platform', repo: 'api', number: 412 }
+        });
+        expect(fake.calls).toEqual(['pullRequest acme/api#412']);
+    });
+
+    it('refuses a link to a repo of another project', async () => {
+        const setup = await prRepo(ORIGIN);
+        const server = await reviewServer(setup.dir);
+        const { isError, body } = await server.call('planroom_review', {
+            target: 'https://dev.azure.com/acme/Other/_git/api/pullrequest/412'
+        });
+        expect(isError).toBe(true);
+        expect(JSON.stringify(body)).toMatch(/not of acme\/Other\/api/);
+    });
+
+    it('publishes each comment at once on its whole range, with no opener and no task, then says so', async () => {
+        const server = await azureReview();
+        await triaged(server);
+        await server.page({
+            type: 'note.save',
+            anchor: { file: 'src/retry.ts', side: 'new', start: 1, end: 3 },
+            text: 'Export it as default?'
+        });
+        await server.page({ type: 'comments.open' });
+        const previewed = deriveComments(server.session().current, 1);
+        await server.page({ type: 'comments.post' });
+        await server.session().settled();
+
+        expect(server.fake.created.map(({ body, anchor, lastLine, pending }) => ({ body, anchor, lastLine, pending }))).toEqual([
+            {
+                body: 'Export it as default?',
+                anchor: { file: 'src/retry.ts', side: 'new', start: 1, end: 3 },
+                lastLine: '}',
+                pending: false
+            },
+            {
+                body: previewed[1]?.body,
+                anchor: { file: 'src/retry.ts', side: 'new', start: 2, end: 2 },
+                lastLine: '    return 2;',
+                pending: false
+            }
+        ]);
+        // The blocker would carry a task on Bitbucket.
+        expect(previewed[1]?.task).toBe(true);
+        expect(server.fake.tasks).toEqual([]);
+        const { body } = await server.call('planroom_wait', { after: 0, timeoutSec: 1 });
+        expect(body.events.at(-1)).toMatchObject({ type: 'review.posted', posted: 2, failed: [], drafts: false });
     });
 });
 

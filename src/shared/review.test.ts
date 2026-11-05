@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { NOW } from '../test/fixtures.js';
+import { lineIndex } from './readthrough.js';
 import {
     commentsMarkdown,
     comparePoints,
     DEFAULT_PREFERENCES,
     deriveComments,
     type ItemRecord,
+    placement,
     type ReviewParts,
     type RoundRecord,
     reviewPreferences,
@@ -133,6 +135,26 @@ describe('the comments a round posts', () => {
             { summary: { draft: 'Looks good.', deleted: true } }
         );
         expect(deriveComments(deleted, 1).map((comment) => comment.key)).toEqual(['item:I-1']);
+    });
+
+    it("places a range on Bitbucket's last line and a line off its diff on the file, and leaves both as they are where any line takes a comment", () => {
+        const hunk = { oldStart: 9, oldCount: 3, newStart: 9, newCount: 3 };
+        const index = lineIndex.parse({
+            files: [
+                { path: 'src/retry.ts', hunks: [hunk], shown: [{ ...hunk, oldStart: 6, oldCount: 9, newStart: 6, newCount: 9 }] }
+            ],
+            repeats: [],
+            moves: []
+        });
+        const range = { file: 'src/retry.ts', side: 'new' as const, start: 9, end: 11 };
+        const off = { file: 'src/retry.ts', side: 'new' as const, start: 40 };
+        expect(placement(index, range, undefined)).toEqual({ placed: range, opening: 'Lines 9-11:\n\n' });
+        expect(placement(index, off, ['x'])).toEqual({
+            placed: { file: 'src/retry.ts', side: 'new' },
+            opening: 'On line 40:\n\n```\nx\n```\n\n'
+        });
+        expect(placement(index, range, undefined, true)).toEqual({ placed: range, opening: '' });
+        expect(placement(index, off, ['x'], true)).toEqual({ placed: off, opening: '' });
     });
 
     it('copies as Markdown under where each comment sits', () => {

@@ -78,7 +78,7 @@ export interface AskOptions {
     now?: () => Date;
 }
 
-/** What `Session.openReview` needs: the repo, the resolved target, and Bitbucket access and the preferences file. */
+/** What `Session.openReview` needs: the repo, the resolved target, and access to its host and the preferences file. */
 export interface ReviewOptions {
     repoRoot: string;
     resolved: ResolvedTarget;
@@ -271,7 +271,7 @@ export class Session {
     /** Validations in flight; more than one when the user re-runs while one is still going. */
     private validations = 0;
     private stopWatching: (() => void) | undefined;
-    /** A review's Bitbucket access and preferences file. */
+    /** A review's access to its PR host, and its preferences file. */
     private host: ReviewHost | undefined;
     /** A review's preferences, as last read or saved. */
     private preferences: ReviewPreferences | undefined;

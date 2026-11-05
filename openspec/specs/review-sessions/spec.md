@@ -7,12 +7,17 @@ Opens and keeps a review of someone else's PR or a local branch: how the target 
 
 ### Requirement: A review opens on a PR or a local branch
 
-The `planroom_review` tool SHALL accept a `target` that is a Bitbucket Cloud PR link, a bare PR number or a branch name. A PR link SHALL name its workspace, repo and number. A bare number SHALL use the checkout's `origin` repo. A branch SHALL open its open PR in the `origin` repo, or with none, or when asked for the local branch, be reviewed against its merge base with the default branch. The call SHALL return the page URL, the PR summary, the worktree path and the reviewer's preferences.
+The `planroom_review` tool SHALL accept a `target` that is a Bitbucket Cloud or Azure DevOps PR link, a bare PR number or a branch name. The checkout's `origin` remote SHALL decide the host: Azure DevOps for a `dev.azure.com` or `visualstudio.com` remote, Bitbucket Cloud for any other. A PR link SHALL name its workspace (on Azure DevOps its organization and project), repo and number, and SHALL be of the `origin` repo. A bare number SHALL use the checkout's `origin` repo. A branch SHALL open its open PR in the `origin` repo, or with none, or when asked for the local branch, be reviewed against its merge base with the default branch. The call SHALL return the page URL, the PR summary, the worktree path and the reviewer's preferences.
 
 #### Scenario: PR link
 
 - **WHEN** the agent opens a review for `https://bitbucket.org/acme/api/pull-requests/412`
 - **THEN** the server fetches that PR's metadata, diff and head commit, and returns the page URL, the summary, the worktree path and the preferences
+
+#### Scenario: Azure DevOps PR link
+
+- **WHEN** the agent opens a review for `https://dev.azure.com/acme/Platform/_git/api/pullrequest/412` in a checkout whose `origin` is that repo
+- **THEN** the review is `pr-412` of `acme/Platform/api` on Azure DevOps, read and posted through Azure DevOps
 
 #### Scenario: Bare PR number
 

@@ -32,8 +32,8 @@ Report each finding as one JSON object: `kind` (`issue`, `opinion` or `question`
 (`blocker`, `important`, `minor`), `evidence` (what in the code shows it, with `path:line`), `suggestion`,
 `likelihood` and `impact` (1 to 3); for an opinion `reasoning` and `alternative`. Add `context`: the exact lines
 the finding is about, and any other code a reader needs beside them, each with its `path:line`. Add `draft`: the comment as the author
-would read it, in Bitbucket Markdown (fenced code, tables, emphasis, lists, links; no HTML, task lists or suggestion
-blocks), with any fix in a fenced code block, and no sign-off. Report nothing you cannot point at in the code; an empty
+would read it, in the Markdown Bitbucket and Azure DevOps both render (fenced code, tables, emphasis, lists, links; no
+HTML, task lists or suggestion blocks), with any fix in a fenced code block, and no sign-off. Report nothing you cannot point at in the code; an empty
 list is a fine answer.
 
 ## Verifying

@@ -121,7 +121,8 @@ function reviewView(
         blocks?: BlockRecord[];
         slides?: SlideRecord[];
         preferences?: ReviewPreferences;
-        pr?: boolean;
+        /** A PR on Bitbucket, or on the host named. */
+        pr?: boolean | 'azure';
         postable?: { ready: boolean; problem?: string };
     } = {}
 ) {
@@ -133,9 +134,12 @@ function reviewView(
                 kind: 'review',
                 changeId: 'branch-feature',
                 review: {
-                    target: options.pr
-                        ? { kind: 'pr', workspace: 'acme', repo: 'api', number: 412 }
-                        : { kind: 'branch', branch: 'feature/retry', base: 'main' },
+                    target:
+                        options.pr === 'azure'
+                            ? { kind: 'pr', host: 'azure', workspace: 'acme', project: 'Platform', repo: 'api', number: 412 }
+                            : options.pr
+                              ? { kind: 'pr', host: 'bitbucket', workspace: 'acme', repo: 'api', number: 412 }
+                              : { kind: 'branch', branch: 'feature/retry', base: 'main' },
                     title: 'Cap the retries',
                     description: 'Caps the retry policy.',
                     link: 'https://bitbucket.org/acme/api/pull-requests/412',
@@ -752,6 +756,14 @@ describe('the comments', () => {
         expect(screen.getByText('1 finding still needs a reaction')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'I-2: Finding I-2 title' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Post as drafts' })).toBeDisabled();
+    });
+
+    it('names Azure DevOps for a PR there, publishing at once with no task to make', async () => {
+        await comments({ pr: 'azure', items: [item('I-1')], reactions: { 'I-1': { verdict: 'agree' } } });
+        expect(screen.getByText(/Each comment as Azure DevOps will show it/)).toBeInTheDocument();
+        expect(screen.getByText('They are published on Azure DevOps at once, the summary last.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Post' })).toBeEnabled();
+        expect(screen.queryByRole('checkbox', { name: 'Make it a task' })).toBeNull();
     });
 
     it('keeps Post off with what to set while the credentials are missing', async () => {
