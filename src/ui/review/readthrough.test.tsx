@@ -72,6 +72,15 @@ const PATCHES: Record<string, string> = {
 +    return y + 1;
 +}
 `,
+    'docs/retries.md': `diff --git a/docs/retries.md b/docs/retries.md
+--- a/docs/retries.md
++++ b/docs/retries.md
+@@ -1,3 +1,3 @@
+ # Retries
+
+-Jobs retry **three** times.
++Jobs retry up to **the policy** limit.
+`,
     'src/send.test.ts': `diff --git a/src/send.test.ts b/src/send.test.ts
 --- /dev/null
 +++ b/src/send.test.ts
@@ -665,6 +674,7 @@ describe('pieces of code', () => {
         await line(send, 'policy.maxAttempts');
         expect(send.querySelectorAll('.code-line.is-add .line-number')).toHaveLength(2);
         expect(within(send).getByRole('button', { name: /1 line removed/ })).toBeInTheDocument();
+        expect(within(send).queryByRole('tab', { name: 'Rendered' })).not.toBeInTheDocument();
         const callers = piece('src/jobs/email.ts:4');
         expect(within(callers).getByRole('tab', { name: 'As a diff' })).toHaveAttribute('aria-selected', 'true');
         await userEvent.click(within(send).getByRole('tab', { name: 'As a diff' }));
@@ -701,6 +711,33 @@ describe('pieces of code', () => {
             'aria-selected',
             'true'
         );
+    });
+
+    it('starts a Markdown piece rendered, its changed blocks marked, once the setting turns it on', async () => {
+        const docs = page({
+            id: 'docs',
+            title: 'The docs',
+            pieces: [{ id: 'guide', file: 'docs/retries.md', lines: '1-3' }],
+            content: { summary: 'The guide follows.', pieces: [] }
+        });
+        const index = {
+            ...INDEX,
+            files: [...INDEX.files, { path: 'docs/retries.md', hunks: [hunk(3, 1, 3, 1)], shown: [hunk(1, 3, 1, 3)] }]
+        };
+        const off = { ...DEFAULT_PREFERENCES, readthrough: { ...DEFAULT_PREFERENCES.readthrough, markdown: false } };
+        const store = storeWith(readView({ round: { index }, pages: [docs], preferences: off }));
+        render(<App store={store} />);
+        const guide = piece('docs/retries.md:1-3');
+        expect(within(guide).getByRole('tab', { name: 'As it is now' })).toHaveAttribute('aria-selected', 'true');
+        expect(await line(guide, 'the policy')).toHaveClass('is-add');
+
+        act(() => store.apply([{ field: 'preferences', value: DEFAULT_PREFERENCES }]));
+        expect(within(guide).getByRole('tab', { name: 'Rendered' })).toHaveAttribute('aria-selected', 'true');
+        expect(within(guide).getByRole('heading', { name: 'Retries' })).toBeInTheDocument();
+        expect(within(guide).getByText('the policy').closest('.markdown-block')).toHaveClass('is-add');
+        expect(within(guide).getByText('three').closest('.markdown-block')).toHaveClass('is-remove');
+        await userEvent.click(within(guide).getByRole('tab', { name: 'As a diff' }));
+        expect(guide.querySelectorAll('.code-line.is-remove')).toHaveLength(1);
     });
 
     it('lists the other places of a repeat, flags the one that differs, and opening it counts', async () => {

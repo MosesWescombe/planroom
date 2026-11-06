@@ -175,6 +175,24 @@ export function plainTitle(source: string): string {
     return textOf(ReactMarkdown({ ...TITLE, children: source }));
 }
 
+/** A top-level Markdown node's place in its source, as remark gives it. */
+interface Positioned {
+    position?: { start: { line: number }; end: { line: number } };
+}
+
+/**
+ * The top-level blocks of `source` (headings, paragraphs, whole lists, fenced code), each as its first and last line,
+ * counted from 1, from the same parse Markdown renders with. Blank lines between blocks are in none.
+ */
+export function markdownBlocks(source: string): [start: number, end: number][] {
+    const blocks: [number, number][] = [];
+    const capture = () => (tree: { children: Positioned[] }) => {
+        for (const { position } of tree.children) if (position) blocks.push([position.start.line, position.end.line]);
+    };
+    ReactMarkdown({ children: source, remarkPlugins: [capture] });
+    return blocks;
+}
+
 /** What a Bitbucket comment renders, as Bitbucket's Python-Markdown does: no raw HTML, task lists or suggestion blocks. */
 const BITBUCKET = [...DOCUMENT];
 

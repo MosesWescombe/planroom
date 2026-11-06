@@ -774,12 +774,13 @@ describe('preferences and the deck alone', () => {
         expect(body.preferences).toMatchObject({
             density: 'light',
             technique: 'deck',
-            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true }
+            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true, markdown: true }
         });
         expect((await server.call('planroom_state')).body.preferences.readthrough).toEqual({
             view: 'auto',
             tests: 'pseudo',
-            autoTick: true
+            autoTick: true,
+            markdown: true
         });
     });
 

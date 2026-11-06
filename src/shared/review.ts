@@ -375,11 +375,15 @@ export const TEST_VIEWS = ['title', 'pseudo', 'code'] as const;
 export type TestView = (typeof TEST_VIEWS)[number];
 export const TEST_VIEW_TITLES: Record<TestView, string> = { title: 'Title', pseudo: 'Pseudo code', code: 'Real code' };
 
-/** The read-through's settings: the starting code view, how tests show, and whether pieces tick themselves. */
+/**
+ * The read-through's settings: the starting code view, how tests show, whether pieces tick themselves, and whether
+ * Markdown files start rendered.
+ */
 export const readthroughSettings = z.object({
     view: z.enum(CODE_VIEWS).default('auto'),
     tests: z.enum(TEST_VIEWS).default('pseudo'),
-    autoTick: z.boolean().default(true)
+    autoTick: z.boolean().default(true),
+    markdown: z.boolean().default(true)
 });
 export type ReadthroughSettings = z.infer<typeof readthroughSettings>;
 
@@ -400,7 +404,7 @@ export const reviewPreferences = z.object({
         .default({ pins: true, diff: true, charts: true, heatmap: true, matrix: true }),
     /** The technique the start card offers: the last one chosen, the deck the first time. */
     technique: z.enum(TECHNIQUES).default('deck'),
-    readthrough: readthroughSettings.default({ view: 'auto', tests: 'pseudo', autoTick: true })
+    readthrough: readthroughSettings.default({ view: 'auto', tests: 'pseudo', autoTick: true, markdown: true })
 });
 export type ReviewPreferences = z.infer<typeof reviewPreferences>;
 

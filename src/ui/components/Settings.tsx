@@ -242,6 +242,21 @@ function ReviewSection() {
                     }
                 />
             </label>
+            <label className="toggle-row">
+                <span>
+                    Render Markdown files
+                    <span className="small muted">
+                        Markdown starts rendered, changed blocks marked. Switch a piece to its code to comment on lines.
+                    </span>
+                </span>
+                <input
+                    type="checkbox"
+                    checked={preferences.readthrough.markdown}
+                    onChange={(event) =>
+                        save({ ...preferences, readthrough: { ...preferences.readthrough, markdown: event.target.checked } })
+                    }
+                />
+            </label>
             <span className="small strong">Views of the findings</span>
             {REVIEW_VIEWS.map((view) => (
                 <label key={view} className="toggle-row">

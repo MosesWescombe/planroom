@@ -1093,7 +1093,7 @@ describe('preferences', () => {
             reviewers: { strength: 'single', model: 'haiku', effort: 'low' },
             views: { pins: true, diff: true, charts: true, heatmap: false, matrix: true },
             technique: 'both',
-            readthrough: { view: 'diff', tests: 'title', autoTick: false }
+            readthrough: { view: 'diff', tests: 'title', autoTick: false, markdown: false }
         };
         await first.page({ type: 'preferences.set', preferences });
         expect(JSON.parse(await readFile(prefs, 'utf8'))).toEqual(preferences);

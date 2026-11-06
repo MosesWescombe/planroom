@@ -42,6 +42,7 @@ import { BlockView } from '../blocks/Block';
 import { type CodeRow, CodeViewer, type LineSelection, PseudoCode, parsePatch } from '../code/CodeViewer';
 import { blockLength } from '../code/folding';
 import { resolveLanguage } from '../code/highlight';
+import { isMarkdown, MarkdownDiff } from '../code/MarkdownDiff';
 import { commentOnWhole, openComposer } from '../comments/composer';
 import { MAX_QUOTE, place, type SelectionBox } from '../comments/selection';
 import { CheckIcon, ChevronIcon, CommentIcon, VsCodeIcon } from '../components/icons';
@@ -153,6 +154,9 @@ function useFoldOffScreen(ref: React.RefObject<HTMLElement | null>, active: bool
     }, [ref, active]);
 }
 
+/** How a piece shows: the agent's views, or for a Markdown file rendered as it reads. */
+type ShownView = PieceView | 'rendered';
+
 /** What the read-through needs to act on a page: the round, whether it takes changes, and the reviewer's settings. */
 interface Reading {
     round: RoundRecord;
@@ -160,6 +164,8 @@ interface Reading {
     autoTick: boolean;
     view: 'auto' | PieceView;
     tests: TestView;
+    /** Whether Markdown files start rendered. */
+    markdown: boolean;
     /** Look up a name clicked in the code: where it is defined, or with `uses` every place it appears. */
     onName: (name: string, uses: boolean) => void;
 }
@@ -410,10 +416,11 @@ function LineThread({ id }: { id: string }) {
 }
 
 /**
- * A piece's code from its file's diff, as it is now or as a diff, with the findings and the reviewer's comments under
- * their lines once the findings may show, and the questions asked about its lines under them. Selecting code picks the
- * lines it touches: a comment is on those whole lines, a question on just the code selected. Clicking a name searches
- * for it.
+ * A piece's code from its file's diff, as it is now, as a diff or rendered as Markdown, with the findings and the
+ * reviewer's comments under their lines once the findings may show, and the questions asked about its lines under them.
+ * Selecting code picks the lines it touches: a comment is on those whole lines, a question on just the code selected.
+ * Clicking a name searches for it. Rendered Markdown shows them under the block their lines are in, and is not
+ * selectable: the reviewer switches to the code to comment on lines.
  */
 function PieceCode({
     reading,
@@ -432,7 +439,7 @@ function PieceCode({
     file: string;
     lines?: LineSpan;
     oldLines?: LineSpan;
-    view: PieceView;
+    view: ShownView;
     /** Rows to show instead of the file's diff, for a moved block. */
     rows?: CodeRow[];
     onCommented?: () => void;
@@ -487,6 +494,25 @@ function PieceCode({
             setPicked(undefined);
             onCommented?.();
         });
+    const notesOn = (row: CodeRow) => {
+        const findings = findingsOnRow(items, file, row);
+        const own = notesOnRow(notes, file, row);
+        const questions = asked.filter((thread) => underRow(thread, row));
+        if (!findings.length && !own.length && !questions.length) return null;
+        return (
+            <>
+                {findings.length > 0 && <FindingCards items={findings} inPlace />}
+                {own.map((note) => (
+                    <NoteCard key={note.id} note={note} />
+                ))}
+                {questions.map((thread) => (
+                    <LineThread key={thread.id} id={thread.id} />
+                ))}
+            </>
+        );
+    };
+    const label = `${file}${lines ? ` lines ${lines[0]} to ${lines[1]}` : ''}`;
+    if (view === 'rendered') return <MarkdownDiff rows={rows} label={label} notes={notesOn} />;
     const ask = () => {
         if (!picked) return;
         const { text, ...span } = picked.selection;
@@ -504,7 +530,7 @@ function PieceCode({
                 rows={rows}
                 format={view === 'now' ? 'now' : 'diff'}
                 language={resolveLanguage('', undefined, file)}
-                label={`${file}${lines ? ` lines ${lines[0]} to ${lines[1]}` : ''}`}
+                label={label}
                 {...(selection ? { selection } : {})}
                 {...(reading.editable
                     ? {
@@ -515,23 +541,7 @@ function PieceCode({
                       }
                     : {})}
                 onName={reading.onName}
-                notes={(row) => {
-                    const findings = findingsOnRow(items, file, row);
-                    const own = notesOnRow(notes, file, row);
-                    const questions = asked.filter((thread) => underRow(thread, row));
-                    if (!findings.length && !own.length && !questions.length) return null;
-                    return (
-                        <>
-                            {findings.length > 0 && <FindingCards items={findings} inPlace />}
-                            {own.map((note) => (
-                                <NoteCard key={note.id} note={note} />
-                            ))}
-                            {questions.map((thread) => (
-                                <LineThread key={thread.id} id={thread.id} />
-                            ))}
-                        </>
-                    );
-                }}
+                notes={notesOn}
             />
             {picked &&
                 (writing ? (
@@ -556,16 +566,27 @@ function PieceCode({
     );
 }
 
-/** The as-it-is-now and as-a-diff switch on one piece. */
-function ViewSwitch({ view, onChange, label }: { view: PieceView; onChange: (view: PieceView) => void; label: string }) {
+const SHOWN_VIEWS: readonly (readonly [ShownView, string])[] = [
+    ['rendered', 'Rendered'],
+    ['now', 'As it is now'],
+    ['diff', 'As a diff']
+];
+
+/** The as-it-is-now and as-a-diff switch on one piece, and for a Markdown file rendered. */
+function ViewSwitch({
+    view,
+    onChange,
+    label,
+    markdown
+}: {
+    view: ShownView;
+    onChange: (view: ShownView) => void;
+    label: string;
+    markdown: boolean;
+}) {
     return (
         <span role="tablist" aria-label={`How ${label} shows`} className="segmented">
-            {(
-                [
-                    ['now', 'As it is now'],
-                    ['diff', 'As a diff']
-                ] as const
-            ).map(([id, name]) => (
+            {SHOWN_VIEWS.filter(([id]) => markdown || id !== 'rendered').map(([id, name]) => (
                 <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => onChange(id)}>
                     {name}
                 </button>
@@ -584,7 +605,7 @@ function MovedCode({
     reading: Reading;
     page: string;
     piece: PieceSpec & { from: NonNullable<PieceSpec['from']> };
-    view: PieceView;
+    view: ShownView;
 }) {
     const fromSpan = parseRange(piece.from.oldLines);
     const toSpan = piece.lines ? parseRange(piece.lines) : undefined;
@@ -774,9 +795,13 @@ function OpenInEditor({ reading, file, lines }: { reading: Reading; file: string
     );
 }
 
-/** The view a piece starts in: the reviewer's fixed setting, else the agent's pick, else as it is now. */
-function startingView(reading: Reading, piece: PieceSpec): PieceView {
+/**
+ * The view a piece starts in: rendered for Markdown when the reviewer renders it, else the reviewer's fixed setting,
+ * else the agent's pick, else as it is now. Removed code alone always starts as a diff.
+ */
+function startingView(reading: Reading, piece: PieceSpec): ShownView {
     if (!piece.lines) return 'diff';
+    if (reading.markdown && isMarkdown(piece.file)) return 'rendered';
     return reading.view === 'auto' ? (piece.view ?? 'now') : reading.view;
 }
 
@@ -814,7 +839,7 @@ const PieceCard = memo(function PieceCard({
     additions: PageAddition[];
 }) {
     const ref = useRef<HTMLElement>(null);
-    const [override, setOverride] = useState<PieceView>();
+    const [override, setOverride] = useState<ShownView>();
     const [folded, setFolded] = useFold(ref, reading, piece.id);
     const tickable = useAutoTickable(reading, piece.id);
     const tick = useTick();
@@ -841,7 +866,7 @@ const PieceCard = memo(function PieceCard({
                 {piece.repeat && <span className="chip">Repeated edit</span>}
                 {piece.from && <span className="chip">Moved</span>}
                 <span className="grow" />
-                {piece.lines && <ViewSwitch view={view} onChange={setOverride} label={where} />}
+                {piece.lines && <ViewSwitch view={view} onChange={setOverride} label={where} markdown={isMarkdown(piece.file)} />}
                 <ReadTick reading={reading} piece={piece.id} label={where} onRead={() => setFolded(true)} />
             </header>
             {note && (

@@ -6924,6 +6924,33 @@ button.nav-item {
     color: var(--agent-text);
 }
 
+/* A Markdown piece rendered as the file reads, block by block: a changed block marked as a changed line is, a removed
+   one struck through too. Notes under a block size to the frame, as under a line. */
+.markdown-diff {
+    container-type: inline-size;
+    padding: 6px 0;
+}
+
+.markdown-block {
+    padding: 8px 16px 8px 13px;
+    border-left: 3px solid transparent;
+}
+
+.markdown-block.is-add {
+    border-left-color: var(--accent-text);
+    background: var(--accent-soft);
+}
+
+.markdown-block.is-remove {
+    border-left-color: var(--agent-text);
+    background: var(--agent-soft);
+    text-decoration: line-through;
+}
+
+.markdown-diff .code-note {
+    padding-left: 16px;
+}
+
 /* Under a line, in the page's font: as wide as the code's window and held in it, so it wraps rather than widening the
    code to one long line, and stays put while the code scrolls sideways. */
 .code-note {
