@@ -7858,6 +7858,170 @@ button.nav-item {
     font-weight: 600;
 }
 
+.piece-file-dir {
+    color: var(--muted);
+    font-weight: 400;
+}
+
+.piece-file-head .icon-button[aria-pressed="true"] {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+/* A page's files, one on show at a time: each a step by its name. */
+.file-steps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+.file-steps-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.file-steps-list > li {
+    min-width: 0;
+}
+
+.file-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 260px;
+    min-height: 30px;
+    padding: 3px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.file-step:hover {
+    background: var(--sunken);
+}
+
+.file-step[aria-current="step"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: 600;
+}
+
+.file-next {
+    align-self: flex-end;
+}
+
+/* Where a file sits in the repo: one column per folder from the root down to it, scrolled to the last. */
+.folder-columns {
+    display: flex;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+}
+
+.folder-column {
+    display: flex;
+    flex: 0 0 200px;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--line);
+}
+
+.folder-column:last-child {
+    flex-grow: 1;
+    border-right: none;
+}
+
+.folder-column-name {
+    padding: 6px 12px 2px;
+}
+
+.folder-column-note {
+    margin: 6px 12px;
+}
+
+.folder-column-list {
+    position: relative;
+    max-height: 216px;
+    margin: 0;
+    padding: 2px 6px 8px;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.folder-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 24px;
+    padding: 1px 6px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+}
+
+.folder-entry.is-folder {
+    cursor: pointer;
+}
+
+.folder-entry.is-folder:hover {
+    background: var(--sunken);
+}
+
+.folder-entry.muted {
+    color: var(--muted);
+}
+
+.folder-entry.is-folder[aria-current] {
+    background: var(--line);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.folder-entry.is-on-page {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+.folder-entry.is-here {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+}
+
+.folder-entry > svg {
+    flex-shrink: 0;
+}
+
+/* A changed file, or a folder holding one. */
+.folder-entry-mark {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.folder-entry.is-here > .folder-entry-mark {
+    background: var(--on-accent);
+}
+
 .piece-file-notes {
     display: flex;
     flex-direction: column;

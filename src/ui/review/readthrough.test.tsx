@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LineIndex, PageRecord, TickRecord } from '../../shared/readthrough';
 import type { ThreadRecord } from '../../shared/records';
-import { DEFAULT_PREFERENCES, type ItemRecord, type ReviewPreferences, type RoundRecord } from '../../shared/review';
+import { DEFAULT_PREFERENCES as DEFAULTS, type ItemRecord, type ReviewPreferences, type RoundRecord } from '../../shared/review';
 import { commentThread, NOW } from '../../test/fixtures';
 import { defined, makeView, posted, storeWith, typeInto } from '../../test/harness';
 import { App } from '../App';
@@ -46,6 +46,23 @@ const job = (name: string, call: string) => `diff --git a/src/jobs/${name}.ts b/
 
 /** `src/deliver.ts` from line 3, as the dialog fetches a declaration: its block, then the next statement. */
 const DELIVER = ['export function deliver(job: Job) {', '    return send(job);', '}', 'export const retries = 3;'];
+
+/** What each folder of the reviewed commit holds, as the server lists it. */
+const FOLDERS: Record<string, { name: string; folder: boolean }[]> = {
+    '': [
+        { name: 'src', folder: true },
+        { name: 'pnpm-lock.yaml', folder: false },
+        { name: 'README.md', folder: false }
+    ],
+    src: [
+        { name: 'jobs', folder: true },
+        { name: 'util', folder: true },
+        { name: 'a.ts', folder: false },
+        { name: 'policy.ts', folder: false },
+        { name: 'send.ts', folder: false }
+    ],
+    'src/jobs': ['email.ts', 'push.ts', 'sms.ts'].map((name) => ({ name, folder: false }))
+};
 
 const PATCHES: Record<string, string> = {
     'src/send.ts': SEND_PATCH,
@@ -182,6 +199,14 @@ const TESTS = page({
 
 const tick: TickRecord = { how: 'manual', at: NOW };
 
+/** The preferences these tests read with: every file of a page down it, unless a test steps through them. */
+const DEFAULT_PREFERENCES: ReviewPreferences = {
+    ...DEFAULTS,
+    readthrough: { ...DEFAULTS.readthrough, files: 'all' }
+};
+/** The preferences as the reviewer starts with them: a page's files one at a time. */
+const STEPPED: ReviewPreferences = DEFAULTS;
+
 /** A branch review read through alone, with its pages laid out and the given round, pages, ticks and preferences. */
 function readView(
     options: {
@@ -261,6 +286,8 @@ function stubServer(search?: (q: string, definition: boolean) => unknown) {
             }
             if (url.startsWith('api/review/diff'))
                 return Response.json({ round: 1, patch: PATCHES[query.get('file') ?? ''] ?? '' });
+            if (url.startsWith('api/review/folder'))
+                return Response.json({ round: 1, path: query.get('path'), entries: FOLDERS[query.get('path') ?? ''] ?? [] });
             if (url.startsWith('api/review/search'))
                 return Response.json(search?.(query.get('q') ?? '', query.get('definition') === '1'));
             if (url.startsWith('api/code'))
@@ -612,6 +639,67 @@ describe('the read-through tab', () => {
     });
 });
 
+describe('one file at a time', () => {
+    const steps = () => within(screen.getByRole('navigation', { name: 'Files on this page' }));
+
+    it("shows a page's files one at a time, stepped through by name or on to the next", async () => {
+        render(<App store={storeWith(readView({ preferences: STEPPED }))} />);
+        expect(steps().getByText('File 1 of 2')).toBeInTheDocument();
+        expect(steps().getByRole('button', { name: 'send.ts' })).toHaveAttribute('aria-current', 'step');
+        expect(file('src/send.ts')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'src/jobs/email.ts' })).not.toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Next file: email.ts' }));
+        expect(file('src/jobs/email.ts')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'src/send.ts' })).not.toBeInTheDocument();
+        expect(steps().getByRole('button', { name: 'email.ts' })).toHaveAttribute('aria-current', 'step');
+        expect(screen.queryByRole('button', { name: /^Next file/ })).not.toBeInTheDocument();
+
+        await userEvent.click(steps().getByRole('button', { name: 'send.ts' }));
+        expect(file('src/send.ts')).toBeInTheDocument();
+    });
+
+    it("marks a file's step once all its pieces are read", () => {
+        render(<App store={storeWith(readView({ preferences: STEPPED, ticks: { '1:send': tick } }))} />);
+        const step = (name: RegExp) => within(steps().getByRole('button', { name }));
+        expect(step(/send\.ts/).getByRole('img', { name: 'read' })).toBeInTheDocument();
+        expect(step(/email\.ts/).queryByRole('img', { name: 'read' })).not.toBeInTheDocument();
+    });
+
+    it("opens a page at the file picked in the rail's list by file", async () => {
+        render(<App store={storeWith(readView({ preferences: STEPPED }))} />);
+        await userEvent.click(screen.getByRole('tab', { name: 'By file' }));
+        const row = defined(document.querySelector<HTMLElement>('li.rail-file[title="src/jobs/email.ts"]'));
+        await userEvent.click(within(row).getByRole('button', { name: /^Page 1:/ }));
+        expect(file('src/jobs/email.ts')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'src/send.ts' })).not.toBeInTheDocument();
+    });
+
+    it('goes on with Page Down past the last piece of a file to the next file, then the next page, and back to the last file', () => {
+        render(<App store={storeWith(readView({ preferences: STEPPED }))} />);
+        const main = defined(document.getElementById('main'));
+        for (const [element, sizes] of [
+            [main, { clientHeight: 800, scrollHeight: 2400 }],
+            [piece('src/send.ts:1-11'), { offsetTop: 100, offsetHeight: 1000 }]
+        ] as const)
+            for (const [name, value] of Object.entries(sizes))
+                Object.defineProperty(element, name, { value, configurable: true });
+        Object.defineProperty(piece('src/send.ts:1-11'), 'offsetParent', { value: main, configurable: true });
+        main.scrollTo = vi.fn();
+        const press = (key: string) => fireEvent.keyDown(document.body, { key });
+        press('PageDown');
+        expect(main.scrollTo).toHaveBeenLastCalledWith({ top: 84, behavior: 'smooth' });
+        press('PageDown');
+        expect(file('src/jobs/email.ts')).toBeInTheDocument();
+        press('PageDown');
+        expect(screen.getByRole('heading', { level: 1, name: 'The helper moved' })).toBeInTheDocument();
+        press('PageUp');
+        expect(screen.getByRole('heading', { level: 1, name: 'The retry limit is a setting' })).toBeInTheDocument();
+        expect(file('src/jobs/email.ts')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'src/send.ts' })).not.toBeInTheDocument();
+    });
+});
+
 describe('pieces of code', () => {
     it('opens a file in VS Code at its first piece, from the worktree, while the round is the live one', async () => {
         const { unmount } = render(<App store={storeWith(readView({ worktreeDir: '/repo/.planroom/wt' }))} />);
@@ -627,6 +715,45 @@ describe('pieces of code', () => {
         render(<App store={storeWith(readView())} />);
         expect(within(file('src/send.ts')).queryByRole('link', { name: /Open in VS Code/ })).not.toBeInTheDocument();
         expect(editorLink('C:\\work\\my repo', 'src/a#b.ts', 7)).toBe('vscode://file/C:/work/my%20repo/src/a%23b.ts:7:1');
+    });
+
+    it("shows each file in its folders from the repo root, marking the changed files and the page's", async () => {
+        const store = storeWith(readView());
+        render(<App store={store} />);
+        const columns = within(screen.getByRole('group', { name: 'Folders down to src/send.ts' }));
+        const root = within(await columns.findByRole('list', { name: 'Repo root' }));
+        expect(root.getByRole('button', { name: 'src, changed' })).toHaveAttribute('aria-current', 'true');
+        const src = within(await columns.findByRole('list', { name: 'src/' }));
+        expect(src.getByText('send.ts').parentElement).toHaveAttribute('aria-current', 'location');
+        expect(src.getByRole('button', { name: 'jobs, changed' })).toBeInTheDocument();
+        expect(src.getByRole('button', { name: 'util' })).toHaveClass('muted');
+        expect(src.getByText('policy.ts').parentElement).toHaveClass('muted');
+        expect(src.getByText('a.ts').parentElement).not.toHaveClass('muted');
+
+        // Opening a folder lists it next, with the page's other file marked.
+        await userEvent.click(src.getByRole('button', { name: 'jobs, changed' }));
+        const jobs = within(await columns.findByRole('list', { name: 'jobs/' }));
+        expect(jobs.getByText('email.ts').parentElement).toHaveClass('is-on-page');
+        expect(src.getByText('send.ts').parentElement).toHaveAttribute('aria-current', 'location');
+
+        // Each file shows its own folders, down to itself, and its folder button hides them for that file alone.
+        const email = within(screen.getByRole('group', { name: 'Folders down to src/jobs/email.ts' }));
+        expect(within(await email.findByRole('list', { name: 'jobs/' })).getByText('email.ts').parentElement).toHaveAttribute(
+            'aria-current',
+            'location'
+        );
+        const hide = within(file('src/jobs/email.ts')).getByRole('button', {
+            name: 'Show the folders down to src/jobs/email.ts'
+        });
+        expect(hide).toHaveAttribute('aria-pressed', 'true');
+        await userEvent.click(hide);
+        expect(screen.queryByRole('group', { name: 'Folders down to src/jobs/email.ts' })).not.toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Folders down to src/send.ts' })).toBeInTheDocument();
+
+        // With Show the folders off, every file starts with them hidden.
+        const off = { ...DEFAULT_PREFERENCES, readthrough: { ...DEFAULT_PREFERENCES.readthrough, folders: false } };
+        act(() => store.apply([{ field: 'preferences', value: off }]));
+        expect(screen.queryByRole('group', { name: /^Folders down to/ })).not.toBeInTheDocument();
     });
 
     it("groups a file's pieces under one header where the file first shows, each a section in line order", async () => {
@@ -942,6 +1069,20 @@ describe('reading and commenting', () => {
         expect(shown.closest('.piece-file-notes')).toBeInTheDocument();
         expect(shown.closest('article')).toBeNull();
         expect(within(file('src/jobs/email.ts')).queryByText('Split it')).not.toBeInTheDocument();
+    });
+
+    it("edits and deletes the reviewer's own comment under its line", async () => {
+        const note = { id: 'N-1', round: 1, anchor: { file: 'src/send.ts', side: 'new' as const }, text: 'Split it', at: NOW };
+        render(<App store={storeWith({ ...readView(), notes: { 'N-1': note } })} />);
+        const shown = within(file('src/send.ts'));
+        await userEvent.click(shown.getByRole('button', { name: 'Edit' }));
+        typeInto(shown.getByRole('textbox', { name: 'Edit the comment' }), 'Split it in two');
+        await userEvent.click(shown.getByRole('button', { name: 'Save' }));
+        await userEvent.click(shown.getByRole('button', { name: 'Delete' }));
+        expect(posted).toEqual([
+            { type: 'note.save', id: 'N-1', anchor: { file: 'src/send.ts', side: 'new' }, text: 'Split it in two' },
+            { type: 'note.delete', id: 'N-1' }
+        ]);
     });
 
     it('comments on every line a selection spans, and on a repeat example for every place unless only here', async () => {

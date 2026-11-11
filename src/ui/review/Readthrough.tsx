@@ -27,6 +27,7 @@ import {
 } from '../../shared/readthrough';
 import {
     DEFAULT_PREFERENCES,
+    type FileStepping,
     findingsUnlocked,
     hasReadthrough,
     type NoteRecord,
@@ -45,7 +46,7 @@ import { resolveLanguage } from '../code/highlight';
 import { isMarkdown, MarkdownDiff } from '../code/MarkdownDiff';
 import { commentOnWhole, openComposer } from '../comments/composer';
 import { MAX_QUOTE, place, type SelectionBox } from '../comments/selection';
-import { CheckIcon, ChevronIcon, CommentIcon, VsCodeIcon } from '../components/icons';
+import { CheckIcon, ChevronIcon, CommentIcon, FolderIcon, VsCodeIcon } from '../components/icons';
 import { BitbucketMarkdown, Markdown, plainTitle, TitleMarkdown } from '../components/Markdown';
 import { Modal } from '../components/Modal';
 import { Rail } from '../components/Rail';
@@ -60,6 +61,7 @@ import { useViewed } from '../viewed';
 import { CommentEditor } from './BitbucketComment';
 import { buildTree, commonRoot, compactFolders, type Folder } from './FileTreeSelect';
 import { FindingCards, findingsOnRow, onWholeFile, underRow } from './Findings';
+import { FilePath, FolderColumns } from './FolderColumns';
 import { readSet, roundProgress, useIsCurrentRound, useShownRound } from './hooks';
 import { useReadKeys, useSpaceKey } from './readKeys';
 
@@ -166,6 +168,10 @@ interface Reading {
     tests: TestView;
     /** Whether Markdown files start rendered. */
     markdown: boolean;
+    /** Whether a page shows its files one at a time or all down the page. */
+    files: FileStepping;
+    /** Whether each file starts with its folders shown. */
+    folders: boolean;
     /** Look up a name clicked in the code: where it is defined, or with `uses` every place it appears. */
     onName: (name: string, uses: boolean) => void;
 }
@@ -385,14 +391,72 @@ function SelectionBar({
     );
 }
 
-/** One of the reviewer's comments, under the line it is on, rendered as Bitbucket will post it. */
-function NoteCard({ note }: { note: NoteRecord }) {
+/**
+ * One of the reviewer's comments, under the line it is on, rendered as Bitbucket will post it. While the round takes
+ * changes and the comment is not posted, Edit rewrites it in place and Delete removes it.
+ */
+function NoteCard({ note, reading }: { note: NoteRecord; reading: Reading }) {
+    const { send } = useActions();
+    const [busy, track] = useBusy();
+    const [editing, setEditing] = useState(false);
+    const [text, setText] = useState(note.text);
+    const id = useId();
+    const { round } = reading;
+    const canEdit = reading.editable && !round.postedAt && round.posts[`note:${note.id}`]?.id === undefined;
+    const save = () =>
+        quietly(
+            track(send({ type: 'note.save', id: note.id, ...(note.anchor ? { anchor: note.anchor } : {}), text })).then(() =>
+                setEditing(false)
+            )
+        );
     return (
         <div className="piece-note">
             <span className="small strong">Your comment{note.repeat && !note.repeat.onlyHere ? ', on every place' : ''}</span>
-            <div className="bb-body">
-                <BitbucketMarkdown source={note.text} />
-            </div>
+            {editing ? (
+                <form
+                    className="reaction-form"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        if (text.trim()) save();
+                    }}
+                >
+                    <CommentEditor id={id} label="Edit the comment" value={text} signed={false} onChange={setText} />
+                    <div className="row">
+                        <button type="submit" className="button-primary button-small" disabled={busy || !text.trim()}>
+                            Save
+                        </button>
+                        <button type="button" className="button-text" onClick={() => setEditing(false)}>
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            ) : (
+                <div className="bb-body">
+                    <BitbucketMarkdown source={note.text} />
+                </div>
+            )}
+            {canEdit && !editing && (
+                <div className="row">
+                    <button
+                        type="button"
+                        className="button-link small"
+                        onClick={() => {
+                            setText(note.text);
+                            setEditing(true);
+                        }}
+                    >
+                        Edit
+                    </button>
+                    <button
+                        type="button"
+                        className="button-link small"
+                        disabled={busy}
+                        onClick={() => quietly(track(send({ type: 'note.delete', id: note.id })))}
+                    >
+                        Delete
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -503,7 +567,7 @@ function PieceCode({
             <>
                 {findings.length > 0 && <FindingCards items={findings} inPlace />}
                 {own.map((note) => (
-                    <NoteCard key={note.id} note={note} />
+                    <NoteCard key={note.id} note={note} reading={reading} />
                 ))}
                 {questions.map((thread) => (
                     <LineThread key={thread.id} id={thread.id} />
@@ -996,12 +1060,15 @@ function FileBlock({
     page,
     file,
     pieces,
+    pageFiles,
     children
 }: {
     reading: Reading;
     page: string;
     file: string;
     pieces: readonly PieceSpec[];
+    /** Every file on the page, this one among them. */
+    pageFiles: ReadonlySet<string>;
     children: ReactNode;
 }) {
     const { round } = reading;
@@ -1016,15 +1083,28 @@ function FileBlock({
     );
     const { send } = useActions();
     const [writing, setWriting] = useState<SelectionBox>();
+    const [folders, setFolders] = useState(reading.folders);
+    useEffect(() => setFolders(reading.folders), [reading.folders]);
+    const changed = useMemo(() => round.files.map((each) => each.path), [round.files]);
     const first = pieces.find((piece) => piece.lines)?.lines;
     return (
         <section className="piece-file" aria-label={file}>
             <header className="piece-file-head">
                 {read && <ReadMark />}
                 <code className="piece-file-path truncate" title={file}>
-                    {file}
+                    <FilePath file={file} />
                 </code>
                 <span className="grow" />
+                <button
+                    type="button"
+                    className="icon-button tiny"
+                    aria-pressed={folders}
+                    aria-label={`Show the folders down to ${file}`}
+                    title={folders ? 'Hide the folders' : 'Show the folders from the repo root down to this file'}
+                    onClick={() => setFolders(!folders)}
+                >
+                    <FolderIcon size={14} />
+                </button>
                 <OpenInEditor reading={reading} file={file} {...(first ? { lines: first } : {})} />
                 {reading.editable && (
                     <button
@@ -1041,11 +1121,12 @@ function FileBlock({
                     </button>
                 )}
             </header>
+            {folders && <FolderColumns round={round.n} file={file} changed={changed} onPage={pageFiles} />}
             {(notes.length > 0 || findings.length > 0) && (
                 <div className="piece-file-notes">
                     {findings.length > 0 && <FindingCards items={findings} inPlace />}
                     {notes.map((note) => (
-                        <NoteCard key={note.id} note={note} />
+                        <NoteCard key={note.id} note={note} reading={reading} />
                     ))}
                 </div>
             )}
@@ -1150,8 +1231,70 @@ function PageThreads({ page, editable }: { page: PageRecord; editable: boolean }
     );
 }
 
-/** One page: its title, then its words and pieces once written, or that it is coming; then its threads. */
-function PageView({ reading, page, number, total }: { reading: Reading; page: PageRecord; number: number; total: number }) {
+/**
+ * The page's files as steps, the one at `at` on show: each by its name, marked once all its pieces are read. Picking
+ * one shows it in place of the one on show.
+ */
+function FileSteps({
+    round,
+    files,
+    at,
+    onPick
+}: {
+    round: RoundRecord;
+    files: readonly [file: string, pieces: PieceSpec[]][];
+    at: number;
+    onPick: (file: string) => void;
+}) {
+    const read = useSelector(
+        (view) => files.map(([, pieces]) => pieces.every((piece) => readSet(view, round).has(piece.id))),
+        deepEqual
+    );
+    return (
+        <nav className="file-steps" aria-label="Files on this page">
+            <span className="small muted file-steps-count">
+                File {at + 1} of {files.length}
+            </span>
+            <ol className="file-steps-list">
+                {files.map(([file], index) => (
+                    <li key={file}>
+                        <button
+                            type="button"
+                            className="file-step"
+                            aria-current={index === at ? 'step' : undefined}
+                            title={file}
+                            onClick={() => onPick(file)}
+                        >
+                            {read[index] && <ReadMark />}
+                            <span className="mono truncate">{file.slice(file.lastIndexOf('/') + 1)}</span>
+                        </button>
+                    </li>
+                ))}
+            </ol>
+        </nav>
+    );
+}
+
+/**
+ * One page: its title, then its words and pieces once written, or that it is coming; then its threads. Its files show
+ * all down the page, or with `fileAt` only the file at that index, stepped through with `onFile`.
+ */
+function PageView({
+    reading,
+    page,
+    number,
+    total,
+    fileAt,
+    onFile
+}: {
+    reading: Reading;
+    page: PageRecord;
+    number: number;
+    total: number;
+    /** The file on show, by its index on the page; -1 shows every file. */
+    fileAt: number;
+    onFile: (file: string) => void;
+}) {
     const markRead = useMarkRead();
     const unread = useSelector(
         (view) => page.pieces.filter((piece) => !shownRead(view, reading.round, piece.id)).map((piece) => piece.id),
@@ -1162,6 +1305,10 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
     const notes = new Map(content?.pieces.map((piece) => [piece.id, piece]) ?? []);
     const tests = new Map(content?.tests?.map((test) => [test.piece, test]) ?? []);
     const added = (piece?: string) => page.added.filter((addition) => addition.piece === piece);
+    const files = byFile(page.pieces);
+    const pageFiles = new Set(files.map(([file]) => file));
+    const shown = fileAt === -1 ? files : files.slice(fileAt, fileAt + 1);
+    const nextFile = fileAt === -1 ? undefined : files[fileAt + 1]?.[0];
     return (
         // Any of its words is commentable, such as a file name, beyond the passages marked below.
         <section className="read-page" aria-labelledby={`page-title-${page.id}`} data-anchor-target={`page:${page.id}`}>
@@ -1207,8 +1354,9 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
                         <BlockView key={index} block={{ ...block, id: `${page.id}-block-${index}` }} placement="question" />
                     ))}
                     <PageWalk reading={reading} page={page} />
-                    {byFile(page.pieces).map(([file, pieces]) => (
-                        <FileBlock key={file} reading={reading} page={page.id} file={file} pieces={pieces}>
+                    {fileAt !== -1 && <FileSteps round={reading.round} files={files} at={fileAt} onPick={onFile} />}
+                    {shown.map(([file, pieces]) => (
+                        <FileBlock key={file} reading={reading} page={page.id} file={file} pieces={pieces} pageFiles={pageFiles}>
                             {page.kind === 'tests'
                                 ? pieces.map((piece) => {
                                       const test = tests.get(piece.id);
@@ -1240,6 +1388,11 @@ function PageView({ reading, page, number, total }: { reading: Reading; page: Pa
                                   })}
                         </FileBlock>
                     ))}
+                    {nextFile && (
+                        <button type="button" className="button-secondary file-next" onClick={() => onFile(nextFile)}>
+                            Next file: <code>{nextFile.slice(nextFile.lastIndexOf('/') + 1)}</code>
+                        </button>
+                    )}
                     <Additions page={page.id} additions={added(undefined)} />
                 </>
             )}
@@ -1488,7 +1641,8 @@ function FileFolder({
     folder: Folder;
     pagesOf: ReadonlyMap<string, FilePage[]>;
     current: string;
-    onPick: (page: string) => void;
+    /** Turn to a page, at `file` when one of its page numbers is picked. */
+    onPick: (page: string, file?: string) => void;
 }) {
     return (
         <ul className="rail-files">
@@ -1516,7 +1670,7 @@ function FileFolder({
                                 aria-current={page.id === current ? 'step' : undefined}
                                 aria-label={`Page ${page.number}: ${page.title}${page.read ? ', read' : ''}`}
                                 title={page.title}
-                                onClick={() => onPick(page.id)}
+                                onClick={() => onPick(page.id, file.path)}
                             >
                                 {page.number}
                             </button>
@@ -1592,7 +1746,7 @@ function ReadContents({
     round: RoundRecord;
     current: string;
     editable: boolean;
-    onPick: (page: string) => void;
+    onPick: (page: string, file?: string) => void;
 }) {
     const [byFile, setByFile] = useState(false);
     const pages = useRailPages(round);
@@ -1877,12 +2031,46 @@ export function Readthrough() {
     useEffect(() => {
         last.current = Math.max(0, at);
     });
-    const go = (id: string | undefined) => {
+    // The file on show of a page shown one file at a time: a file of it by path, its last, or else its first.
+    const [shownFile, setShownFile] = useState<{ page: string; file?: string; last?: boolean }>();
+    const files = page ? byFile(page.pieces) : [];
+    const stepping = reading.files === 'step' && files.length > 1 && current !== HOUSEKEEPING_PAGE;
+    const chosen = shownFile?.page === current ? shownFile : undefined;
+    const fileAt = !stepping
+        ? -1
+        : chosen?.last
+          ? files.length - 1
+          : Math.max(
+                0,
+                files.findIndex(([file]) => file === chosen?.file)
+            );
+    const go = (id: string | undefined, at?: { file?: string; last?: boolean }) => {
         if (!id) return;
         setPage(id);
+        setShownFile(at && { page: id, ...at });
         document.getElementById('main')?.scrollTo?.({ top: 0 });
     };
-    useReadKeys({ page: round.readthrough ? current : undefined, previous: order[at - 1], next: order[at + 1], go });
+    // Another file of the page: back up to the top of the files, where it starts, once read down past it.
+    const stepFile = (file: string | undefined) => {
+        if (!file || !current) return;
+        setShownFile({ page: current, file });
+        const main = document.getElementById('main');
+        const steps = main?.querySelector('.file-steps');
+        if (!main || !steps) return;
+        const top = Math.max(0, steps.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - 16);
+        if (top < main.scrollTop) main.scrollTo?.({ top });
+    };
+    const nextFile = fileAt === -1 ? undefined : files[fileAt + 1]?.[0];
+    const previousFile = fileAt > 0 ? files[fileAt - 1]?.[0] : undefined;
+    useReadKeys({
+        page: round.readthrough ? current : undefined,
+        previous: previousFile
+            ? () => stepFile(previousFile)
+            : order[at - 1]
+              ? () => go(order[at - 1], { last: true })
+              : undefined,
+        next: nextFile ? () => stepFile(nextFile) : order[at + 1] ? () => go(order[at + 1]) : undefined
+    });
     let body: ReactNode;
     if (!hasReadthrough(round.technique)) body = <p className="muted">This round is reviewed with the overview deck alone.</p>;
     else if (!round.readthrough) body = <ReadBuilding round={round} />;
@@ -1909,7 +2097,16 @@ export function Readthrough() {
                 {current === HOUSEKEEPING_PAGE ? (
                     <Housekeeping reading={reading} />
                 ) : (
-                    page && <PageView reading={reading} page={page} number={at + 1} total={order.length} />
+                    page && (
+                        <PageView
+                            reading={reading}
+                            page={page}
+                            number={at + 1}
+                            total={order.length}
+                            fileAt={fileAt}
+                            onFile={stepFile}
+                        />
+                    )
                 )}
                 <nav className="deck-nav" aria-label="Pages">
                     <button type="button" className="button-secondary" disabled={at <= 0} onClick={() => go(order[at - 1])}>
@@ -1939,7 +2136,12 @@ export function Readthrough() {
                 }
             >
                 {round.readthrough && current ? (
-                    <ReadContents round={round} current={current} editable={reading.editable} onPick={go} />
+                    <ReadContents
+                        round={round}
+                        current={current}
+                        editable={reading.editable}
+                        onPick={(id, file) => go(id, file ? { file } : undefined)}
+                    />
                 ) : (
                     <nav className="rail" aria-label="Read-through">
                         <div className="nav-heading">READ-THROUGH</div>

@@ -431,6 +431,28 @@ describe('reading', () => {
         expect((await server.session().reviewSearch(undefined, 'nothingLikeThis')).matches).toEqual([]);
     });
 
+    it('lists a folder of the reviewed commit, folders first, and refuses a path out of the repo', async () => {
+        const server = await readingNow();
+        await writeFile(join(server.repo.dir, 'notes.txt'), 'not committed\n');
+        expect(await server.session().reviewFolder(undefined, '')).toEqual({
+            round: 1,
+            path: '',
+            entries: [
+                { name: 'src', folder: true },
+                { name: 'pnpm-lock.yaml', folder: false },
+                { name: 'README.md', folder: false }
+            ]
+        });
+        expect((await server.session().reviewFolder(undefined, 'src')).entries).toEqual([
+            { name: 'jobs', folder: true },
+            { name: 'many.ts', folder: false },
+            { name: 'send.test.ts', folder: false },
+            { name: 'send.ts', folder: false }
+        ]);
+        expect((await server.session().reviewFolder(undefined, 'src/*')).entries).toEqual([]);
+        expect(await rejection(server.session().reviewFolder(undefined, 'src/../..'))).toMatchObject({ status: 400 });
+    });
+
     it('narrows a name search to the lines that declare it', async () => {
         const server = await readingNow();
         expect((await server.session().reviewSearch(undefined, 'sendAll', true)).matches).toEqual([
@@ -774,13 +796,15 @@ describe('preferences and the deck alone', () => {
         expect(body.preferences).toMatchObject({
             density: 'light',
             technique: 'deck',
-            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true, markdown: true }
+            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true, markdown: true, files: 'step', folders: true }
         });
         expect((await server.call('planroom_state')).body.preferences.readthrough).toEqual({
             view: 'auto',
             tests: 'pseudo',
             autoTick: true,
-            markdown: true
+            markdown: true,
+            files: 'step',
+            folders: true
         });
     });
 

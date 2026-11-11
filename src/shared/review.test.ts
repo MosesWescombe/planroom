@@ -198,7 +198,7 @@ describe('preferences', () => {
             reviewers: { model: 'sonnet', effort: 'high' },
             views: { pins: true, diff: true, charts: true, heatmap: true, matrix: true },
             technique: 'deck',
-            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true, markdown: true }
+            readthrough: { view: 'auto', tests: 'pseudo', autoTick: true, markdown: true, files: 'step', folders: true }
         });
         expect(reviewPreferences.parse({ takes: { risk: false } }).takes).toEqual({
             predict: true,
@@ -215,7 +215,9 @@ describe('preferences', () => {
             view: 'auto',
             tests: 'pseudo',
             autoTick: false,
-            markdown: true
+            markdown: true,
+            files: 'step',
+            folders: true
         });
     });
 

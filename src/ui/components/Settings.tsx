@@ -5,6 +5,8 @@ import {
     CODE_VIEW_TITLES,
     CODE_VIEWS,
     DENSITIES,
+    FILE_STEP_TITLES,
+    FILE_STEPS,
     REVIEW_STRENGTH_DETAILS,
     REVIEW_STRENGTHS,
     REVIEW_VIEW_TITLES,
@@ -254,6 +256,28 @@ function ReviewSection() {
                     checked={preferences.readthrough.markdown}
                     onChange={(event) =>
                         save({ ...preferences, readthrough: { ...preferences.readthrough, markdown: event.target.checked } })
+                    }
+                />
+            </label>
+            <ChoiceRow
+                label="Files on a page"
+                choices={FILE_STEPS}
+                titles={FILE_STEP_TITLES}
+                value={preferences.readthrough.files}
+                onChange={(files) => files && save({ ...preferences, readthrough: { ...preferences.readthrough, files } })}
+            />
+            <label className="toggle-row">
+                <span>
+                    Show the folders
+                    <span className="small muted">
+                        Each file opens with the folders from the repo root down to it. Its folder button hides them.
+                    </span>
+                </span>
+                <input
+                    type="checkbox"
+                    checked={preferences.readthrough.folders}
+                    onChange={(event) =>
+                        save({ ...preferences, readthrough: { ...preferences.readthrough, folders: event.target.checked } })
                     }
                 />
             </label>

@@ -1,5 +1,6 @@
 import { existsSync, promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
+import sortBy from 'lodash/sortBy.js';
 import { checkCommand, currentPhase, isReadOnly, orderedQuestions } from '../shared/derive.js';
 import { type LoggedEvent, type NewLoggedEvent, pageRequest } from '../shared/events.js';
 import { toIssues } from '../shared/issues.js';
@@ -8,6 +9,7 @@ import type { ValidationRecord } from '../shared/records.js';
 import {
     type CodeAnchor,
     currentRound,
+    type FolderListing,
     type Handoff,
     handoffFile,
     handoffMarkdown,
@@ -580,6 +582,37 @@ export class Session {
             query: name,
             matches: matches.slice(0, MAX_SEARCH_MATCHES),
             truncated: matches.length > MAX_SEARCH_MATCHES
+        };
+    }
+
+    /**
+     * What `folder` holds in the round's reviewed commit, read with `git ls-tree`, so the read-through can show where a
+     * file sits in the whole repo. Pathspecs are literal, so a name with `*` or `:(` matches only itself.
+     */
+    async reviewFolder(roundNumber: number | undefined, folder: string): Promise<FolderListing> {
+        const round = this.reviewRound(roundNumber);
+        if (folder.length > 1000 || /[\0\n\r]/.test(folder) || folder.startsWith('/') || folder.split('/').includes('..'))
+            throw new RejectedError([{ path: 'path', message: 'name a folder of the repo, from its root' }], 400);
+        const out = await git(this.repoRoot, [
+            '--literal-pathspecs',
+            'ls-tree',
+            '-z',
+            '--full-tree',
+            round.head,
+            ...(folder ? ['--', `${folder}/`] : [])
+        ]);
+        const entries = out
+            .split('\0')
+            .filter(Boolean)
+            .map((line) => {
+                const tab = line.indexOf('\t');
+                const path = line.slice(tab + 1);
+                return { name: path.slice(path.lastIndexOf('/') + 1), folder: line.split(' ')[1] === 'tree' };
+            });
+        return {
+            round: round.n,
+            path: folder,
+            entries: sortBy(entries, [(entry) => !entry.folder, (entry) => entry.name.toLowerCase()])
         };
     }
 

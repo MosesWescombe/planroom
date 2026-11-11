@@ -8,7 +8,7 @@ import { typing } from './hooks';
 
 /**
  * The read-through's keys. Page Down and Page Up go piece to piece, on past the last or the first to the next or previous
- * page. The arrow keys scroll a step at a time, stop at the end or the start of the current piece and, pressed on, pull
+ * file or page. The arrow keys scroll a step at a time, stop at the end or the start of the current piece and, pressed on, pull
  * the page a little way before they go on to the next piece. Space ticks the piece nearest the middle of the view read and
  * folds or opens it.
  */
@@ -145,24 +145,22 @@ export function useSpaceKey(ref: RefObject<HTMLElement | null>, action: () => vo
 }
 
 /**
- * The read-through's keys on `page`, the page on show, while no field or dialog takes them; `go` turns to the page
- * before or after it. The current piece is the one with focus, which the keys move to the piece they go to, while it is
+ * The read-through's keys on `page`, the page on show, while no field or dialog takes them; `previous` and `next` go on
+ * to the file or page before or after the pieces on show, and are undefined where there is none. The current piece is the one with focus, which the keys move to the piece they go to, while it is
  * in view and the reader has not scrolled away by hand; else the one being read where the page is scrolled.
  */
 export function useReadKeys({
     page,
     previous,
-    next,
-    go
+    next
 }: {
     page: string | undefined;
-    previous: string | undefined;
-    next: string | undefined;
-    go: (page: string) => void;
+    previous: (() => void) | undefined;
+    next: (() => void) | undefined;
 }): void {
     const reduced = useReducedMotion();
-    const latest = useRef({ previous, next, go, reduced });
-    latest.current = { previous, next, go, reduced };
+    const latest = useRef({ previous, next, reduced });
+    latest.current = { previous, next, reduced };
     useEffect(() => {
         const main = document.getElementById('main');
         if (!page || !main) return undefined;
@@ -198,8 +196,7 @@ export function useReadKeys({
         const act = (move: KeyMove, elements: HTMLElement[]) => {
             if ('pull' in move) return;
             if ('page' in move) {
-                const to = move.page === 1 ? latest.current.next : latest.current.previous;
-                if (to) latest.current.go(to);
+                (move.page === 1 ? latest.current.next : latest.current.previous)?.();
                 return;
             }
             aim = { top: move.to, until: performance.now() + AIM_MS };

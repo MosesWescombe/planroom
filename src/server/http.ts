@@ -44,6 +44,8 @@ export interface ServedPlan {
     reviewDiff?(round: number | undefined, file?: string, full?: boolean): Promise<{ round: number; patch: string }>;
     /** Every whole-word match of a name in a review round's commit. */
     reviewSearch?(round: number | undefined, query: string, definition?: boolean): Promise<unknown>;
+    /** What one folder of a review round's commit holds. */
+    reviewFolder?(round: number | undefined, folder: string): Promise<unknown>;
 }
 
 export interface PageServer {
@@ -335,6 +337,21 @@ export async function startPageServer(options: PageServerOptions): Promise<PageS
         const round = req.query.round === undefined ? undefined : Number(req.query.round);
         try {
             res.json(await plan.reviewSearch(round, String(req.query.q ?? ''), req.query.definition === '1'));
+        } catch (error) {
+            sendError(res, error);
+        }
+    });
+
+    /** What one folder of the review round's commit holds, `path` from the repo root ('' for the root itself). */
+    router.get('/api/review/folder', needsPlan, async (req, res) => {
+        const plan = planOf(res);
+        if (!plan.reviewFolder) {
+            res.status(404).json({ error: 'this page is not a review' });
+            return;
+        }
+        const round = req.query.round === undefined ? undefined : Number(req.query.round);
+        try {
+            res.json(await plan.reviewFolder(round, String(req.query.path ?? '')));
         } catch (error) {
             sendError(res, error);
         }

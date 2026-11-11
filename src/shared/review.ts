@@ -375,15 +375,22 @@ export const TEST_VIEWS = ['title', 'pseudo', 'code'] as const;
 export type TestView = (typeof TEST_VIEWS)[number];
 export const TEST_VIEW_TITLES: Record<TestView, string> = { title: 'Title', pseudo: 'Pseudo code', code: 'Real code' };
 
+/** How a read-through page shows its files: one at a time, stepped through, or all down the page. */
+export const FILE_STEPS = ['step', 'all'] as const;
+export type FileStepping = (typeof FILE_STEPS)[number];
+export const FILE_STEP_TITLES: Record<FileStepping, string> = { step: 'One at a time', all: 'All at once' };
+
 /**
- * The read-through's settings: the starting code view, how tests show, whether pieces tick themselves, and whether
- * Markdown files start rendered.
+ * The read-through's settings: the starting code view, how tests show, whether pieces tick themselves, whether
+ * Markdown files start rendered, how a page shows its files, and whether each file starts with its folders shown.
  */
 export const readthroughSettings = z.object({
     view: z.enum(CODE_VIEWS).default('auto'),
     tests: z.enum(TEST_VIEWS).default('pseudo'),
     autoTick: z.boolean().default(true),
-    markdown: z.boolean().default(true)
+    markdown: z.boolean().default(true),
+    files: z.enum(FILE_STEPS).default('step'),
+    folders: z.boolean().default(true)
 });
 export type ReadthroughSettings = z.infer<typeof readthroughSettings>;
 
@@ -404,7 +411,14 @@ export const reviewPreferences = z.object({
         .default({ pins: true, diff: true, charts: true, heatmap: true, matrix: true }),
     /** The technique the start card offers: the last one chosen, the deck the first time. */
     technique: z.enum(TECHNIQUES).default('deck'),
-    readthrough: readthroughSettings.default({ view: 'auto', tests: 'pseudo', autoTick: true, markdown: true })
+    readthrough: readthroughSettings.default({
+        view: 'auto',
+        tests: 'pseudo',
+        autoTick: true,
+        markdown: true,
+        files: 'step',
+        folders: true
+    })
 });
 export type ReviewPreferences = z.infer<typeof reviewPreferences>;
 
@@ -914,6 +928,13 @@ export interface SearchResult {
     query: string;
     matches: { file: string; line: number; text: string }[];
     truncated: boolean;
+}
+
+/** What one folder of a round's reviewed commit holds, folders first, each kind by name; `path` is '' at the root. */
+export interface FolderListing {
+    round: number;
+    path: string;
+    entries: { name: string; folder: boolean }[];
 }
 
 /** The task file's name for round `n`, in the review's folder. */

@@ -1,6 +1,6 @@
 import type { PageRequest } from '../shared/events';
 import type { Issue } from '../shared/issues';
-import type { Handoff, SearchResult } from '../shared/review';
+import type { FolderListing, Handoff, SearchResult } from '../shared/review';
 import type { Revision } from '../shared/revisions';
 import type { PlanListing, StreamMessage } from '../shared/view';
 
@@ -84,6 +84,23 @@ export function fetchDiff(round: number, file: string, full = false): Promise<st
         diffs.set(key, patch);
     }
     return patch;
+}
+
+/** One review round's folder listings, cached per round and folder like its diffs. */
+const folders = new Map<string, Promise<FolderListing>>();
+
+/** Fetch what one folder of a review round's commit holds; `path` is '' for the repo root. A failed fetch is forgotten. */
+export function fetchFolder(round: number, path: string): Promise<FolderListing> {
+    const key = JSON.stringify([round, path]);
+    let listing = folders.get(key);
+    if (!listing) {
+        listing = fetch(`api/review/folder?${new URLSearchParams({ round: String(round), path }).toString()}`).then((response) =>
+            json<FolderListing>(response)
+        );
+        listing.catch(() => folders.delete(key));
+        folders.set(key, listing);
+    }
+    return listing;
 }
 
 /** Search a review round's commit for a name: every whole-word match, or with `definition` the lines that declare it. */
