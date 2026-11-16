@@ -224,10 +224,23 @@ the new questions, call `planroom_wait` for the `phase.complete` event, and writ
 
 ## Phase 3: Write-up
 
-Turn the answers into a document the user can review section by section. It becomes the OpenSpec change, so cover:
-an ELI5 section, summary, how it works (a diagram), the numbers, rollout, impact, risks, acceptance criteria (an
-interactive checklist with every item `done: true`, so it starts fully agreed and the user unticks what they dispute),
-and assumptions.
+Turn the answers into a document the user can review section by section. It becomes the plan, so it has to carry
+everything the plan needs, but its structure is yours: choose the sections, their titles and their order to fit this
+change, not a template. A one-file fix may need three sections; a migration across services may need ten.
+
+Only three things are in every write-up:
+
+- the ELI5 section, first;
+- acceptance criteria: an interactive checklist with every item `done: true`, so it starts fully agreed and the user
+  unticks what they dispute. The proposer turns each item into a scenario;
+- every assumption, as a callout (below).
+
+Everything else earns its place. Sections that often do: a summary, how it works (a diagram), the numbers, rollout,
+impact, risks. Write one only when the change gives it something to say: the numbers when there are volumes, costs,
+limits or timings that shape the design; rollout when shipping takes more than a merge (stages, a flag, a migration, a
+backfill, a way back). Add sections this list does not name when the change calls for them, such as a migration, a
+data model, an API contract or alternatives ruled out. Never write a section to say it does not apply, and never pad
+one to fill a heading.
 
 - **ELI5 first.** The first section, titled "ELI5", explains the whole change as you would to a five-year-old: a
   `text` block of three or four short sentences with no jargon, then an `intuition` block for the change as a whole.
