@@ -1068,7 +1068,12 @@ describe('starting the reviewers', () => {
     it('records the round strength the reviewer chose, tells the agent once, and returns it in planroom_state', async () => {
         const { opened, page, call } = await branchReview();
         expect(opened.body.reviewers).toBeUndefined();
-        const reviewers = { strength: 'single', model: 'haiku', effort: 'low' };
+        const reviewers = {
+            strength: 'single',
+            model: 'haiku',
+            effort: 'low',
+            plans: { strength: 'none', model: 'opus', effort: 'max' }
+        };
         await page({ type: 'reviewers.start', reviewers });
         expect((await rejection(page({ type: 'reviewers.start', reviewers }))).message).toMatch(/already started/);
         const { body } = await call('planroom_wait', { after: 0, timeoutSec: 1 });
@@ -1090,7 +1095,12 @@ describe('preferences', () => {
         const preferences = {
             takes: { predict: true, prosCons: true, risk: false, check: true },
             density: 'light',
-            reviewers: { strength: 'single', model: 'haiku', effort: 'low' },
+            reviewers: {
+                strength: 'single',
+                model: 'haiku',
+                effort: 'low',
+                plans: { strength: 'single', model: 'opus', effort: 'medium' }
+            },
             views: { pins: true, diff: true, charts: true, heatmap: false, matrix: true },
             technique: 'both',
             readthrough: { view: 'diff', tests: 'title', autoTick: false, markdown: false, files: 'all', folders: false }

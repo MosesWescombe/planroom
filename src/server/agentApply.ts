@@ -595,9 +595,18 @@ function applyReviewEvent(
             const { item } = event;
             const existing = draft.state.items[item.id];
             if (posted()) return;
-            if (round.reviewers?.strength === 'none' && item.kind !== 'followup') {
-                fail(index, '.item.kind', `the reviewer chose no AI review for round ${round.n}: send no findings`);
-                return;
+            if (round.reviewers && item.kind !== 'followup') {
+                const plan = item.dimension === 'plans';
+                if ((plan ? round.reviewers.plans.strength : round.reviewers.strength) === 'none') {
+                    fail(
+                        index,
+                        plan ? '.item.dimension' : '.item.kind',
+                        plan
+                            ? `the reviewer chose no plan review for round ${round.n}: send no plans findings`
+                            : `the reviewer chose no AI review of the code for round ${round.n}: send only plans findings, if any`
+                    );
+                    return;
+                }
             }
             if (existing && existing.round !== round.n) {
                 fail(

@@ -72,12 +72,22 @@ only the review (step 2) beside it.
 2. **Start the review** as `reviewers.start`'s `reviewers.strength` says: start `planroom-reviewer` subagents, each
    given the worktree and the commit range, and each with the Agent tool's `model` and `effort` set to its
    `reviewers.model` and `reviewers.effort`:
-   - `none`: no reviewer and no verifier. Send no findings: the server refuses them, and the page says no AI review
-     was run.
+   - `none`: no code reviewer and no verifier. Send no findings but `plans` ones: the server refuses them.
    - `single`: one reviewer, dimension `all`, told to verify its own findings. Keep what it returns.
    - `standard`: one reviewer, dimension `all`, then one in **verify** mode with every item it found.
    - `thorough`: one per dimension (`correctness`, `security`, `performance`, `design`, `tests`); for a large diff,
      split the files between them. Then one in **verify** mode with every item they found.
+
+   **Review the plans** as `reviewers.plans` says, apart from the code review and beside it. It applies only when the
+   diff adds or changes planning documents: an OpenSpec change under `openspec/changes/`, a Markdown plan, an ADR or
+   a design doc. With none in the diff, start no plan reviewer whatever the setting. Otherwise start a
+   `planroom-reviewer`, dimension `plans`, given the plan files, at `reviewers.plans.model` and
+   `reviewers.plans.effort`:
+   - `none`: no plan reviewer. Send no finding with `dimension: "plans"`: the server refuses it.
+   - `single`: the plan reviewer, told to verify its own findings.
+   - `standard`: the plan reviewer, then one in **verify** mode with every item it found.
+
+   Send each plan finding with `dimension: "plans"`. With both strengths at `none`, the page says no AI review was run.
 
    A verifier is told to refute rather than find: keep only what it confirms, with its confidence. Report progress:
    `deck.progress { review: "3 of 5 reviewers done" }`. When the last finding is sent, or the review found none, send
@@ -242,7 +252,7 @@ architecture node id, or a sequence actor), and a `draft`: the comment to post.
 
 | Event | Do |
 | ----- | -- |
-| `reviewers.start` | The reviewer started the round: build what its `technique` names, and start the reviewers it names, as in step 2; none at `none`. |
+| `reviewers.start` | The reviewer started the round: build what its `technique` names, and start the code reviewers and the plan reviewer it names, as in step 2; none at `none`. |
 | `take.answer` | Note what the reviewer saw differently. No reply is needed; it feeds the summary. A second one for a card you changed is their new answer. |
 | `impact.send` | The reviewer's concerns, under each of your areas (by `id`) and areas they added (no `id`). Investigate them, write Trade-offs, and publish it: see steps 6 and 7. A second one, after you changed the impact map, carries their concerns again: update Trade-offs to answer them. |
 | `walkthrough.done` | The findings now show. Make sure every verified finding is sent. `how: "skipped"` means they knew the change; if Trade-offs is not published yet, still write and publish it. |

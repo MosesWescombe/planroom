@@ -5,6 +5,7 @@ import {
     findingsUnlocked,
     hasDeck,
     hasReadthrough,
+    noAiReview,
     type ReviewStage,
     reviewStage,
     roundItems,
@@ -78,7 +79,7 @@ export function ReviewTabs() {
         const unlocked = findingsUnlocked(round);
         const drafted = deckSlides(view, round.n).length;
         const posted = Boolean(round.postedAt);
-        const none = round.reviewers?.strength === 'none';
+        const none = noAiReview(round.reviewers);
         const read = roundProgress(view, round).lines;
         const tabs: Omit<TabInfo, 'number'>[] = [
             {

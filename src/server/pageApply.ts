@@ -40,6 +40,8 @@ import {
     findingsUnlocked,
     handoffFile,
     impactMapOf,
+    noAiReview,
+    type ReviewerSettings,
     type ReviewPreferences,
     type RoundRecord,
     SIGN_OFF_LOCK,
@@ -352,10 +354,13 @@ function applyReviewRequest(draft: Draft, request: PageRequest, context: PageCon
             if (technique === 'readthrough' && round.publishedAt)
                 reject('The walkthrough is already out: choose the deck, or both', 'technique', 400);
             draft.updateRound(round.n, (current) => ({ ...current, technique, reviewers: { ...reviewers, at: now } }));
-            const { strength, model, effort } = reviewers;
+            const describe = ({ strength, model, effort }: Omit<ReviewerSettings, 'plans'>, what: string) =>
+                strength === 'none' ? `no ${what}` : `${what} ${strength}, ${model} at ${effort} effort`;
             noteYours(draft, {
                 title: 'You started the review',
-                detail: `${TECHNIQUE_TITLES[technique]}; ${strength === 'none' ? 'no AI review' : `${strength}, ${model} at ${effort} effort`}`
+                detail: noAiReview(reviewers)
+                    ? `${TECHNIQUE_TITLES[technique]}; no AI review`
+                    : `${TECHNIQUE_TITLES[technique]}; ${describe(reviewers, 'code review')}; ${describe(reviewers.plans, 'plan review')}`
             });
             return {
                 event: { type: 'reviewers.start', round: round.n, technique, reviewers },

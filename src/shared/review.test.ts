@@ -195,7 +195,7 @@ describe('preferences', () => {
         expect(DEFAULT_PREFERENCES).toEqual({
             takes: { predict: true, prosCons: true, risk: true, check: true },
             density: 'normal',
-            reviewers: { model: 'sonnet', effort: 'high' },
+            reviewers: { model: 'sonnet', effort: 'high', plans: { strength: 'standard', model: 'sonnet', effort: 'high' } },
             views: { pins: true, diff: true, charts: true, heatmap: true, matrix: true },
             technique: 'deck',
             readthrough: { view: 'auto', tests: 'pseudo', autoTick: true, markdown: true, files: 'step', folders: true }
@@ -209,7 +209,8 @@ describe('preferences', () => {
         expect(reviewPreferences.parse({ reviewers: { strength: 'single' } }).reviewers).toEqual({
             strength: 'single',
             model: 'sonnet',
-            effort: 'high'
+            effort: 'high',
+            plans: { strength: 'standard', model: 'sonnet', effort: 'high' }
         });
         expect(reviewPreferences.parse({ readthrough: { autoTick: false } }).readthrough).toEqual({
             view: 'auto',

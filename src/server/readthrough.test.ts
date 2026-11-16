@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent } from '../shared/events.js';
 import { changedLines, lineCount, readProgress, uncovered } from '../shared/readthrough.js';
-import { currentRound, deriveComments, findingsUnlocked, reviewStage } from '../shared/review.js';
+import { currentRound, type DIMENSIONS, deriveComments, findingsUnlocked, reviewStage } from '../shared/review.js';
 import { defined, gitRepo, rejection, reviewServer, tempRepo } from '../test/serverHelpers.js';
 import { git } from './worktree.js';
 
@@ -227,9 +227,48 @@ describe('the read-through layout', () => {
                 }
             }
         ]);
-        expect(JSON.stringify(finding)).toContain('chose no AI review');
+        expect(JSON.stringify(finding)).toContain('chose no AI review of the code');
+        // The plan reviewer has its own strength, standard here, so its findings still land.
+        const plan = await server.emit([
+            {
+                type: 'item.upsert',
+                item: {
+                    id: 'I-1',
+                    kind: 'question',
+                    dimension: 'plans',
+                    title: 'Why?',
+                    body: 'Why?',
+                    confidence: 0.9,
+                    anchor: { file: 'src/send.ts', side: 'new', start: 8 },
+                    draft: 'Why?'
+                }
+            }
+        ]);
+        expect(JSON.stringify(plan)).not.toContain('chose no');
+        expect(server.session().current.items['I-1']?.dimension).toBe('plans');
         expect(server.session().view().preferences).toMatchObject({ technique: 'readthrough', reviewers: { strength: 'none' } });
         expect(JSON.parse(await readFile(server.prefs, 'utf8'))).toMatchObject({ technique: 'readthrough' });
+    });
+    it('refuses plans findings when the reviewer chose no plan review, and takes code findings', async () => {
+        const server = await opened();
+        const reviewers = { ...NONE, strength: 'single', plans: { strength: 'none', model: 'sonnet', effort: 'high' } };
+        await server.page({ type: 'reviewers.start', technique: 'deck', reviewers });
+        const item = (id: string, dimension: (typeof DIMENSIONS)[number]) =>
+            ({
+                type: 'item.upsert',
+                item: {
+                    id,
+                    kind: 'question',
+                    dimension,
+                    title: 'Why?',
+                    body: 'Why?',
+                    confidence: 0.9,
+                    anchor: { file: 'src/send.ts', side: 'new', start: 8 },
+                    draft: 'Why?'
+                }
+            }) as const;
+        expect(JSON.stringify(await server.emit([item('I-1', 'plans')]))).toContain('chose no plan review');
+        expect((await server.emit([item('I-2', 'correctness')])).isError).toBe(false);
     });
 });
 

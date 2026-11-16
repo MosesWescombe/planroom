@@ -572,6 +572,7 @@ export const loggedEvent = z.discriminatedUnion('type', [
     /**
      * The reviewer started the round: build what `technique` names (the deck, the read-through, or the deck then the
      * read-through), and start the `planroom-reviewer` subagents it names, at its model and effort; none at `none`.
+     * `reviewers.plans` is the plan reviewer's own strength, model and effort, for any planning documents in the diff.
      */
     logged.extend({
         type: z.literal('reviewers.start'),

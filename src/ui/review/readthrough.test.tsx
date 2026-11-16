@@ -247,7 +247,13 @@ function readView(
                             posts: {},
                             earlier: {},
                             technique: 'readthrough',
-                            reviewers: { strength: 'none', model: 'sonnet', effort: 'high', at: NOW },
+                            reviewers: {
+                                strength: 'none',
+                                model: 'sonnet',
+                                effort: 'high',
+                                plans: { ...DEFAULTS.reviewers.plans, strength: 'none' },
+                                at: NOW
+                            },
                             index: INDEX,
                             readthrough: { openedAt: NOW },
                             ...options.round
@@ -1341,7 +1347,13 @@ describe('findings under their lines', () => {
         version: 1,
         updatedAt: NOW
     };
-    const standard = { strength: 'standard' as const, model: 'sonnet' as const, effort: 'high' as const, at: NOW };
+    const standard = {
+        strength: 'standard' as const,
+        model: 'sonnet' as const,
+        effort: 'high' as const,
+        plans: DEFAULTS.reviewers.plans,
+        at: NOW
+    };
 
     it('shows a finding as a card under its line when the Review tab is open', async () => {
         render(<App store={storeWith(readView({ items: [finding], round: { reviewers: standard } }))} />);
@@ -1406,7 +1418,7 @@ describe('starting a round', () => {
             {
                 type: 'reviewers.start',
                 technique: 'readthrough',
-                reviewers: { strength: 'none', model: 'sonnet', effort: 'high' }
+                reviewers: { strength: 'none', model: 'sonnet', effort: 'high', plans: DEFAULTS.reviewers.plans }
             }
         ]);
     });

@@ -218,16 +218,28 @@ describe('the walkthrough while it builds', () => {
     it('asks how to review before the reviewers start, offering the saved defaults', async () => {
         const preferences = {
             ...DEFAULT_PREFERENCES,
-            reviewers: { strength: 'thorough' as const, model: 'opus' as const, effort: 'high' as const }
+            reviewers: { ...DEFAULT_PREFERENCES.reviewers, strength: 'thorough' as const, model: 'opus' as const }
         };
         render(<App store={storeWith(reviewView({ preferences }))} />);
         const card = within(screen.getByRole('region', { name: 'Start the review' }));
         expect(card.getByRole('combobox', { name: /Strength/ })).toHaveValue('thorough');
         await userEvent.selectOptions(card.getByRole('combobox', { name: /Strength/ }), 'single');
         await userEvent.selectOptions(card.getByRole('combobox', { name: 'Effort' }), 'low');
+        expect(card.getByRole('combobox', { name: /Plan strength/ })).toHaveValue('standard');
+        await userEvent.selectOptions(card.getByRole('combobox', { name: /Plan strength/ }), 'single');
+        await userEvent.selectOptions(card.getByRole('combobox', { name: 'Plan model' }), 'opus');
         await userEvent.click(card.getByRole('button', { name: 'Start review' }));
         expect(posted).toEqual([
-            { type: 'reviewers.start', technique: 'deck', reviewers: { strength: 'single', model: 'opus', effort: 'low' } }
+            {
+                type: 'reviewers.start',
+                technique: 'deck',
+                reviewers: {
+                    strength: 'single',
+                    model: 'opus',
+                    effort: 'low',
+                    plans: { strength: 'single', model: 'opus', effort: 'high' }
+                }
+            }
         ]);
     });
 
@@ -235,7 +247,11 @@ describe('the walkthrough while it builds', () => {
         render(
             <App
                 store={storeWith(
-                    reviewView({ round: { reviewers: { strength: 'single', model: 'haiku', effort: 'low', at: NOW } } })
+                    reviewView({
+                        round: {
+                            reviewers: { ...DEFAULT_PREFERENCES.reviewers, strength: 'single', at: NOW }
+                        }
+                    })
                 )}
             />
         );

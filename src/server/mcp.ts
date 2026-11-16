@@ -100,7 +100,7 @@ const REVIEW_TOOL: Tool = {
         "each file's hunks, its Housekeeping reason or spacing-only hunks and whether it is a test, plus repeated edits and moved blocks as hints. " +
         '`preferences` say which your-take cards to use and how many, and the read-through settings. Build nothing and start no reviewer ' +
         'subagent before the reviewer starts the round from the page: `reviewers.start` names the `technique` (deck, readthrough or both) ' +
-        'and how many reviewers, at what model and effort, and `technique` and `reviewers` return it once they have. A posted review whose PR head has moved resumes as the next round, whose `earlier` comments you follow up.',
+        'and how many reviewers, at what model and effort, with `reviewers.plans` for a separate plan reviewer of any planning documents, and `technique` and `reviewers` return it once they have. A posted review whose PR head has moved resumes as the next round, whose `earlier` comments you follow up.',
     inputSchema: inputSchema(reviewInput)
 };
 

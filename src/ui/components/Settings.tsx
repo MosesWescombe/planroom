@@ -7,6 +7,8 @@ import {
     DENSITIES,
     FILE_STEP_TITLES,
     FILE_STEPS,
+    PLAN_STRENGTH_DETAILS,
+    PLAN_STRENGTHS,
     REVIEW_STRENGTH_DETAILS,
     REVIEW_STRENGTHS,
     REVIEW_VIEW_TITLES,
@@ -117,8 +119,9 @@ function ChoiceRow<T extends string>({
 }
 
 /**
- * The reviewer subagents' strength, model and effort, in Settings and on the card that starts a round's review. In
- * Settings the strength can be left to how the reviewer reviews, which `unset` names.
+ * The reviewer subagents' strength, model and effort, then the plan reviewer's own, in Settings and on the card that
+ * starts a round's review. In Settings the code review's strength can be left to how the reviewer reviews, which
+ * `unset` names.
  */
 export function ReviewerFields<T extends ReviewerPreference>({
     value,
@@ -160,6 +163,34 @@ export function ReviewerFields<T extends ReviewerPreference>({
                 choices={REVIEWER_EFFORTS}
                 value={value.effort}
                 onChange={(effort) => effort && onChange({ ...value, effort })}
+            />
+            <span className="small strong">Plan review</span>
+            <span className="small muted">
+                A separate reviewer grills planning documents in the change, such as an OpenSpec change, and looks for better
+                alternatives. It runs only when the change has some.
+            </span>
+            <ChoiceRow
+                label={
+                    <>
+                        Plan strength
+                        <span className="small muted">{PLAN_STRENGTH_DETAILS[value.plans.strength]}</span>
+                    </>
+                }
+                choices={PLAN_STRENGTHS}
+                value={value.plans.strength}
+                onChange={(strength) => strength && onChange({ ...value, plans: { ...value.plans, strength } })}
+            />
+            <ChoiceRow
+                label="Plan model"
+                choices={REVIEWER_MODELS}
+                value={value.plans.model}
+                onChange={(model) => model && onChange({ ...value, plans: { ...value.plans, model } })}
+            />
+            <ChoiceRow
+                label="Plan effort"
+                choices={REVIEWER_EFFORTS}
+                value={value.plans.effort}
+                onChange={(effort) => effort && onChange({ ...value, plans: { ...value.plans, effort } })}
             />
         </>
     );

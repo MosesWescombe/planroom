@@ -9,6 +9,7 @@ import {
     hostOf,
     type ItemKind,
     type ItemRecord,
+    noAiReview,
     placement,
     type RoundRecord,
     roundItems,
@@ -634,7 +635,7 @@ export function Findings() {
                                 </p>
                             </header>
                             {items.length === 0 ? (
-                                round.reviewers?.strength === 'none' ? (
+                                noAiReview(round.reviewers) ? (
                                     <p className="muted">
                                         No AI review was run for this round: you chose none when you started it. Your own comments
                                         are in the Comments tab.

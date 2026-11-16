@@ -115,8 +115,8 @@ export function describeCodeAnchor(anchor: CodeAnchor): string {
 
 // ---------------------------------------------------------------- findings
 
-/** The dimensions the review runs by, one reviewer each. */
-export const DIMENSIONS = ['correctness', 'security', 'performance', 'design', 'tests'] as const;
+/** The dimensions the review runs by, one reviewer each; `plans` runs only when the diff holds planning documents. */
+export const DIMENSIONS = ['correctness', 'security', 'performance', 'design', 'tests', 'plans'] as const;
 export const SEVERITIES = ['blocker', 'important', 'minor'] as const;
 export type Severity = (typeof SEVERITIES)[number];
 
@@ -348,13 +348,41 @@ export const REVIEW_STRENGTH_DETAILS: Record<ReviewStrength, string> = {
 export const REVIEWER_MODELS = ['haiku', 'sonnet', 'opus', 'fable'] as const;
 export const REVIEWER_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 
-/** How many reviewer subagents a round sends off, and at what model and effort. */
-export const reviewerSettings = z.object({
-    strength: z.enum(REVIEW_STRENGTHS).default('standard'),
+/**
+ * How hard a separate `planroom-reviewer` grills the change's planning documents (an OpenSpec change, a Markdown plan,
+ * a design doc): not at all, one that checks its own findings, or one then a verifier. It runs only when the diff has
+ * planning documents.
+ */
+export const PLAN_STRENGTHS = ['none', 'single', 'standard'] as const;
+export type PlanStrength = (typeof PLAN_STRENGTHS)[number];
+export const PLAN_STRENGTH_DETAILS: Record<PlanStrength, string> = {
+    none: 'Planning documents get no review of their own.',
+    single: 'One reviewer grills the plans and checks its own findings.',
+    standard: 'One reviewer grills the plans, then a verifier tries to refute what it found.'
+};
+
+/** The plan reviewer's strength, model and effort. */
+export const planReviewerSettings = z.object({
+    strength: z.enum(PLAN_STRENGTHS).default('standard'),
     model: z.enum(REVIEWER_MODELS).default('sonnet'),
     effort: z.enum(REVIEWER_EFFORTS).default('high')
 });
+export type PlanReviewerSettings = z.infer<typeof planReviewerSettings>;
+const DEFAULT_PLAN_REVIEWER: PlanReviewerSettings = { strength: 'standard', model: 'sonnet', effort: 'high' };
+
+/** How many reviewer subagents a round sends off, and at what model and effort, with the plan reviewer's own. */
+export const reviewerSettings = z.object({
+    strength: z.enum(REVIEW_STRENGTHS).default('standard'),
+    model: z.enum(REVIEWER_MODELS).default('sonnet'),
+    effort: z.enum(REVIEWER_EFFORTS).default('high'),
+    plans: planReviewerSettings.default(DEFAULT_PLAN_REVIEWER)
+});
 export type ReviewerSettings = z.infer<typeof reviewerSettings>;
+
+/** Whether the reviewer chose no AI review at all for a round: no code reviewers and no plan reviewer. */
+export function noAiReview(reviewers: Pick<ReviewerSettings, 'strength' | 'plans'> | undefined): boolean {
+    return reviewers?.strength === 'none' && reviewers.plans.strength === 'none';
+}
 
 /** The reviewer subagents as preferences: the strength is unset until the reviewer first picks one. */
 const reviewerPreference = reviewerSettings.extend({ strength: z.enum(REVIEW_STRENGTHS).optional() });
@@ -405,7 +433,7 @@ export const reviewPreferences = z.object({
         .object({ predict: on, prosCons: on, risk: on, check: on })
         .default({ predict: true, prosCons: true, risk: true, check: true }),
     density: z.enum(DENSITIES).default('normal'),
-    reviewers: reviewerPreference.default({ model: 'sonnet', effort: 'high' }),
+    reviewers: reviewerPreference.default({ model: 'sonnet', effort: 'high', plans: DEFAULT_PLAN_REVIEWER }),
     views: z
         .object({ pins: on, diff: on, charts: on, heatmap: on, matrix: on })
         .default({ pins: true, diff: true, charts: true, heatmap: true, matrix: true }),
